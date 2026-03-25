@@ -1,0 +1,15 @@
+{
+  "development": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "app_dev",
+    "pool": { "min": 2, "max": 10 }
+  },
+  "production": {
+    "host": "db.prod.internal",
+    "port": 5432,
+    "database": "app_prod",
+    "pool": { "min": 5, "max": 50 },
+    "ssl": true
+  }
+}

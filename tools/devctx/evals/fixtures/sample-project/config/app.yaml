@@ -1,0 +1,17 @@
+server:
+  host: 0.0.0.0
+  port: 3000
+  gracefulShutdownMs: 5000
+
+logging:
+  level: info
+  format: json
+
+auth:
+  jwtSecret: "${JWT_SECRET}"
+  tokenExpirySeconds: 3600
+  refreshTokenExpirySeconds: 86400
+
+rateLimit:
+  windowMs: 60000
+  maxRequests: 100

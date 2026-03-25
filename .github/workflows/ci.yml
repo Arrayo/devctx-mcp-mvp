@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+    defaults:
+      run:
+        working-directory: tools/devctx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: tools/devctx/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run smoke:json
+      - run: npm run smoke:formats
+      - name: Lint (Node 22 only)
+        if: matrix.node-version == 22
+        run: npx --yes eslint@9 src/ scripts/
+      - name: Audit
+        if: matrix.node-version == 22
+        run: npm audit --audit-level=high || true

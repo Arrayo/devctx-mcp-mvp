@@ -1,0 +1,140 @@
+import { createRequire } from 'node:module';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+import { buildIndex, buildIndexIncremental, persistIndex } from './index.js';
+import { smartRead } from './tools/smart-read.js';
+import { smartSearch } from './tools/smart-search.js';
+import { smartContext } from './tools/smart-context.js';
+import { smartReadBatch } from './tools/smart-read-batch.js';
+import { smartShell } from './tools/smart-shell.js';
+import { projectRoot, projectRootSource } from './utils/paths.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../package.json');
+
+export const asTextResult = (result) => ({
+  content: [
+    {
+      type: 'text',
+      text: JSON.stringify(result, null, 2),
+    },
+  ],
+});
+
+export const createDevctxServer = () => {
+  const server = new McpServer({
+    name: 'devctx',
+    version,
+  });
+
+  server.tool(
+    'smart_read',
+    'Read a file with token-efficient modes. outline/signatures: compact structure (~90% savings). range: specific line range with line numbers. symbol: extract function/class/method by name (string or array for batch). full: file content capped at 12k chars. maxTokens: token budget — auto-selects the most detailed mode that fits (full -> outline -> signatures -> truncated). Responses are cached in memory per session and invalidated by file mtime; cached=true when served from cache. Supports JS/TS, Python, Go, Rust, Java, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
+    {
+      filePath: z.string(),
+      mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol']).optional(),
+      startLine: z.number().optional(),
+      endLine: z.number().optional(),
+      symbol: z.union([z.string(), z.array(z.string())]).optional(),
+      maxTokens: z.number().int().min(1).optional(),
+    },
+    async ({ filePath, mode = 'outline', startLine, endLine, symbol, maxTokens }) =>
+      asTextResult(await smartRead({ filePath, mode, startLine, endLine, symbol, maxTokens })),
+  );
+
+  server.tool(
+    'smart_read_batch',
+    'Read multiple files in one call. Each item accepts path, mode, symbol, startLine, endLine, maxTokens (per-file budget). Optional global maxTokens budget with early stop when exceeded. Max 20 files per call.',
+    {
+      files: z.array(z.object({
+        path: z.string(),
+        mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol']).optional(),
+        symbol: z.union([z.string(), z.array(z.string())]).optional(),
+        startLine: z.number().optional(),
+        endLine: z.number().optional(),
+        maxTokens: z.number().int().min(1).optional(),
+      })).min(1).max(20),
+      maxTokens: z.number().int().min(1).optional(),
+    },
+    async ({ files, maxTokens }) =>
+      asTextResult(await smartReadBatch({ files, maxTokens })),
+  );
+
+  server.tool(
+    'smart_search',
+    'Search code across the project using ripgrep (with filesystem fallback). Returns grouped, ranked results. Optional intent (implementation/debug/tests/config/docs/explore) adjusts ranking: tests boosts test files, config boosts config files, docs reduces penalty on READMEs. Includes retrievalConfidence and provenance metadata.',
+    {
+      query: z.string(),
+      cwd: z.string().optional(),
+      intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
+    },
+    async ({ query, cwd = '.', intent }) => asTextResult(await smartSearch({ query, cwd, intent })),
+  );
+
+  server.tool(
+    'smart_context',
+    'Get curated context for a task in one call. Combines smart_search + smart_read + graph expansion. Returns relevant files (outline/signatures), related tests, dependencies, and symbol details — optimized for tokens. Replaces the manual search → read → read cycle. Optional intent override, token budget, and diff mode (pass diff=true for HEAD or diff="main" to scope context to changed files only).',
+    {
+      task: z.string(),
+      intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
+      maxTokens: z.number().optional(),
+      entryFile: z.string().optional(),
+      diff: z.union([z.boolean(), z.string()]).optional(),
+    },
+    async ({ task, intent, maxTokens, entryFile, diff }) =>
+      asTextResult(await smartContext({ task, intent, maxTokens, entryFile, diff })),
+  );
+
+  server.tool(
+    'smart_shell',
+    'Run a diagnostic shell command from an allowlist. Allowed: pwd, ls, find, rg, git (status/diff/show/log/branch/rev-parse), npm/pnpm/yarn/bun (test/run/lint/build/typecheck/check). Blocks shell operators, pipes, and unsafe commands.',
+    {
+      command: z.string(),
+    },
+    async ({ command }) => asTextResult(await smartShell({ command })),
+  );
+
+  server.tool(
+    'build_index',
+    'Build a lightweight symbol index for the project. Speeds up smart_search ranking and smart_read symbol lookups. Pass incremental=true to only reindex files with changed mtime (much faster for large repos). Without incremental, rebuilds from scratch.',
+    {
+      incremental: z.boolean().optional(),
+    },
+    async ({ incremental }) => {
+      if (incremental) {
+        const { index, stats } = buildIndexIncremental(projectRoot);
+        await persistIndex(index, projectRoot);
+        const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
+        return asTextResult({ status: 'ok', files: stats.total, symbols: symbolCount, ...stats });
+      }
+
+      const index = buildIndex(projectRoot);
+      await persistIndex(index, projectRoot);
+      const fileCount = Object.keys(index.files).length;
+      const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
+      return asTextResult({ status: 'ok', files: fileCount, symbols: symbolCount });
+    },
+  );
+
+  return server;
+};
+
+export const runDevctxServer = async () => {
+  if (process.env.DEVCTX_DEBUG === '1') {
+    process.stderr.write(`devctx project root (${projectRootSource}): ${projectRoot}\n`);
+  }
+
+  const server = createDevctxServer();
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+
+  const shutdown = () => {
+    transport.close().catch(() => {}).finally(() => process.exit(0));
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  return server;
+};
