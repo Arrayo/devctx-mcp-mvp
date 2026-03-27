@@ -1,6 +1,6 @@
 {
   "name": "smart-context-mcp",
-  "version": "0.9.0",
+  "version": "1.0.3",
   "description": "MCP server that reduces agent token usage and improves response quality with compact file summaries, ranked code search, and curated context.",
   "author": "Francisco Caballero Portero <fcp1978@hotmail.com>",
   "type": "module",
@@ -13,9 +13,11 @@
     "url": "https://github.com/Arrayo/devctx-mcp-mvp/issues"
   },
   "bin": {
+    "smart-context-headless": "scripts/headless-wrapper.js",
     "smart-context-server": "scripts/devctx-server.js",
     "smart-context-init": "scripts/init-clients.js",
-    "smart-context-report": "scripts/report-metrics.js"
+    "smart-context-report": "scripts/report-metrics.js",
+    "smart-context-protect": "scripts/check-repo-safety.js"
   },
   "exports": {
     ".": "./src/server.js",
@@ -23,7 +25,10 @@
   },
   "files": [
     "src/",
+    "scripts/claude-hook.js",
+    "scripts/check-repo-safety.js",
     "scripts/devctx-server.js",
+    "scripts/headless-wrapper.js",
     "scripts/init-clients.js",
     "scripts/report-metrics.js"
   ],
@@ -45,7 +50,7 @@
     "smoke:json": "node ./scripts/smoke-test.js --json",
     "init:clients": "node ./scripts/init-clients.js",
     "smoke:formats": "node ./scripts/format-smoke.js",
-    "test": "node --test ./tests/*.test.js",
+    "test": "node --test --test-concurrency=1 ./tests/*.test.js",
     "eval": "node ./evals/harness.js",
     "eval:context": "node ./evals/harness.js --tool=context",
     "eval:both": "node ./evals/harness.js --tool=both",

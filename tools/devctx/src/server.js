@@ -9,6 +9,8 @@ import { smartContext } from './tools/smart-context.js';
 import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
 import { smartSummary } from './tools/smart-summary.js';
+import { smartMetrics } from './tools/smart-metrics.js';
+import { smartTurn } from './tools/smart-turn.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
 
 const require = createRequire(import.meta.url);
@@ -123,9 +125,9 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_summary',
-    'Maintain compressed conversation state across turns. Actions: get (retrieve current/last session), update (create or replace a session; omitted fields are cleared), append (add to existing session), reset (clear session), list_sessions (show all sessions). Sessions persist in .devctx/sessions/ with 30-day retention. Auto-generates sessionId from goal if not provided. Returns a resume summary capped at maxTokens (default 500) plus compression metadata (`truncated`, `compressionLevel`, `omitted`) and `schemaVersion`. Tracks: goal, status, pinned context, unresolved questions, current focus, blockers, next step, completed steps, key decisions, and touched files.',
+    'Maintain compressed conversation state across turns. Actions: get (retrieve current/last session), update (create or replace a session; omitted fields are cleared), append (add to existing session), auto_append (append only if something meaningful changed), checkpoint (event-driven orchestration that decides whether to auto-persist), reset (clear session), list_sessions (show all sessions), compact (apply retention/compaction to SQLite events), cleanup_legacy (inspect or remove imported legacy JSON/JSONL files). Sessions persist in project-local SQLite with 30-day retention defaults. Auto-generates sessionId from goal if omitted. `get` auto-resumes the active session when present, otherwise falls back to the best saved session when unambiguous; pass `sessionId: "auto"` to accept the recommended session even when multiple recent candidates exist. Returns a resume summary capped at maxTokens (default 500) plus compression metadata (`truncated`, `compressionLevel`, `omitted`) and `schemaVersion`. Includes `repoSafety` so agents can catch `.devctx/state.sqlite` git hygiene issues early; mutating actions are blocked at runtime when that SQLite file is tracked or staged. Tracks: goal, status, pinned context, unresolved questions, current focus, blockers, next step, completed steps, key decisions, and touched files.',
     {
-      action: z.enum(['get', 'update', 'append', 'reset', 'list_sessions']),
+      action: z.enum(['get', 'update', 'append', 'auto_append', 'checkpoint', 'reset', 'list_sessions', 'compact', 'cleanup_legacy']),
       sessionId: z.string().optional(),
       update: z.object({
         goal: z.string().optional(),
@@ -140,10 +142,87 @@ export const createDevctxServer = () => {
         nextStep: z.string().optional(),
         touchedFiles: z.array(z.string()).optional(),
       }).optional(),
+      event: z.enum(['manual', 'milestone', 'decision', 'blocker', 'status_change', 'file_change', 'task_switch', 'task_complete', 'session_end', 'read_only', 'heartbeat']).optional(),
+      force: z.boolean().optional(),
       maxTokens: z.number().int().min(100).max(2000).optional(),
+      retentionDays: z.number().int().min(1).max(3650).optional(),
+      keepLatestEventsPerSession: z.number().int().min(0).max(10000).optional(),
+      keepLatestMetrics: z.number().int().min(0).max(100000).optional(),
+      vacuum: z.boolean().optional(),
+      apply: z.boolean().optional(),
     },
-    async ({ action, sessionId, update, maxTokens }) =>
-      asTextResult(await smartSummary({ action, sessionId, update, maxTokens })),
+    async ({ action, sessionId, update, event, force, maxTokens, retentionDays, keepLatestEventsPerSession, keepLatestMetrics, vacuum, apply }) =>
+      asTextResult(await smartSummary({
+        action,
+        sessionId,
+        update,
+        event,
+        force,
+        maxTokens,
+        retentionDays,
+        keepLatestEventsPerSession,
+        keepLatestMetrics,
+        vacuum,
+        apply,
+      })),
+  );
+
+  server.tool(
+    'smart_turn',
+    'Orchestrate start/end of a meaningful agent turn so context usage becomes almost mandatory with low token overhead. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary and can optionally include compact metrics. Use this instead of manually chaining `smart_summary(get)` and `smart_summary(checkpoint)` when you want a single context-first turn workflow.',
+    {
+      phase: z.enum(['start', 'end']),
+      sessionId: z.string().optional(),
+      prompt: z.string().optional(),
+      update: z.object({
+        goal: z.string().optional(),
+        status: z.enum(['planning', 'in_progress', 'blocked', 'completed']).optional(),
+        pinnedContext: z.array(z.string()).optional(),
+        unresolvedQuestions: z.array(z.string()).optional(),
+        currentFocus: z.string().optional(),
+        whyBlocked: z.string().optional(),
+        completed: z.array(z.string()).optional(),
+        decisions: z.array(z.string()).optional(),
+        blockers: z.array(z.string()).optional(),
+        nextStep: z.string().optional(),
+        touchedFiles: z.array(z.string()).optional(),
+      }).optional(),
+      event: z.enum(['manual', 'milestone', 'decision', 'blocker', 'status_change', 'file_change', 'task_switch', 'task_complete', 'session_end', 'read_only', 'heartbeat']).optional(),
+      force: z.boolean().optional(),
+      maxTokens: z.number().int().min(100).max(2000).optional(),
+      ensureSession: z.boolean().optional(),
+      includeMetrics: z.boolean().optional(),
+      metricsWindow: z.enum(['24h', '7d', '30d', 'all']).optional(),
+      latestMetrics: z.number().int().min(1).max(20).optional(),
+    },
+    async ({ phase, sessionId, prompt, update, event, force, maxTokens, ensureSession, includeMetrics, metricsWindow, latestMetrics }) =>
+      asTextResult(await smartTurn({
+        phase,
+        sessionId,
+        prompt,
+        update,
+        event,
+        force,
+        maxTokens,
+        ensureSession,
+        includeMetrics,
+        metricsWindow,
+        latestMetrics,
+      })),
+  );
+
+  server.tool(
+    'smart_metrics',
+    'Inspect token metrics recorded in project-local SQLite storage by default. Returns aggregated totals, per-tool savings, and recent entries. Supports time windows (`24h`, `7d`, `30d`, `all`), optional tool filtering, and optional session filtering (`sessionId: "active"` resolves the current active session automatically). Pass `file` to inspect a legacy/custom JSONL file explicitly. When `.devctx/state.sqlite` is tracked or staged, reads fall back to a temporary read-only snapshot and report `sideEffectsSuppressed`; metrics writes from other tools are skipped until git hygiene is fixed.',
+    {
+      file: z.string().optional(),
+      tool: z.string().optional(),
+      sessionId: z.string().optional(),
+      window: z.enum(['24h', '7d', '30d', 'all']).optional(),
+      latest: z.number().int().min(1).max(50).optional(),
+    },
+    async ({ file, tool, sessionId, window, latest }) =>
+      asTextResult(await smartMetrics({ file, tool, sessionId, window, latest })),
   );
 
   return server;

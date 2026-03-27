@@ -1,12 +1,76 @@
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { smartSummary } from '../src/tools/smart-summary.js';
-import { projectRoot } from '../src/utils/runtime-config.js';
+import { ACTIVE_SESSION_SCOPE, SQLITE_SCHEMA_VERSION, withStateDb } from '../src/storage/sqlite.js';
+import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 
-const SESSIONS_DIR = path.join(projectRoot, '.devctx', 'sessions');
+const originalProjectRoot = projectRoot;
+let summaryTestRoot = null;
+const getSessionsDir = () => path.join(projectRoot, '.devctx', 'sessions');
+const getActiveSessionFile = () => path.join(getSessionsDir(), 'active.json');
+const getStateDbPath = () => path.join(projectRoot, '.devctx', 'state.sqlite');
 const TEST_SESSION_ID = 'test-session-cleanup';
+
+const withProjectStateDb = (callback, options = {}) => withStateDb(callback, {
+  filePath: getStateDbPath(),
+  ...options,
+});
+
+const getActiveSessionId = () => withProjectStateDb(
+  (db) => db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE)?.session_id ?? null,
+  { readOnly: true },
+);
+
+const clearActiveSession = () => withProjectStateDb((db) => {
+  db.prepare('DELETE FROM active_session WHERE scope = ?').run(ACTIVE_SESSION_SCOPE);
+});
+
+const sessionExists = (sessionId) => withProjectStateDb(
+  (db) => Boolean(db.prepare('SELECT 1 FROM sessions WHERE session_id = ?').get(sessionId)),
+  { readOnly: true },
+);
+
+const getSessionEventCount = (sessionId) => withProjectStateDb(
+  (db) => db.prepare('SELECT COUNT(*) AS count FROM session_events WHERE session_id = ?').get(sessionId).count,
+  { readOnly: true },
+);
+
+const ageSession = (sessionId, updatedAt) => withProjectStateDb((db) => {
+  const row = db.prepare('SELECT snapshot_json FROM sessions WHERE session_id = ?').get(sessionId);
+  assert.ok(row, `Session ${sessionId} should exist before aging it`);
+
+  const snapshot = JSON.parse(row.snapshot_json);
+  snapshot.updatedAt = updatedAt;
+
+  db.prepare(`
+    UPDATE sessions
+    SET updated_at = ?, snapshot_json = ?
+    WHERE session_id = ?
+  `).run(updatedAt, JSON.stringify(snapshot), sessionId);
+
+  const activeSessionId = db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE)?.session_id;
+  if (activeSessionId === sessionId) {
+    db.prepare('UPDATE active_session SET updated_at = ? WHERE scope = ?').run(updatedAt, ACTIVE_SESSION_SCOPE);
+  }
+});
+
+before(() => {
+  summaryTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-suite-'));
+  setProjectRoot(summaryTestRoot);
+  fs.mkdirSync(getSessionsDir(), { recursive: true });
+  execFileSync('git', ['init'], { cwd: summaryTestRoot, stdio: 'ignore' });
+});
+
+after(() => {
+  setProjectRoot(originalProjectRoot);
+  if (summaryTestRoot) {
+    fs.rmSync(summaryTestRoot, { recursive: true, force: true });
+  }
+});
 
 test('smart_summary - create new session with update', async () => {
   const result = await smartSummary({
@@ -26,7 +90,7 @@ test('smart_summary - create new session with update', async () => {
   assert.strictEqual(result.sessionId, TEST_SESSION_ID);
   assert.ok(result.summary);
   assert.strictEqual(result.summary.goal, 'Test feature implementation');
-  assert.strictEqual(result.schemaVersion, 2);
+  assert.strictEqual(result.schemaVersion, SQLITE_SCHEMA_VERSION);
   assert.strictEqual(result.compressionLevel, 'none');
   assert.ok(result.tokens > 0);
   assert.ok(result.updatedAt);
@@ -43,7 +107,7 @@ test('smart_summary - get existing session', async () => {
   assert.strictEqual(result.sessionId, TEST_SESSION_ID);
   assert.ok(result.summary);
   assert.strictEqual(result.summary.goal, 'Test feature implementation');
-  assert.strictEqual(result.schemaVersion, 2);
+  assert.strictEqual(result.schemaVersion, SQLITE_SCHEMA_VERSION);
 });
 
 test('smart_summary - append to existing session', async () => {
@@ -170,11 +234,8 @@ test('smart_summary - auto-generate sessionId from goal', async () => {
 
   assert.ok(result.sessionId);
   assert.ok(result.sessionId.includes('add-user-authentication'));
-  
-  const sessionPath = path.join(SESSIONS_DIR, `${result.sessionId}.json`);
-  if (fs.existsSync(sessionPath)) {
-    fs.unlinkSync(sessionPath);
-  }
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
 test('smart_summary - compression under token budget', async () => {
@@ -200,11 +261,8 @@ test('smart_summary - compression under token budget', async () => {
   assert.ok((result.summary.recentCompleted || []).length <= 3);
   assert.ok((result.summary.keyDecisions || []).length <= 2);
   assert.ok((result.summary.hotFiles || []).length <= 5);
-  
-  const sessionPath = path.join(SESSIONS_DIR, 'test-compression.json');
-  if (fs.existsSync(sessionPath)) {
-    fs.unlinkSync(sessionPath);
-  }
+
+  await smartSummary({ action: 'reset', sessionId: 'test-compression' });
 });
 
 test('smart_summary - reset session', async () => {
@@ -223,19 +281,18 @@ test('smart_summary - reset session', async () => {
   assert.strictEqual(getResult.found, false);
 });
 
-test('smart_summary - reset active session clears active.json', async () => {
+test('smart_summary - reset active session clears active session state', async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-reset-active',
     update: { goal: 'Active to reset', status: 'in_progress' },
   });
 
-  const activeFile = path.join(projectRoot, '.devctx', 'sessions', 'active.json');
-  assert.ok(fs.existsSync(activeFile), 'active.json should exist before reset');
+  assert.strictEqual(await getActiveSessionId(), 'test-reset-active');
 
   await smartSummary({ action: 'reset', sessionId: 'test-reset-active' });
 
-  assert.ok(!fs.existsSync(activeFile), 'active.json should be deleted after resetting active session');
+  assert.strictEqual(await getActiveSessionId(), null);
 
   const getResult = await smartSummary({ action: 'get' });
   assert.strictEqual(getResult.found, false, 'get without sessionId should return not found after active reset');
@@ -251,8 +308,8 @@ test('smart_summary - get non-existent session', async () => {
   assert.ok(result.message);
 });
 
-test('smart_summary - orphaned active.json is cleaned up automatically', async () => {
-  const activeFile = path.join(projectRoot, '.devctx', 'sessions', 'active.json');
+test('smart_summary - orphaned legacy active.json is ignored automatically', async () => {
+  const activeFile = getActiveSessionFile();
   fs.writeFileSync(activeFile, JSON.stringify({
     sessionId: 'missing-session',
     updatedAt: new Date().toISOString(),
@@ -261,7 +318,7 @@ test('smart_summary - orphaned active.json is cleaned up automatically', async (
   const result = await smartSummary({ action: 'get' });
 
   assert.strictEqual(result.found, false);
-  assert.ok(!fs.existsSync(activeFile), 'orphaned active.json should be removed automatically');
+  assert.strictEqual(await getActiveSessionId(), null);
 });
 
 test('smart_summary - append without sessionId uses active session', async () => {
@@ -290,6 +347,300 @@ test('smart_summary - append without sessionId uses active session', async () =>
   assert.ok(appendResult.summary.keyDecisions.includes('key decision'));
 
   await smartSummary({ action: 'reset', sessionId: 'test-active-append' });
+});
+
+test('smart_summary - auto_append skips no-op updates', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-auto-append-skip',
+    update: {
+      goal: 'Auto append skip',
+      status: 'in_progress',
+      completed: ['initial'],
+      nextStep: 'keep going',
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-auto-append-skip');
+  const result = await smartSummary({
+    action: 'auto_append',
+    sessionId: 'test-auto-append-skip',
+    update: {
+      completed: ['initial'],
+      nextStep: 'keep going',
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-auto-append-skip');
+
+  assert.strictEqual(result.action, 'auto_append');
+  assert.strictEqual(result.skipped, true);
+  assert.deepStrictEqual(result.changedFields, []);
+  assert.strictEqual(afterEvents, beforeEvents);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-auto-append-skip' });
+});
+
+test('smart_summary - auto_append persists meaningful changes', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-auto-append-save',
+    update: {
+      goal: 'Auto append save',
+      status: 'in_progress',
+      completed: ['initial'],
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-auto-append-save');
+  const result = await smartSummary({
+    action: 'auto_append',
+    sessionId: 'test-auto-append-save',
+    update: {
+      completed: ['second'],
+      nextStep: 'finish validation',
+      touchedFiles: ['src/feature.js'],
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-auto-append-save');
+
+  assert.strictEqual(result.skipped, false);
+  assert.ok(result.changedFields.includes('completed'));
+  assert.ok(result.changedFields.includes('nextStep'));
+  assert.ok(result.summary.recentCompleted.includes('second'));
+  assert.strictEqual(afterEvents, beforeEvents + 1);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-auto-append-save' });
+});
+
+test('smart_summary - checkpoint persists milestone events with relevant changes', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-checkpoint-milestone',
+    update: {
+      goal: 'Checkpoint milestone',
+      status: 'in_progress',
+      completed: ['initial'],
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-checkpoint-milestone');
+  const result = await smartSummary({
+    action: 'checkpoint',
+    event: 'milestone',
+    sessionId: 'test-checkpoint-milestone',
+    update: {
+      completed: ['milestone reached'],
+      touchedFiles: ['src/milestone.js'],
+      nextStep: 'run verification',
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-checkpoint-milestone');
+
+  assert.strictEqual(result.skipped, false);
+  assert.strictEqual(result.checkpoint.event, 'milestone');
+  assert.strictEqual(result.checkpoint.shouldPersist, true);
+  assert.ok(result.changedFields.includes('completed'));
+  assert.strictEqual(afterEvents, beforeEvents + 1);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-milestone' });
+});
+
+test('smart_summary - checkpoint suppresses read_only events', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-checkpoint-read-only',
+    update: {
+      goal: 'Checkpoint read only',
+      status: 'in_progress',
+      currentFocus: 'exploration',
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-checkpoint-read-only');
+  const result = await smartSummary({
+    action: 'checkpoint',
+    event: 'read_only',
+    sessionId: 'test-checkpoint-read-only',
+    update: {
+      currentFocus: 'exploration',
+      touchedFiles: ['src/explore.js'],
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-checkpoint-read-only');
+
+  assert.strictEqual(result.skipped, true);
+  assert.strictEqual(result.checkpoint.event, 'read_only');
+  assert.strictEqual(result.checkpoint.shouldPersist, false);
+  assert.match(result.checkpoint.reason, /Read-only exploration/);
+  assert.strictEqual(afterEvents, beforeEvents);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-read-only' });
+});
+
+test('smart_summary - checkpoint force overrides suppressed events', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-checkpoint-force',
+    update: {
+      goal: 'Checkpoint force',
+      status: 'in_progress',
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-checkpoint-force');
+  const result = await smartSummary({
+    action: 'checkpoint',
+    event: 'heartbeat',
+    force: true,
+    sessionId: 'test-checkpoint-force',
+    update: {
+      nextStep: 'force-save this state',
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-checkpoint-force');
+
+  assert.strictEqual(result.skipped, false);
+  assert.strictEqual(result.checkpoint.event, 'heartbeat');
+  assert.strictEqual(result.checkpoint.shouldPersist, true);
+  assert.match(result.checkpoint.reason, /forced/i);
+  assert.strictEqual(afterEvents, beforeEvents + 1);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-force' });
+});
+
+test('smart_summary - checkpoint suppresses weak single-file changes', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-checkpoint-file-change-weak',
+    update: {
+      goal: 'Weak file change',
+      status: 'in_progress',
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-checkpoint-file-change-weak');
+  const result = await smartSummary({
+    action: 'checkpoint',
+    event: 'file_change',
+    sessionId: 'test-checkpoint-file-change-weak',
+    update: {
+      touchedFiles: ['src/only-one.js'],
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-checkpoint-file-change-weak');
+
+  assert.strictEqual(result.skipped, true);
+  assert.strictEqual(result.checkpoint.event, 'file_change');
+  assert.strictEqual(result.checkpoint.shouldPersist, false);
+  assert.match(result.checkpoint.reason, /single touched file/i);
+  assert.strictEqual(result.checkpoint.score, 1);
+  assert.strictEqual(result.checkpoint.threshold, 3);
+  assert.strictEqual(afterEvents, beforeEvents);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-file-change-weak' });
+});
+
+test('smart_summary - checkpoint persists strong decision changes with score details', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-checkpoint-decision-strong',
+    update: {
+      goal: 'Strong decision checkpoint',
+      status: 'in_progress',
+    },
+  });
+
+  const beforeEvents = await getSessionEventCount('test-checkpoint-decision-strong');
+  const result = await smartSummary({
+    action: 'checkpoint',
+    event: 'decision',
+    sessionId: 'test-checkpoint-decision-strong',
+    update: {
+      decisions: ['Use SQLite-backed summaries as the primary context store'],
+      pinnedContext: ['Project context must stay inside .devctx/state.sqlite'],
+      nextStep: 'wire decision into orchestration rules',
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-checkpoint-decision-strong');
+
+  assert.strictEqual(result.skipped, false);
+  assert.strictEqual(result.checkpoint.event, 'decision');
+  assert.strictEqual(result.checkpoint.shouldPersist, true);
+  assert.ok(result.checkpoint.score >= result.checkpoint.threshold);
+  assert.ok(result.checkpoint.scoreByField.decisions >= 4);
+  assert.ok(result.checkpoint.scoreByField.pinnedContext >= 4);
+  assert.strictEqual(afterEvents, beforeEvents + 1);
+
+  await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-decision-strong' });
+});
+
+test('smart_summary - repoSafety warns when state.sqlite is tracked', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-repo-safety',
+    update: {
+      goal: 'Repo safety',
+      status: 'in_progress',
+    },
+  });
+
+  fs.writeFileSync(path.join(summaryTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+  execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: summaryTestRoot, stdio: 'ignore' });
+
+  const result = await smartSummary({
+    action: 'get',
+    sessionId: 'test-repo-safety',
+  });
+
+  assert.strictEqual(result.repoSafety.available, true);
+  assert.strictEqual(result.repoSafety.isGitRepo, true);
+  assert.strictEqual(result.repoSafety.isTracked, true);
+  assert.strictEqual(result.repoSafety.riskLevel, 'warning');
+  assert.ok(result.repoSafety.warnings.some((warning) => warning.includes('tracked by git')));
+
+  execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: summaryTestRoot, stdio: 'ignore' });
+  await smartSummary({ action: 'reset', sessionId: 'test-repo-safety' });
+});
+
+test('smart_summary - mutating actions are blocked when state.sqlite is tracked or staged', async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'test-repo-safety-blocked',
+    update: {
+      goal: 'Repo safety blocked',
+      status: 'in_progress',
+    },
+  });
+
+  fs.writeFileSync(path.join(summaryTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+  execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: summaryTestRoot, stdio: 'ignore' });
+
+  const beforeEvents = await getSessionEventCount('test-repo-safety-blocked');
+  const blocked = await smartSummary({
+    action: 'append',
+    sessionId: 'test-repo-safety-blocked',
+    update: {
+      completed: ['should not persist'],
+      nextStep: 'this write should be blocked',
+    },
+  });
+  const afterEvents = await getSessionEventCount('test-repo-safety-blocked');
+  const current = await smartSummary({
+    action: 'get',
+    sessionId: 'test-repo-safety-blocked',
+  });
+
+  assert.strictEqual(blocked.blocked, true);
+  assert.strictEqual(blocked.mutationBlocked, true);
+  assert.deepStrictEqual(blocked.blockedBy, ['tracked', 'staged']);
+  assert.match(blocked.message, /tracked and staged/i);
+  assert.strictEqual(afterEvents, beforeEvents);
+  assert.strictEqual(current.sideEffectsSuppressed, true);
+  assert.ok(!current.summary.recentCompleted?.includes('should not persist'));
+  assert.ok(!current.summary.nextStep || current.summary.nextStep !== 'this write should be blocked');
+
+  execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: summaryTestRoot, stdio: 'ignore' });
+  await smartSummary({ action: 'reset', sessionId: 'test-repo-safety-blocked' });
 });
 
 test('smart_summary - reset non-active session preserves active.json', async () => {
@@ -570,7 +921,7 @@ test('smart_summary - nextStep survives before goal under tight budget', async (
 
 test('smart_summary - legacy session without schemaVersion still loads', async () => {
   const legacySessionId = 'test-legacy-session';
-  const legacyPath = path.join(SESSIONS_DIR, `${legacySessionId}.json`);
+  const legacyPath = path.join(getSessionsDir(), `${legacySessionId}.json`);
   fs.writeFileSync(legacyPath, JSON.stringify({
     sessionId: legacySessionId,
     goal: 'Legacy session',
@@ -649,20 +1000,23 @@ test('smart_summary - token-dense pathological strings still respect cap', async
 
 test('smart_summary - stale sessions are auto-deleted on list', async () => {
   const staleSessionId = 'test-stale-session';
-  const sessionPath = path.join(projectRoot, '.devctx', 'sessions', `${staleSessionId}.json`);
-  
   const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
-  fs.writeFileSync(sessionPath, JSON.stringify({
+
+  await smartSummary({
+    action: 'update',
     sessionId: staleSessionId,
-    goal: 'Stale session',
-    status: 'completed',
-    updatedAt: oldDate,
-  }), 'utf8');
+    update: {
+      goal: 'Stale session',
+      status: 'completed',
+    },
+  });
+  await ageSession(staleSessionId, oldDate);
+  await clearActiveSession();
 
   const listResult = await smartSummary({ action: 'list_sessions' });
 
   assert.ok(!listResult.sessions.some(s => s.sessionId === staleSessionId));
-  assert.ok(!fs.existsSync(sessionPath));
+  assert.strictEqual(await sessionExists(staleSessionId), false);
 });
 
 test('smart_summary - stale active session is preserved', async () => {
@@ -678,21 +1032,240 @@ test('smart_summary - stale active session is preserved', async () => {
     },
   });
 
-  const sessionPath = path.join(projectRoot, '.devctx', 'sessions', `${staleActiveId}.json`);
-  const sessionData = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-  sessionData.updatedAt = oldDate;
-  fs.writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2), 'utf8');
-
-  const activeFile = path.join(projectRoot, '.devctx', 'sessions', 'active.json');
-  fs.writeFileSync(activeFile, JSON.stringify({ sessionId: staleActiveId, updatedAt: oldDate }, null, 2), 'utf8');
+  await ageSession(staleActiveId, oldDate);
 
   await smartSummary({ action: 'list_sessions' });
 
-  assert.ok(fs.existsSync(sessionPath), 'Active session should not be deleted even if stale');
+  assert.strictEqual(await sessionExists(staleActiveId), true, 'Active session should not be deleted even if stale');
 
   const getResult = await smartSummary({ action: 'get' });
   assert.strictEqual(getResult.found, true);
   assert.strictEqual(getResult.sessionId, staleActiveId);
 
   await smartSummary({ action: 'reset', sessionId: staleActiveId });
+});
+
+test('smart_summary - get auto-resumes a single saved session without active.json', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-auto-single-'));
+  const previousRoot = projectRoot;
+
+  try {
+    setProjectRoot(tmpRoot);
+    await smartSummary({
+      action: 'update',
+      sessionId: 'auto-single',
+      update: {
+        goal: 'Resume single session',
+        status: 'in_progress',
+        nextStep: 'continue work',
+      },
+    });
+
+    await clearActiveSession();
+
+    const result = await smartSummary({ action: 'get' });
+    assert.strictEqual(result.found, true);
+    assert.strictEqual(result.sessionId, 'auto-single');
+    assert.strictEqual(result.autoResumed, true);
+    assert.strictEqual(result.resumeSource, 'latest_only');
+  } finally {
+    setProjectRoot(previousRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_summary - get returns candidates when multiple recent sessions are ambiguous', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-auto-many-'));
+  const previousRoot = projectRoot;
+
+  try {
+    setProjectRoot(tmpRoot);
+    await smartSummary({
+      action: 'update',
+      sessionId: 'auto-a',
+      update: {
+        goal: 'First active task',
+        status: 'in_progress',
+      },
+    });
+    await smartSummary({
+      action: 'update',
+      sessionId: 'auto-b',
+      update: {
+        goal: 'Second active task',
+        status: 'planning',
+      },
+    });
+
+    await clearActiveSession();
+
+    const result = await smartSummary({ action: 'get' });
+    assert.strictEqual(result.found, false);
+    assert.strictEqual(result.ambiguous, true);
+    assert.ok(Array.isArray(result.candidates));
+    assert.ok(result.candidates.length >= 2);
+    assert.ok(['auto-a', 'auto-b'].includes(result.recommendedSessionId));
+  } finally {
+    setProjectRoot(previousRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_summary - get with sessionId auto accepts the recommended session', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-auto-force-'));
+  const previousRoot = projectRoot;
+
+  try {
+    setProjectRoot(tmpRoot);
+    await smartSummary({
+      action: 'update',
+      sessionId: 'auto-force-a',
+      update: {
+        goal: 'First candidate',
+        status: 'in_progress',
+      },
+    });
+    await smartSummary({
+      action: 'update',
+      sessionId: 'auto-force-b',
+      update: {
+        goal: 'Second candidate',
+        status: 'planning',
+      },
+    });
+
+    await clearActiveSession();
+
+    const result = await smartSummary({ action: 'get', sessionId: 'auto' });
+    assert.strictEqual(result.found, true);
+    assert.strictEqual(result.autoResumed, true);
+    assert.strictEqual(result.ambiguous, true);
+    assert.strictEqual(result.sessionId, result.recommendedSessionId);
+    assert.ok(Array.isArray(result.candidates));
+    assert.ok(result.candidates.length >= 2);
+  } finally {
+    setProjectRoot(previousRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_summary - compact prunes retained events and stale non-active sessions', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-compact-'));
+  const previousRoot = projectRoot;
+
+  try {
+    setProjectRoot(tmpRoot);
+    fs.mkdirSync(getSessionsDir(), { recursive: true });
+
+    await smartSummary({
+      action: 'update',
+      sessionId: 'compact-active',
+      update: { goal: 'Active session', status: 'in_progress' },
+    });
+    await smartSummary({
+      action: 'update',
+      sessionId: 'compact-stale',
+      update: { goal: 'Stale session', status: 'completed' },
+    });
+    await smartSummary({
+      action: 'append',
+      sessionId: 'compact-active',
+      update: { completed: ['step-1'] },
+    });
+    await smartSummary({
+      action: 'append',
+      sessionId: 'compact-active',
+      update: { completed: ['step-2'] },
+    });
+
+    const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
+    await ageSession('compact-active', oldDate);
+    await ageSession('compact-stale', oldDate);
+    await withProjectStateDb((db) => {
+      db.prepare('UPDATE session_events SET created_at = ? WHERE session_id = ?').run(oldDate, 'compact-active');
+    });
+
+    const result = await smartSummary({
+      action: 'compact',
+      retentionDays: 30,
+      keepLatestEventsPerSession: 1,
+      keepLatestMetrics: 1,
+    });
+
+    assert.strictEqual(result.sessions.deleted, 1);
+    assert.ok(result.sessionEvents.deleted >= 1);
+
+    const snapshot = await withProjectStateDb((db) => ({
+      sessions: db.prepare('SELECT session_id FROM sessions ORDER BY session_id').all(),
+      active: db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE),
+    }));
+    assert.deepStrictEqual(
+      snapshot.sessions.map((row) => row.session_id),
+      ['compact-active'],
+    );
+    assert.strictEqual(snapshot.active.session_id, 'compact-active');
+
+    await smartSummary({ action: 'reset', sessionId: 'compact-active' });
+  } finally {
+    setProjectRoot(previousRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_summary - cleanup_legacy supports dry-run and apply for imported files', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-cleanup-legacy-'));
+  const previousRoot = projectRoot;
+  const legacySessionId = 'cleanup-legacy-session';
+  try {
+    setProjectRoot(tmpRoot);
+    fs.mkdirSync(getSessionsDir(), { recursive: true });
+
+    const legacyPath = path.join(getSessionsDir(), `${legacySessionId}.json`);
+    const activeFile = getActiveSessionFile();
+    const metricsFile = path.join(projectRoot, '.devctx', 'metrics.jsonl');
+
+    fs.writeFileSync(legacyPath, JSON.stringify({
+      sessionId: legacySessionId,
+      goal: 'Legacy cleanup',
+      status: 'in_progress',
+      updatedAt: '2026-03-28T09:00:00.000Z',
+    }, null, 2), 'utf8');
+    fs.writeFileSync(activeFile, JSON.stringify({
+      sessionId: legacySessionId,
+      updatedAt: '2026-03-28T09:00:00.000Z',
+    }, null, 2), 'utf8');
+    fs.writeFileSync(metricsFile, `${JSON.stringify({
+      tool: 'smart_read',
+      sessionId: legacySessionId,
+      rawTokens: 100,
+      compressedTokens: 40,
+      savedTokens: 60,
+      timestamp: '2026-03-28T09:10:00.000Z',
+    })}\n`, 'utf8');
+
+    const getResult = await smartSummary({ action: 'get', sessionId: legacySessionId });
+    assert.strictEqual(getResult.found, true);
+
+    const dryRun = await smartSummary({ action: 'cleanup_legacy' });
+    assert.strictEqual(dryRun.apply, false);
+    assert.strictEqual(dryRun.sessions.deletable, 1);
+    assert.strictEqual(dryRun.activeSession.eligible, true);
+    assert.strictEqual(dryRun.metrics.eligible, true);
+    assert.ok(fs.existsSync(legacyPath));
+    assert.ok(fs.existsSync(activeFile));
+    assert.ok(fs.existsSync(metricsFile));
+
+    const applied = await smartSummary({ action: 'cleanup_legacy', apply: true });
+    assert.strictEqual(applied.sessions.deleted, 1);
+    assert.strictEqual(applied.activeSession.deleted, true);
+    assert.strictEqual(applied.metrics.deleted, true);
+    assert.ok(!fs.existsSync(legacyPath));
+    assert.ok(!fs.existsSync(activeFile));
+    assert.ok(!fs.existsSync(metricsFile));
+
+    await smartSummary({ action: 'reset', sessionId: legacySessionId });
+  } finally {
+    setProjectRoot(previousRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });

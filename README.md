@@ -1,8 +1,11 @@
 # smart-context-mcp
 
+[![npm version](https://badge.fury.io/js/smart-context-mcp.svg)](https://www.npmjs.com/package/smart-context-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **MCP server that reduces AI agent token usage by 90% and improves response quality.**
 
-Instead of reading entire files and repeating context, this MCP provides 7 smart tools that compress, rank, and maintain context efficiently.
+Instead of reading entire files and repeating context, this MCP provides 8 focused tools that compress, rank, and maintain context efficiently.
 
 ## Why use this?
 
@@ -12,7 +15,7 @@ Instead of reading entire files and repeating context, this MCP provides 7 smart
 
 **Real metrics from production use:**
 - 14.5M tokens → 1.6M tokens (89.87% reduction)
-- 3,666 successful calls across 7 tools
+- 3,666 successful calls across the original 7 core tools
 - Compression ratios: 3x to 46x depending on tool
 
 ## Quick Start (2 commands)
@@ -24,15 +27,19 @@ npx smart-context-init --target .
 
 That's it. Restart your AI client (Cursor, Codex, Claude Desktop) and the tools are available.
 
+**Important:** The init command automatically sets the correct project-root env var in the generated configs, so the MCP server runs from your project root. This works for standalone projects, monorepos, and nested workspaces.
+
 ## What you get
 
-Seven focused tools that work automatically:
+Eight focused tools that work automatically:
 
 - `smart_read`: compact file summaries instead of full file dumps (3x compression)
 - `smart_read_batch`: read multiple files in one call — reduces round-trip latency
 - `smart_search`: ripgrep-first code search with intent-aware ranking (21x compression)
 - `smart_context`: one-call context planner — search + read + graph expansion
 - `smart_summary`: maintain compressed conversation state across sessions (46x compression)
+- `smart_turn`: one-call turn orchestration for start/end context recovery and checkpointing
+- `smart_metrics`: inspect saved token metrics and recent usage through MCP
 - `smart_shell`: safe diagnostic shell execution with restricted commands (18x compression)
 - `build_index`: lightweight symbol index for faster lookups and smarter ranking
 
@@ -76,16 +83,19 @@ Total: ~1,000 tokens (95% reduction)
 | Read multiple files at once | `smart_read_batch` | array of `{ path, mode, symbol }` |
 | Search code by keyword/pattern | `smart_search` | `query`, `intent`: `debug` \| `implementation` \| `tests` \| `config` |
 | Get full context for a task | `smart_context` | `task` (natural language), `detail`: `minimal` \| `balanced` \| `deep` |
-| Maintain conversation context | `smart_summary` | `action`: `get` \| `update` \| `append` \| `reset` \| `list_sessions` |
+| Maintain conversation context | `smart_summary` | `action`: `get` \| `update` \| `append` \| `auto_append` \| `checkpoint` \| `reset` \| `list_sessions` \| `compact` \| `cleanup_legacy` |
+| Orchestrate a turn with context | `smart_turn` | `phase`: `start` \| `end`, `prompt`, `ensureSession`, `event`, `update` |
+| Inspect token savings | `smart_metrics` | `window`, `tool`, `sessionId` |
 | Run diagnostic commands | `smart_shell` | `command` (allowlisted only) |
 | Build symbol index (once) | `build_index` | `incremental`: `true` for faster updates |
 
 **When to use what:**
-- **Starting a task?** → `smart_summary` to get context, then `smart_context` with your goal
+- **Starting a non-trivial task?** → `smart_turn` with `phase: "start"` and the user prompt
+- **Need usage/savings numbers?** → `smart_metrics`
 - **Need specific file content?** → `smart_read` in `outline` or `signatures` mode
 - **Searching for a pattern?** → `smart_search` with appropriate `intent`
 - **Reading many files?** → `smart_read_batch` to reduce round-trips
-- **After each milestone?** → `smart_summary` with `action: "append"` to track progress
+- **After each milestone?** → `smart_turn` with `phase: "end"` and an event like `milestone` or `decision`
 - **Resuming after break?** → `smart_summary` with `action: "get"` to restore context
 - **First time in repo?** → `build_index` once for better ranking
 
@@ -107,6 +117,8 @@ npx smart-context-init --target .
 ```
 
 This installs the MCP server and generates client configs for all supported clients. `npm install` downloads a platform-specific `rg` binary via `@vscode/ripgrep`. No system ripgrep is required.
+If the target is a git repository, `smart-context-init` also installs an idempotent `pre-commit` hook that blocks commits when `.devctx/state.sqlite` is staged, tracked, or not properly ignored.
+For Claude Code specifically, `smart-context-init` also generates `.claude/settings.json` with native hooks so `smart_turn(start)` and turn-end enforcement happen automatically instead of relying only on prompt rules.
 
 To install only for a specific client:
 
@@ -144,9 +156,22 @@ cd /path/to/your-project
 claude
 ```
 
-Claude Code reads `.mcp.json` from the project root.
+Claude Code reads `.mcp.json` from the project root and `.claude/settings.json` for native hook automation.
 
-Config: `.mcp.json`
+Config: `.mcp.json`, `.claude/settings.json`
+
+### Codex/Qwen headless fallback
+
+When a client does not expose native per-turn hooks, use `smart-context-headless` to wrap a headless CLI run and force `smart_turn(start)` plus a closing checkpoint around that invocation.
+
+Examples:
+
+```bash
+smart-context-headless --client codex --prompt "Finish the runtime repo-safety docs" -- codex exec
+smart-context-headless --client qwen --prompt "Review the persisted session and propose the next step" -- qwen -p
+```
+
+This is the current automation path for non-Claude CLI agents. GUI clients without hook support still rely on generated rules plus `smart_turn`.
 
 ### Qwen Code
 
@@ -174,9 +199,9 @@ The `intent` parameter in `smart_search` and `smart_context` adjusts ranking and
 
 - **Cursor**: `.cursor/rules/devctx.mdc` (always-apply rule)
 - **Codex**: `AGENTS.md` (devctx section with sentinel markers)
-- **Claude Code**: `CLAUDE.md` (devctx section with sentinel markers)
+- **Claude Code**: `CLAUDE.md` (devctx section with sentinel markers) and `.claude/settings.json` (native hooks)
 
-The rules are idempotent — running `smart-context-init` again updates the section without duplicating it. Existing content in `AGENTS.md` and `CLAUDE.md` is preserved.
+The generated files are idempotent — running `smart-context-init` again updates the devctx sections and Claude hook entries without duplicating them. Existing content in `AGENTS.md`, `CLAUDE.md`, and `.claude/settings.json` is preserved.
 
 ## Quick start (from source)
 
@@ -188,7 +213,7 @@ npm start
 
 For normal IDE use, the MCP client should start the server automatically from its project config.
 
-The package exposes three binaries: `smart-context-server`, `smart-context-init`, and `smart-context-report`.
+The package exposes five binaries: `smart-context-server`, `smart-context-init`, `smart-context-report`, `smart-context-protect`, and `smart-context-headless`.
 
 ## Use against another repo
 
@@ -204,7 +229,15 @@ or:
 DEVCTX_PROJECT_ROOT=/path/to/target-repo node ./src/mcp-server.js
 ```
 
-This is the basis for non-invasive validation before writing client config into another repository.
+or (recommended for MCP clients and generated configs):
+
+```bash
+DEVCTX_PROJECT_ROOT=/path/to/target-repo node ./src/mcp-server.js
+```
+
+Legacy configs that still set `MCP_PROJECT_ROOT` remain supported for backward compatibility.
+
+`smart-context-init` automatically sets `DEVCTX_PROJECT_ROOT` in the generated client configs (`.cursor/mcp.json`, `.codex/config.toml`, `.mcp.json`, `.qwen/settings.json`), so the MCP server always launches from the correct project context, even in monorepos or when installed globally.
 
 ## Generate client configs
 
@@ -415,16 +448,20 @@ Maintain compressed conversation state across sessions. Solves the context-loss 
 
 | Action | Purpose | Returns |
 |--------|---------|---------|
-| `get` | Retrieve current or specified session | Resume summary (≤500 tokens) + compression metadata |
+| `get` | Retrieve current, explicit, or auto-resolved session | Resume summary (≤500 tokens) + compression metadata |
 | `update` | Create or replace session | New session with compressed state |
 | `append` | Add to existing session | Merged session state |
+| `auto_append` | Add only when something meaningful changed | Merged session state or skipped no-op result |
+| `checkpoint` | Event-driven orchestration for persistence decisions | Persisted update or skipped event with decision metadata |
 | `reset` | Clear session | Confirmation |
 | `list_sessions` | Show all available sessions | Array of sessions with metadata |
+| `compact` | Apply retention/compaction to SQLite state | Counts for pruned sessions, events, and metrics |
+| `cleanup_legacy` | Inspect or remove imported JSON/JSONL artifacts | Dry-run or deletion report |
 
 **Parameters:**
 - `action` (required) — one of the actions above
-- `sessionId` (optional) — session identifier; auto-generated from `goal` if omitted
-- `update` (required for update/append) — object with:
+- `sessionId` (optional) — session identifier; auto-generated from `goal` if omitted. Pass `"auto"` to accept the recommended recent session when multiple candidates exist.
+- `update` (required for update/append/auto_append/checkpoint) — object with:
   - `goal`: primary objective
   - `status`: current state (`planning` | `in_progress` | `blocked` | `completed`)
   - `pinnedContext`: critical context that should survive compression when possible
@@ -437,14 +474,27 @@ Maintain compressed conversation state across sessions. Solves the context-loss 
   - `nextStep`: immediate next action
   - `touchedFiles`: array of modified files
 - `maxTokens` (optional, default 500) — hard cap on summary size
+- `event` (optional for `checkpoint`) — one of `manual`, `milestone`, `decision`, `blocker`, `status_change`, `file_change`, `task_switch`, `task_complete`, `session_end`, `read_only`, `heartbeat`
+- `force` (optional, default false) — override a suppressed checkpoint event
+- `retentionDays` (optional, default 30) — used by `compact`
+- `keepLatestEventsPerSession` (optional, default 20) — used by `compact`
+- `keepLatestMetrics` (optional, default 1000) — used by `compact`
+- `vacuum` (optional, default false) — run SQLite `VACUUM` after deletions during `compact`
+- `apply` (optional, default false) — required to actually delete files during `cleanup_legacy`
 
-`update` replaces the stored session state for that `sessionId`, so omitted fields are cleared. Use `append` when you want to keep existing state and add progress incrementally.
+`update` replaces the stored session state for that `sessionId`, so omitted fields are cleared. Use `append` when you want to keep existing state and add progress incrementally. Use `auto_append` when the caller may checkpoint frequently and should skip writes when nothing meaningful changed. Use `checkpoint` when the caller has a milestone/blocker/decision event and wants the tool to orchestrate persistence.
 
 **Storage:**
-- Sessions persist in `.devctx/sessions/<sessionId>.json`
-- Active session tracked in `.devctx/sessions/active.json`
-- 30-day retention for inactive sessions
-- No expiration for active sessions
+- Session state, session events, summary cache, and metrics persist in `.devctx/state.sqlite`
+- Legacy `.devctx/sessions/*.json`, `.devctx/sessions/active.json`, and `.devctx/metrics.jsonl` are imported idempotently when present
+- `compact` enforces retention without deleting the active session
+- `cleanup_legacy` is dry-run by default and only deletes imported legacy artifacts when `apply: true`
+
+**Auto-resume behavior:**
+- `get` returns the active session immediately when `active.json` exists
+- If there is no active session, `get` auto-resumes the best saved session when there is a single clear candidate
+- If multiple recent sessions are plausible, `get` returns ordered `candidates` plus `recommendedSessionId`
+- Passing `sessionId: "auto"` accepts that recommendation and restores it as the active session
 
 **Resume summary fields:**
 - `status` and `nextStep` are preserved with highest priority
@@ -459,6 +509,8 @@ Maintain compressed conversation state across sessions. Solves the context-loss 
 - `truncated`: whether the resume summary had to be compressed
 - `compressionLevel`: `none` | `trimmed` | `reduced` | `status_only`
 - `omitted`: fields dropped from the resume summary to fit the token budget
+- `repoSafety`: git hygiene signal for `.devctx/state.sqlite` (`isIgnored`, `isTracked`, `isStaged`, warnings, recommended actions)
+- mutating actions (`update`, `append`, `auto_append`, `checkpoint`, `reset`, `compact`) are blocked at runtime when `.devctx/state.sqlite` is tracked or staged
 
 **Compression strategy:**
 - Keeps the persisted session state intact and compresses only the resume summary
@@ -471,11 +523,12 @@ Maintain compressed conversation state across sessions. Solves the context-loss 
 ```javascript
 // Start of work session
 smart_summary({ action: "get" })
-// → retrieves last active session or returns "not found"
+// → retrieves last active session or auto-resumes the best saved session
 
 // After implementing auth middleware
 smart_summary({ 
-  action: "append",
+  action: "checkpoint",
+  event: "milestone",
   update: {
     completed: ["auth middleware"],
     decisions: ["JWT with 1h expiry, refresh tokens in Redis"],
@@ -491,6 +544,77 @@ smart_summary({ action: "get" })
 // List all sessions
 smart_summary({ action: "list_sessions" })
 // → see all available sessions, pick one to resume
+
+// Inspect git safety for project-local state from any smart_summary response
+smart_summary({ action: "get" })
+// → repoSafety warns if .devctx/state.sqlite is tracked or not ignored
+
+// Suppress noisy read-only exploration checkpoints
+smart_summary({
+  action: "checkpoint",
+  event: "read_only",
+  update: { currentFocus: "inspect auth flow" }
+})
+// → skipped=true, no event persisted
+
+// Compact old SQLite events while keeping recent history
+smart_summary({ action: "compact", retentionDays: 30, keepLatestEventsPerSession: 20, keepLatestMetrics: 1000 })
+
+// Inspect what legacy files are safe to remove
+smart_summary({ action: "cleanup_legacy" })
+
+// Remove imported legacy JSON/JSONL artifacts explicitly
+smart_summary({ action: "cleanup_legacy", apply: true })
+```
+
+### `smart_metrics`
+
+Inspect token metrics recorded in project-local SQLite storage without leaving MCP.
+
+- Returns aggregated totals, savings percentage, and per-tool breakdowns
+- Supports `window`: `24h` | `7d` | `30d` | `all`
+- Supports filtering by `tool`
+- Supports filtering by `sessionId`, including `sessionId: "active"`
+- Includes `latestEntries` so an agent can explain recent savings without parsing storage manually
+- Includes `overheadTokens` and `overheadTools` so hook/wrapper context cost stays measurable against the savings
+- When `.devctx/state.sqlite` is tracked or staged, metric writes are skipped and reads fall back to a temporary read-only snapshot with `sideEffectsSuppressed: true`
+
+**Example workflow:**
+
+```javascript
+smart_metrics({ window: "7d", sessionId: "active" })
+// → totals and recent entries for the current task/session
+```
+
+### `smart_turn`
+
+Orchestrate the start or end of a meaningful agent turn with one MCP call.
+
+- `phase: "start"` rehydrates context, classifies whether the current prompt aligns with persisted work, and can auto-create a planning session for a substantial new task
+- `phase: "end"` writes a checkpoint through `smart_summary` and can optionally include compact metrics
+- Designed to make context usage almost mandatory without forcing the agent to chain `smart_summary(get)` and `smart_summary(checkpoint)` manually on every turn
+- Claude Code can call this automatically through generated native hooks on `SessionStart`, `UserPromptSubmit`, `PostToolUse`, and `Stop`
+- Non-Claude CLI clients can approximate the same flow with `smart-context-headless`, which wraps one headless agent invocation around `smart_turn(start)` and `smart_turn(end)`
+
+**Example workflow:**
+
+```javascript
+smart_turn({
+  phase: "start",
+  prompt: "Finish runtime repo-safety enforcement for smart metrics",
+  ensureSession: true
+})
+// → summary + continuity classification + repoSafety
+
+smart_turn({
+  phase: "end",
+  event: "milestone",
+  update: {
+    completed: ["Finished smart metrics repo-safety enforcement"],
+    nextStep: "Update docs and run the full suite"
+  }
+})
+// → checkpoint result + optional compact metrics
 ```
 
 ### `build_index`
@@ -538,8 +662,19 @@ The harness supports `--root=`, `--corpus=`, and `--tool=search|context|both` fo
 ## Notes
 
 - Paths are resolved relative to the effective project root, not the caller cwd.
-- Metrics are written to `<projectRoot>/.devctx/metrics.jsonl` (override with `DEVCTX_METRICS_FILE` env var).
+- Persistent context and metrics live in `<projectRoot>/.devctx/state.sqlite`.
+- `DEVCTX_METRICS_FILE` is now an explicit compatibility override for JSONL-based workflows and reports.
 - Symbol index stored in `<projectRoot>/.devctx/index.json` when `build_index` is used.
-- Conversation sessions stored in `<projectRoot>/.devctx/sessions/` when `smart_summary` is used.
+- Legacy session JSON files in `<projectRoot>/.devctx/sessions/` are imported idempotently when present.
 - `smart_shell` is intentionally conservative by design.
 - Today this is a strong navigation and diagnostics layer, not a full semantic code intelligence system.
+
+## Author
+
+**Francisco Caballero Portero**  
+Email: fcp1978@hotmail.com  
+GitHub: [@Arrayo](https://github.com/Arrayo)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.

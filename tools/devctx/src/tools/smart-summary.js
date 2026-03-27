@@ -1,23 +1,120 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { projectRoot } from '../utils/runtime-config.js';
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
+import { enforceRepoSafety, getRepoSafety } from '../repo-safety.js';
+import {
+  ACTIVE_SESSION_SCOPE,
+  SQLITE_SCHEMA_VERSION,
+  cleanupLegacyState,
+  compactState,
+  importLegacyState,
+  withStateDb,
+  withStateDbSnapshot,
+} from '../storage/sqlite.js';
 
 const MAX_SESSION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_TOKENS = 500;
 const VALID_STATUSES = new Set(['planning', 'in_progress', 'blocked', 'completed']);
+const ACTIVE_STATUSES = new Set(['planning', 'in_progress', 'blocked']);
 const DEFAULT_STATUS = 'in_progress';
-const SESSION_SCHEMA_VERSION = 2;
+const AUTO_RESUME_SESSION_ID = 'auto';
+const AUTO_RESUME_RECENCY_GAP_MS = 12 * 60 * 60 * 1000;
+const MAX_RESUME_CANDIDATES = 5;
+const DEFAULT_CHECKPOINT_EVENT = 'manual';
+const CHECKPOINT_FIELD_BASE_SCORE = {
+  goal: 5,
+  status: 4,
+  pinnedContext: 4,
+  unresolvedQuestions: 2,
+  currentFocus: 2,
+  whyBlocked: 4,
+  completed: 2,
+  decisions: 4,
+  blockers: 4,
+  nextStep: 4,
+  touchedFiles: 1,
+};
+const CHECKPOINT_POLICY_BY_EVENT = {
+  manual: {
+    persistByDefault: true,
+    minScore: 1,
+    requiredChangedFields: [],
+    reason: 'Manual checkpoint requested.',
+  },
+  milestone: {
+    persistByDefault: true,
+    minScore: 4,
+    requiredChangedFields: ['completed', 'decisions', 'nextStep', 'touchedFiles', 'currentFocus', 'pinnedContext'],
+    reason: 'Milestone checkpoints should persist durable progress.',
+  },
+  decision: {
+    persistByDefault: true,
+    minScore: 4,
+    requiredChangedFields: ['decisions', 'pinnedContext', 'nextStep'],
+    reason: 'Decision checkpoints should preserve rationale and next actions.',
+  },
+  blocker: {
+    persistByDefault: true,
+    minScore: 4,
+    requiredChangedFields: ['status', 'blockers', 'whyBlocked', 'nextStep'],
+    reason: 'Blocker checkpoints should preserve blocking context.',
+  },
+  status_change: {
+    persistByDefault: true,
+    minScore: 3,
+    requiredChangedFields: ['status', 'nextStep', 'whyBlocked'],
+    reason: 'Status changes should be checkpointed when state actually changes.',
+  },
+  file_change: {
+    persistByDefault: true,
+    minScore: 3,
+    requiredChangedFields: ['touchedFiles', 'completed', 'nextStep'],
+    reason: 'File-change checkpoints should persist only when work moved forward.',
+  },
+  task_switch: {
+    persistByDefault: true,
+    minScore: 4,
+    requiredChangedFields: ['goal', 'currentFocus', 'nextStep', 'pinnedContext'],
+    reason: 'Task switches should preserve the handoff state.',
+  },
+  task_complete: {
+    persistByDefault: true,
+    minScore: 5,
+    requiredChangedFields: ['status', 'completed', 'decisions', 'nextStep'],
+    reason: 'Task completion should leave a durable summary.',
+  },
+  session_end: {
+    persistByDefault: true,
+    minScore: 3,
+    requiredChangedFields: ['nextStep', 'status', 'completed', 'decisions', 'touchedFiles'],
+    reason: 'Session-end checkpoints should capture the latest restart point.',
+  },
+  read_only: {
+    persistByDefault: false,
+    minScore: Infinity,
+    requiredChangedFields: [],
+    reason: 'Read-only exploration should not persist by default.',
+  },
+  heartbeat: {
+    persistByDefault: false,
+    minScore: Infinity,
+    requiredChangedFields: [],
+    reason: 'Heartbeat checkpoints are intentionally suppressed.',
+  },
+};
+const SUMMARY_WRITE_ACTIONS = new Set(['update', 'append', 'auto_append', 'checkpoint', 'reset', 'compact']);
+const HARD_BLOCK_REPO_SAFETY_REASONS = [
+  ['tracked', 'isTracked'],
+  ['staged', 'isStaged'],
+];
 
-const getSessionsDir = () => path.join(projectRoot, '.devctx', 'sessions');
-const getActiveSessionFile = () => path.join(getSessionsDir(), 'active.json');
+const getTimestamp = (value, fallback = Date.now()) => {
+  const parsed = Date.parse(value ?? '');
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
-const ensureSessionsDir = () => {
-  const sessionsDir = getSessionsDir();
-  if (!fs.existsSync(sessionsDir)) {
-    fs.mkdirSync(sessionsDir, { recursive: true });
-  }
+const toIsoString = (value, fallback = new Date().toISOString()) => {
+  const parsed = getTimestamp(value, NaN);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : fallback;
 };
 
 const generateSessionId = (goal) => {
@@ -26,122 +123,6 @@ const generateSessionId = (goal) => {
     ? goal.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)
     : 'session';
   return `${date}-${slug}`;
-};
-
-const getSessionPath = (sessionId) => path.join(getSessionsDir(), `${sessionId}.json`);
-
-const loadSession = (sessionId) => {
-  const sessionPath = getSessionPath(sessionId);
-  if (!fs.existsSync(sessionPath)) {
-    return null;
-  }
-  try {
-    const data = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-    return data;
-  } catch {
-    return null;
-  }
-};
-
-const saveSession = (sessionId, data) => {
-  ensureSessionsDir();
-  const sessionPath = getSessionPath(sessionId);
-  const sessionData = {
-    ...data,
-    schemaVersion: SESSION_SCHEMA_VERSION,
-    sessionId,
-    updatedAt: new Date().toISOString(),
-  };
-  fs.writeFileSync(sessionPath, JSON.stringify(sessionData, null, 2), 'utf8');
-  
-  const activeSessionFile = getActiveSessionFile();
-  fs.writeFileSync(activeSessionFile, JSON.stringify({ sessionId, updatedAt: sessionData.updatedAt }, null, 2), 'utf8');
-  
-  return sessionData;
-};
-
-const getActiveSession = () => {
-  const activeSessionFile = getActiveSessionFile();
-  if (!fs.existsSync(activeSessionFile)) {
-    return null;
-  }
-  try {
-    const { sessionId } = JSON.parse(fs.readFileSync(activeSessionFile, 'utf8'));
-    const activeSession = loadSession(sessionId);
-    if (!activeSession) {
-      fs.unlinkSync(activeSessionFile);
-      return null;
-    }
-    return activeSession;
-  } catch {
-    try {
-      fs.unlinkSync(activeSessionFile);
-    } catch {}
-    return null;
-  }
-};
-
-const cleanupStaleSessions = () => {
-  ensureSessionsDir();
-  const sessionsDir = getSessionsDir();
-  const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.json') && f !== 'active.json');
-  const now = Date.now();
-  let cleaned = 0;
-  
-  const activeSession = getActiveSession();
-  const activeSessionId = activeSession?.sessionId;
-  
-  for (const file of files) {
-    const sessionPath = path.join(sessionsDir, file);
-    try {
-      const data = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-      
-      if (data.sessionId === activeSessionId) {
-        continue;
-      }
-      
-      const age = now - new Date(data.updatedAt).getTime();
-      if (age > MAX_SESSION_AGE_MS) {
-        fs.unlinkSync(sessionPath);
-        cleaned += 1;
-      }
-    } catch {
-      fs.unlinkSync(sessionPath);
-      cleaned += 1;
-    }
-  }
-  
-  return cleaned;
-};
-
-const listSessions = () => {
-  ensureSessionsDir();
-  cleanupStaleSessions();
-  
-  const sessionsDir = getSessionsDir();
-  const files = fs.readdirSync(sessionsDir).filter(f => f.endsWith('.json') && f !== 'active.json');
-  const now = Date.now();
-  
-  return files
-    .map(file => {
-      const sessionPath = path.join(sessionsDir, file);
-      try {
-        const data = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
-        const age = now - new Date(data.updatedAt).getTime();
-        return {
-          sessionId: data.sessionId,
-          goal: data.goal,
-          status: data.status,
-          updatedAt: data.updatedAt,
-          ageMs: age,
-          isStale: age > MAX_SESSION_AGE_MS,
-        };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 };
 
 const truncateString = (str, maxLength) => {
@@ -172,7 +153,7 @@ const compactFilePath = (filePath) => {
 
 const validateUpdateInput = (update) => {
   if (!update || typeof update !== 'object') {
-    throw new Error('update parameter is required for update/append actions');
+    throw new Error('update parameter is required for update/append/auto_append actions');
   }
 
   if (update.status !== undefined && !VALID_STATUSES.has(update.status)) {
@@ -195,6 +176,331 @@ const mergeUniqueStrings = (...lists) => {
   }
 
   return result;
+};
+
+const buildComparableSessionState = (data = {}) => ({
+  goal: typeof data.goal === 'string' ? data.goal : '',
+  status: normalizeStatus(data.status),
+  pinnedContext: mergeUniqueStrings(data.pinnedContext),
+  unresolvedQuestions: mergeUniqueStrings(data.unresolvedQuestions),
+  currentFocus: typeof data.currentFocus === 'string' ? data.currentFocus : '',
+  whyBlocked: typeof data.whyBlocked === 'string' ? data.whyBlocked : '',
+  completed: mergeUniqueStrings(data.completed),
+  decisions: mergeUniqueStrings(data.decisions),
+  blockers: mergeUniqueStrings(data.blockers),
+  nextStep: typeof data.nextStep === 'string' ? data.nextStep : '',
+  touchedFiles: mergeUniqueStrings(data.touchedFiles),
+});
+
+const buildAppendData = (existingData, update) => {
+  const completed = mergeUniqueStrings(existingData.completed, update.completed);
+  const decisions = mergeUniqueStrings(existingData.decisions, update.decisions);
+  const touchedFiles = mergeUniqueStrings(existingData.touchedFiles, update.touchedFiles);
+
+  return {
+    goal: update.goal || existingData.goal || 'Untitled session',
+    status: normalizeStatus(update.status, normalizeStatus(existingData.status)),
+    pinnedContext: mergeUniqueStrings(existingData.pinnedContext, update.pinnedContext),
+    unresolvedQuestions: mergeUniqueStrings(existingData.unresolvedQuestions, update.unresolvedQuestions),
+    currentFocus: update.currentFocus || existingData.currentFocus || '',
+    whyBlocked: update.whyBlocked || existingData.whyBlocked || '',
+    completed,
+    decisions,
+    blockers: update.blockers !== undefined ? mergeUniqueStrings(update.blockers) : (existingData.blockers || []),
+    nextStep: update.nextStep || existingData.nextStep || '',
+    touchedFiles,
+    completedCount: completed.length,
+    decisionsCount: decisions.length,
+    touchedFilesCount: touchedFiles.length,
+  };
+};
+
+const buildReplaceData = (update) => {
+  const completed = mergeUniqueStrings(update.completed);
+  const decisions = mergeUniqueStrings(update.decisions);
+  const touchedFiles = mergeUniqueStrings(update.touchedFiles);
+
+  return {
+    goal: update.goal || 'Untitled session',
+    status: normalizeStatus(update.status),
+    pinnedContext: mergeUniqueStrings(update.pinnedContext),
+    unresolvedQuestions: mergeUniqueStrings(update.unresolvedQuestions),
+    currentFocus: update.currentFocus ?? '',
+    whyBlocked: update.whyBlocked ?? '',
+    completed,
+    decisions,
+    blockers: mergeUniqueStrings(update.blockers),
+    nextStep: update.nextStep ?? '',
+    touchedFiles,
+    completedCount: completed.length,
+    decisionsCount: decisions.length,
+    touchedFilesCount: touchedFiles.length,
+  };
+};
+
+const diffUniqueStrings = (before, after) => {
+  const seen = new Set(mergeUniqueStrings(before));
+  return mergeUniqueStrings(after).filter((item) => !seen.has(item));
+};
+
+const getAutoAppendChanges = (existingData, mergedData) => {
+  if (!existingData || Object.keys(existingData).length === 0) {
+    return ['create_session'];
+  }
+
+  const comparableBefore = buildComparableSessionState(existingData);
+  const comparableAfter = buildComparableSessionState(mergedData);
+  const changes = [];
+
+  if (comparableAfter.goal !== comparableBefore.goal) changes.push('goal');
+  if (comparableAfter.status !== comparableBefore.status) changes.push('status');
+  if (comparableAfter.currentFocus !== comparableBefore.currentFocus) changes.push('currentFocus');
+  if (comparableAfter.whyBlocked !== comparableBefore.whyBlocked) changes.push('whyBlocked');
+  if (comparableAfter.nextStep !== comparableBefore.nextStep) changes.push('nextStep');
+  if (diffUniqueStrings(comparableBefore.pinnedContext, comparableAfter.pinnedContext).length > 0) changes.push('pinnedContext');
+  if (diffUniqueStrings(comparableBefore.unresolvedQuestions, comparableAfter.unresolvedQuestions).length > 0) changes.push('unresolvedQuestions');
+  if (diffUniqueStrings(comparableBefore.completed, comparableAfter.completed).length > 0) changes.push('completed');
+  if (diffUniqueStrings(comparableBefore.decisions, comparableAfter.decisions).length > 0) changes.push('decisions');
+  if (JSON.stringify(comparableAfter.blockers) !== JSON.stringify(comparableBefore.blockers)) changes.push('blockers');
+  if (diffUniqueStrings(comparableBefore.touchedFiles, comparableAfter.touchedFiles).length > 0) changes.push('touchedFiles');
+
+  return changes;
+};
+
+const analyzeCheckpointChanges = (existingData, mergedData) => {
+  const changedFields = getAutoAppendChanges(existingData, mergedData);
+  const comparableBefore = buildComparableSessionState(existingData);
+  const comparableAfter = buildComparableSessionState(mergedData);
+  const fieldStats = {};
+  const scoreByField = {};
+  let score = 0;
+
+  const assignFieldScore = (field, nextScore) => {
+    if (!changedFields.includes(field) || nextScore <= 0) {
+      return;
+    }
+
+    scoreByField[field] = nextScore;
+    score += nextScore;
+  };
+
+  if (changedFields.includes('goal')) {
+    fieldStats.goal = {
+      before: comparableBefore.goal,
+      after: comparableAfter.goal,
+    };
+    assignFieldScore('goal', CHECKPOINT_FIELD_BASE_SCORE.goal);
+  }
+
+  if (changedFields.includes('status')) {
+    const before = comparableBefore.status;
+    const after = comparableAfter.status;
+    const transitionBonus = (after === 'blocked' || after === 'completed' || before === 'blocked') ? 2 : 0;
+    fieldStats.status = { before, after };
+    assignFieldScore('status', CHECKPOINT_FIELD_BASE_SCORE.status + transitionBonus);
+  }
+
+  if (changedFields.includes('currentFocus')) {
+    fieldStats.currentFocus = {
+      before: comparableBefore.currentFocus,
+      after: comparableAfter.currentFocus,
+    };
+    assignFieldScore('currentFocus', CHECKPOINT_FIELD_BASE_SCORE.currentFocus);
+  }
+
+  if (changedFields.includes('whyBlocked')) {
+    fieldStats.whyBlocked = {
+      before: comparableBefore.whyBlocked,
+      after: comparableAfter.whyBlocked,
+    };
+    assignFieldScore('whyBlocked', CHECKPOINT_FIELD_BASE_SCORE.whyBlocked);
+  }
+
+  if (changedFields.includes('nextStep')) {
+    fieldStats.nextStep = {
+      before: comparableBefore.nextStep,
+      after: comparableAfter.nextStep,
+    };
+    assignFieldScore('nextStep', CHECKPOINT_FIELD_BASE_SCORE.nextStep);
+  }
+
+  const arrayFields = [
+    'pinnedContext',
+    'unresolvedQuestions',
+    'completed',
+    'decisions',
+    'blockers',
+    'touchedFiles',
+  ];
+
+  for (const field of arrayFields) {
+    if (!changedFields.includes(field)) {
+      continue;
+    }
+
+    const added = diffUniqueStrings(comparableBefore[field], comparableAfter[field]);
+    const removed = diffUniqueStrings(comparableAfter[field], comparableBefore[field]);
+    fieldStats[field] = {
+      added,
+      addedCount: added.length,
+      removedCount: removed.length,
+    };
+
+    let nextScore = CHECKPOINT_FIELD_BASE_SCORE[field] ?? 0;
+    if (field === 'completed') nextScore += Math.min(2, Math.max(0, added.length - 1));
+    if (field === 'decisions') nextScore += Math.min(2, Math.max(0, added.length - 1));
+    if (field === 'pinnedContext') nextScore += Math.min(2, Math.max(0, added.length - 1));
+    if (field === 'blockers') nextScore += Math.min(2, Math.max(0, added.length - 1));
+    if (field === 'touchedFiles') nextScore = added.length >= 3 ? 3 : added.length >= 1 ? 1 : 0;
+    if (field === 'unresolvedQuestions') nextScore += Math.min(1, Math.max(0, added.length - 1));
+
+    assignFieldScore(field, nextScore);
+  }
+
+  return {
+    changedFields,
+    fieldStats,
+    score,
+    scoreByField,
+  };
+};
+
+const hasMeaningfulAutoAppendInput = (update = {}) =>
+  update.status !== undefined
+  || Object.values(pruneEmptyFields(update)).some((value) =>
+    (typeof value === 'string' && value.trim().length > 0)
+    || (Array.isArray(value) && value.length > 0),
+  );
+
+const normalizeCheckpointEvent = (value) => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return CHECKPOINT_POLICY_BY_EVENT[normalized] ? normalized : DEFAULT_CHECKPOINT_EVENT;
+};
+
+const resolveCheckpointDecision = ({ event, force = false, existingData, mergedData }) => {
+  const normalizedEvent = normalizeCheckpointEvent(event);
+  const policy = CHECKPOINT_POLICY_BY_EVENT[normalizedEvent];
+  const analysis = analyzeCheckpointChanges(existingData, mergedData);
+  const { changedFields, fieldStats, score, scoreByField } = analysis;
+
+  if (force) {
+    return {
+      event: normalizedEvent,
+      changedFields,
+      fieldStats,
+      score,
+      scoreByField,
+      threshold: policy.minScore,
+      shouldPersist: true,
+      reason: 'Checkpoint forced by caller.',
+      policy,
+    };
+  }
+
+  if (!policy.persistByDefault) {
+    return {
+      event: normalizedEvent,
+      changedFields,
+      fieldStats,
+      score,
+      scoreByField,
+      threshold: policy.minScore,
+      shouldPersist: false,
+      reason: policy.reason,
+      policy,
+    };
+  }
+
+  if (changedFields.length === 0) {
+    return {
+      event: normalizedEvent,
+      changedFields,
+      fieldStats,
+      score,
+      scoreByField,
+      threshold: policy.minScore,
+      shouldPersist: false,
+      reason: 'Checkpoint skipped because no meaningful context changed.',
+      policy,
+    };
+  }
+
+  if (policy.requiredChangedFields.length > 0) {
+    const relevantChange = policy.requiredChangedFields.some((field) => changedFields.includes(field));
+    if (!relevantChange) {
+      return {
+        event: normalizedEvent,
+        changedFields,
+        fieldStats,
+        score,
+        scoreByField,
+        threshold: policy.minScore,
+        shouldPersist: false,
+        reason: `Checkpoint event "${normalizedEvent}" requires one of: ${policy.requiredChangedFields.join(', ')}.`,
+        policy,
+      };
+    }
+  }
+
+  if (normalizedEvent === 'file_change' && changedFields.length === 1 && changedFields[0] === 'touchedFiles') {
+    const addedFiles = fieldStats.touchedFiles?.addedCount ?? 0;
+    if (addedFiles < 2) {
+      return {
+        event: normalizedEvent,
+        changedFields,
+        fieldStats,
+        score,
+        scoreByField,
+        threshold: policy.minScore,
+        shouldPersist: false,
+        reason: 'Checkpoint skipped because a single touched file without progress is not significant enough.',
+        policy,
+      };
+    }
+  }
+
+  if (normalizedEvent === 'task_complete') {
+    const completedStateReached = mergedData.status === 'completed';
+    if (!completedStateReached && !changedFields.includes('completed')) {
+      return {
+        event: normalizedEvent,
+        changedFields,
+        fieldStats,
+        score,
+        scoreByField,
+        threshold: policy.minScore,
+        shouldPersist: false,
+        reason: 'Task completion checkpoints require completed work or a completed status.',
+        policy,
+      };
+    }
+  }
+
+  if (score < policy.minScore) {
+    return {
+      event: normalizedEvent,
+      changedFields,
+      fieldStats,
+      score,
+      scoreByField,
+      threshold: policy.minScore,
+      shouldPersist: false,
+      reason: `Checkpoint skipped because significance score ${score} is below threshold ${policy.minScore}.`,
+      policy,
+    };
+  }
+
+  return {
+    event: normalizedEvent,
+    changedFields,
+    fieldStats,
+    score,
+    scoreByField,
+    threshold: policy.minScore,
+    shouldPersist: true,
+    reason: policy.reason,
+    policy,
+  };
 };
 
 const uniqueTail = (items, limit) => mergeUniqueStrings(items || []).slice(-limit);
@@ -220,34 +526,110 @@ const pruneEmptyFields = (value) =>
     }),
   );
 
-const buildResumeSummary = (data) => {
-  const status = normalizeStatus(data.status);
+const parseJsonText = (value, fallback) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const getSessionRow = (db, sessionId) => db.prepare(`
+  SELECT
+    session_id,
+    goal,
+    status,
+    current_focus,
+    why_blocked,
+    next_step,
+    pinned_context_json,
+    unresolved_questions_json,
+    blockers_json,
+    snapshot_json,
+    completed_count,
+    decisions_count,
+    touched_files_count,
+    created_at,
+    updated_at
+  FROM sessions
+  WHERE session_id = ?
+`).get(sessionId);
+
+const getActiveSessionId = (db) =>
+  db.prepare(`
+    SELECT session_id
+    FROM active_session
+    WHERE scope = ?
+  `).get(ACTIVE_SESSION_SCOPE)?.session_id ?? null;
+
+const hydrateSession = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  const snapshot = parseJsonText(row.snapshot_json, {});
+  const completed = mergeUniqueStrings(snapshot.completed);
+  const decisions = mergeUniqueStrings(snapshot.decisions);
+  const touchedFiles = mergeUniqueStrings(snapshot.touchedFiles);
+  const pinnedContext = mergeUniqueStrings(parseJsonText(row.pinned_context_json, []), snapshot.pinnedContext);
+  const unresolvedQuestions = mergeUniqueStrings(parseJsonText(row.unresolved_questions_json, []), snapshot.unresolvedQuestions);
+  const blockers = mergeUniqueStrings(parseJsonText(row.blockers_json, []), snapshot.blockers);
+
+  return {
+    ...snapshot,
+    schemaVersion: Number(snapshot.schemaVersion ?? 1),
+    sessionId: row.session_id,
+    goal: typeof row.goal === 'string' ? row.goal : (snapshot.goal ?? ''),
+    status: normalizeStatus(row.status, normalizeStatus(snapshot.status)),
+    currentFocus: typeof row.current_focus === 'string' ? row.current_focus : (snapshot.currentFocus ?? ''),
+    whyBlocked: typeof row.why_blocked === 'string' ? row.why_blocked : (snapshot.whyBlocked ?? ''),
+    nextStep: typeof row.next_step === 'string' ? row.next_step : (snapshot.nextStep ?? ''),
+    pinnedContext,
+    unresolvedQuestions,
+    blockers,
+    completed,
+    decisions,
+    touchedFiles,
+    completedCount: Number.isInteger(row.completed_count) ? row.completed_count : completed.length,
+    decisionsCount: Number.isInteger(row.decisions_count) ? row.decisions_count : decisions.length,
+    touchedFilesCount: Number.isInteger(row.touched_files_count) ? row.touched_files_count : touchedFiles.length,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const buildSessionSummary = (session) => {
+  const status = normalizeStatus(session.status);
   const whyBlocked = status === 'blocked'
-    ? (isMeaningfulString(data.whyBlocked) ? data.whyBlocked : (data.blockers || []).find(isMeaningfulString))
+    ? (isMeaningfulString(session.whyBlocked) ? session.whyBlocked : (session.blockers || []).find(isMeaningfulString))
     : undefined;
-  const completed = mergeUniqueStrings(data.completed);
-  const decisions = mergeUniqueStrings(data.decisions);
-  const touchedFiles = mergeUniqueStrings(data.touchedFiles);
+  const completed = mergeUniqueStrings(session.completed);
+  const decisions = mergeUniqueStrings(session.decisions);
+  const touchedFiles = mergeUniqueStrings(session.touchedFiles);
 
   return pruneEmptyFields({
     status,
-    nextStep: isMeaningfulString(data.nextStep) ? data.nextStep : undefined,
-    pinnedContext: uniqueHead(data.pinnedContext, 3),
-    unresolvedQuestions: uniqueHead(data.unresolvedQuestions, 3),
-    currentFocus: isMeaningfulString(data.currentFocus) ? data.currentFocus : undefined,
+    nextStep: isMeaningfulString(session.nextStep) ? session.nextStep : undefined,
+    pinnedContext: uniqueHead(session.pinnedContext, 3),
+    unresolvedQuestions: uniqueHead(session.unresolvedQuestions, 3),
+    currentFocus: isMeaningfulString(session.currentFocus) ? session.currentFocus : undefined,
     whyBlocked,
-    goal: isMeaningfulString(data.goal) ? data.goal : undefined,
+    goal: isMeaningfulString(session.goal) ? session.goal : undefined,
     recentCompleted: uniqueTail(completed, 3),
     keyDecisions: uniqueTail(decisions, 2),
     hotFiles: uniqueTail(touchedFiles.map(compactFilePath), 5),
-    completedCount: data.completedCount ?? completed.length,
-    decisionsCount: data.decisionsCount ?? decisions.length,
-    touchedFilesCount: data.touchedFilesCount ?? touchedFiles.length,
+    completedCount: session.completedCount ?? completed.length,
+    decisionsCount: session.decisionsCount ?? decisions.length,
+    touchedFilesCount: session.touchedFilesCount ?? touchedFiles.length,
   });
 };
 
 const compressSummary = (data, maxTokens) => {
-  const baseSummary = buildResumeSummary(data);
+  const baseSummary = buildSessionSummary(data);
   let compressed = baseSummary;
   let summary = JSON.stringify(compressed, null, 2);
   let tokens = countTokens(summary);
@@ -316,12 +698,12 @@ const compressSummary = (data, maxTokens) => {
   };
 
   const reductionSteps = [
-    () => shrinkArrayField('recentCompleted'),
-    () => shrinkArrayField('keyDecisions'),
     () => shrinkArrayField('hotFiles'),
+    () => shrinkArrayField('keyDecisions'),
+    () => shrinkArrayField('recentCompleted'),
     () => shrinkArrayField('unresolvedQuestions'),
-    () => shrinkScalarField('goal'),
     () => shrinkScalarField('currentFocus'),
+    () => shrinkScalarField('goal'),
     () => shrinkScalarField('whyBlocked'),
     () => shrinkArrayField('pinnedContext'),
     () => shrinkScalarField('nextStep', { removable: false }),
@@ -383,203 +765,727 @@ const compressSummary = (data, maxTokens) => {
   return { compressed, tokens, truncated: true, omitted, compressionLevel };
 };
 
-export const smartSummary = async ({ action, sessionId, update, maxTokens = DEFAULT_MAX_TOKENS }) => {
-  const startTime = Date.now();
-  
-  ensureSessionsDir();
-  
-  if (action === 'list_sessions') {
-    const sessions = listSessions();
-    const activeSession = getActiveSession();
-    
+const cacheSummary = (db, sessionId, { compressed, tokens, compressionLevel, omitted, updatedAt }) => {
+  db.prepare(`
+    INSERT INTO summary_cache(
+      session_id,
+      summary_json,
+      tokens,
+      compression_level,
+      omitted_json,
+      updated_at
+    )
+    VALUES(?, ?, ?, ?, ?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      summary_json = excluded.summary_json,
+      tokens = excluded.tokens,
+      compression_level = excluded.compression_level,
+      omitted_json = excluded.omitted_json,
+      updated_at = excluded.updated_at
+  `).run(
+    sessionId,
+    JSON.stringify(compressed),
+    tokens,
+    compressionLevel,
+    JSON.stringify(omitted),
+    updatedAt,
+  );
+};
+
+const writeActiveSession = (db, sessionId, updatedAt) => {
+  db.prepare(`
+    INSERT INTO active_session(scope, session_id, updated_at)
+    VALUES(?, ?, ?)
+    ON CONFLICT(scope) DO UPDATE SET
+      session_id = excluded.session_id,
+      updated_at = excluded.updated_at
+  `).run(ACTIVE_SESSION_SCOPE, sessionId, updatedAt);
+};
+
+const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
+  const existing = hydrateSession(getSessionRow(db, sessionId));
+  const createdAt = existing?.createdAt ?? new Date().toISOString();
+  const updatedAt = new Date().toISOString();
+  const completed = mergeUniqueStrings(data.completed);
+  const decisions = mergeUniqueStrings(data.decisions);
+  const touchedFiles = mergeUniqueStrings(data.touchedFiles);
+  const pinnedContext = mergeUniqueStrings(data.pinnedContext);
+  const unresolvedQuestions = mergeUniqueStrings(data.unresolvedQuestions);
+  const blockers = mergeUniqueStrings(data.blockers);
+
+  const snapshot = {
+    goal: typeof data.goal === 'string' ? data.goal : '',
+    status: normalizeStatus(data.status),
+    pinnedContext,
+    unresolvedQuestions,
+    currentFocus: data.currentFocus ?? '',
+    whyBlocked: data.whyBlocked ?? '',
+    completed,
+    decisions,
+    blockers,
+    nextStep: data.nextStep ?? '',
+    touchedFiles,
+    completedCount: completed.length,
+    decisionsCount: decisions.length,
+    touchedFilesCount: touchedFiles.length,
+    schemaVersion: SQLITE_SCHEMA_VERSION,
+    sessionId,
+    createdAt,
+    updatedAt,
+  };
+
+  db.prepare(`
+    INSERT INTO sessions(
+      session_id,
+      goal,
+      status,
+      current_focus,
+      why_blocked,
+      next_step,
+      pinned_context_json,
+      unresolved_questions_json,
+      blockers_json,
+      snapshot_json,
+      completed_count,
+      decisions_count,
+      touched_files_count,
+      created_at,
+      updated_at
+    )
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      goal = excluded.goal,
+      status = excluded.status,
+      current_focus = excluded.current_focus,
+      why_blocked = excluded.why_blocked,
+      next_step = excluded.next_step,
+      pinned_context_json = excluded.pinned_context_json,
+      unresolved_questions_json = excluded.unresolved_questions_json,
+      blockers_json = excluded.blockers_json,
+      snapshot_json = excluded.snapshot_json,
+      completed_count = excluded.completed_count,
+      decisions_count = excluded.decisions_count,
+      touched_files_count = excluded.touched_files_count,
+      updated_at = excluded.updated_at,
+      created_at = sessions.created_at
+  `).run(
+    sessionId,
+    snapshot.goal,
+    snapshot.status,
+    snapshot.currentFocus,
+    snapshot.whyBlocked,
+    snapshot.nextStep,
+    JSON.stringify(pinnedContext),
+    JSON.stringify(unresolvedQuestions),
+    JSON.stringify(blockers),
+    JSON.stringify(snapshot),
+    snapshot.completedCount,
+    snapshot.decisionsCount,
+    snapshot.touchedFilesCount,
+    snapshot.createdAt,
+    snapshot.updatedAt,
+  );
+
+  writeActiveSession(db, sessionId, updatedAt);
+
+  if (action) {
+    db.prepare(`
+      INSERT INTO session_events(
+        session_id,
+        event_type,
+        payload_json,
+        token_cost,
+        created_at
+      )
+      VALUES(?, ?, ?, ?, ?)
+    `).run(
+      sessionId,
+      action,
+      JSON.stringify(pruneEmptyFields(eventPayload ?? {})),
+      0,
+      updatedAt,
+    );
+  }
+
+  return snapshot;
+};
+
+const cleanupStaleSessions = (db) => {
+  const activeSessionId = getActiveSessionId(db);
+  const rows = db.prepare(`
+    SELECT session_id, updated_at
+    FROM sessions
+  `).all();
+
+  const now = Date.now();
+  let cleaned = 0;
+
+  for (const row of rows) {
+    if (row.session_id === activeSessionId) {
+      continue;
+    }
+
+    const ageMs = now - getTimestamp(row.updated_at, now);
+    if (ageMs <= MAX_SESSION_AGE_MS) {
+      continue;
+    }
+
+    db.prepare('DELETE FROM sessions WHERE session_id = ?').run(row.session_id);
+    cleaned += 1;
+  }
+
+  return cleaned;
+};
+
+const listSessions = (db, { cleanup = true } = {}) => {
+  if (cleanup) {
+    cleanupStaleSessions(db);
+  }
+
+  const now = Date.now();
+
+  return db.prepare(`
+    SELECT session_id, goal, status, updated_at
+    FROM sessions
+    ORDER BY datetime(updated_at) DESC, session_id ASC
+  `).all().map((row) => {
+    const ageMs = now - getTimestamp(row.updated_at, now);
     return {
-      action: 'list_sessions',
-      sessions,
-      activeSessionId: activeSession?.sessionId || null,
-      totalSessions: sessions.length,
-      staleSessions: sessions.filter(s => s.isStale).length,
+      sessionId: row.session_id,
+      goal: row.goal,
+      status: row.status,
+      updatedAt: row.updated_at,
+      ageMs,
+      isStale: ageMs > MAX_SESSION_AGE_MS,
+    };
+  });
+};
+
+const buildResumeCandidates = (sessions) =>
+  sessions.slice(0, MAX_RESUME_CANDIDATES).map((session) => ({
+    sessionId: session.sessionId,
+    goal: session.goal,
+    status: session.status,
+    updatedAt: session.updatedAt,
+    ageMs: session.ageMs,
+    isStale: session.isStale,
+  }));
+
+const addRepoSafety = (result, repoSafety = getRepoSafety()) => ({
+  ...result,
+  repoSafety,
+});
+
+const getMutationSafetyPolicy = () => {
+  const repoSafety = enforceRepoSafety();
+  const reasons = HARD_BLOCK_REPO_SAFETY_REASONS
+    .filter(([, field]) => repoSafety[field])
+    .map(([reason]) => reason);
+
+  return {
+    repoSafety,
+    shouldBlock: reasons.length > 0,
+    reasons,
+  };
+};
+
+const buildMutationBlockedMessage = (reasons, stateDbPath = '.devctx/state.sqlite') => {
+  if (reasons.includes('tracked') && reasons.includes('staged')) {
+    return `Refused to mutate project-local context because ${stateDbPath} is tracked and staged by git. Fix git hygiene first.`;
+  }
+
+  if (reasons.includes('tracked')) {
+    return `Refused to mutate project-local context because ${stateDbPath} is tracked by git. Untrack it before continuing.`;
+  }
+
+  if (reasons.includes('staged')) {
+    return `Refused to mutate project-local context because ${stateDbPath} is staged for commit. Unstage it before continuing.`;
+  }
+
+  return `Refused to mutate project-local context because ${stateDbPath} failed runtime safety checks.`;
+};
+
+const buildMutationBlockedResponse = ({ action, sessionId, repoSafety, reasons }) =>
+  addRepoSafety({
+    action,
+    sessionId: sessionId ?? null,
+    blocked: true,
+    mutationBlocked: true,
+    blockedBy: reasons,
+    message: buildMutationBlockedMessage(reasons, repoSafety.stateDbPath ?? '.devctx/state.sqlite'),
+  }, repoSafety);
+
+const resolveAutoResumeTarget = (db, { forceRecommended = false, cleanup = true } = {}) => {
+  const sessions = listSessions(db, { cleanup });
+  const candidates = buildResumeCandidates(sessions);
+
+  if (sessions.length === 0) {
+    return {
+      found: false,
+      ambiguous: false,
+      candidates,
+      recommendedSessionId: null,
+      message: 'No saved sessions found. Use action=update to create one.',
     };
   }
-  
+
+  if (sessions.length === 1) {
+    return {
+      found: true,
+      sessionId: sessions[0].sessionId,
+      autoResumed: true,
+      resumeSource: 'latest_only',
+      candidates,
+      recommendedSessionId: sessions[0].sessionId,
+      ambiguous: false,
+    };
+  }
+
+  const openSessions = sessions.filter((session) => ACTIVE_STATUSES.has(normalizeStatus(session.status)));
+  if (openSessions.length === 1) {
+    return {
+      found: true,
+      sessionId: openSessions[0].sessionId,
+      autoResumed: true,
+      resumeSource: 'only_open_session',
+      candidates,
+      recommendedSessionId: openSessions[0].sessionId,
+      ambiguous: false,
+    };
+  }
+
+  const [latest, secondLatest] = sessions;
+  const recencyGapMs = getTimestamp(latest?.updatedAt, 0) - getTimestamp(secondLatest?.updatedAt, 0);
+
+  if (Number.isFinite(recencyGapMs) && recencyGapMs >= AUTO_RESUME_RECENCY_GAP_MS) {
+    return {
+      found: true,
+      sessionId: latest.sessionId,
+      autoResumed: true,
+      resumeSource: 'latest_by_recency',
+      candidates,
+      recommendedSessionId: latest.sessionId,
+      ambiguous: false,
+    };
+  }
+
+  const recommended = openSessions[0] || latest;
+  if (forceRecommended && recommended) {
+    return {
+      found: true,
+      sessionId: recommended.sessionId,
+      autoResumed: true,
+      resumeSource: openSessions[0] ? 'recommended_open_session' : 'recommended_latest',
+      candidates,
+      recommendedSessionId: recommended.sessionId,
+      ambiguous: true,
+    };
+  }
+
+  return {
+    found: false,
+    ambiguous: true,
+    candidates,
+    recommendedSessionId: recommended?.sessionId ?? null,
+    message: 'Multiple recent sessions found. Specify sessionId or use sessionId="auto" to accept the recommendation.',
+  };
+};
+
+export const smartSummary = async ({
+  action,
+  sessionId,
+  update,
+  maxTokens = DEFAULT_MAX_TOKENS,
+  event,
+  force,
+  retentionDays,
+  keepLatestEventsPerSession,
+  keepLatestMetrics,
+  vacuum,
+  apply,
+} = {}) => {
+  const startTime = Date.now();
+  const mutationSafety = getMutationSafetyPolicy();
+  const shouldBlockWrites = SUMMARY_WRITE_ACTIONS.has(action) && mutationSafety.shouldBlock;
+  const allowReadSideEffects = !mutationSafety.shouldBlock;
+  const shouldImportLegacy = allowReadSideEffects;
+
+  if (shouldImportLegacy) {
+    await importLegacyState();
+  }
+
+  if (action === 'list_sessions') {
+    const reader = allowReadSideEffects ? withStateDb : withStateDbSnapshot;
+    return reader((db) => {
+      const sessions = listSessions(db, { cleanup: allowReadSideEffects });
+      const activeSessionId = getActiveSessionId(db);
+
+      return addRepoSafety({
+        action: 'list_sessions',
+        sessions,
+        activeSessionId,
+        totalSessions: sessions.length,
+        staleSessions: sessions.filter((session) => session.isStale).length,
+      });
+    }, allowReadSideEffects ? undefined : {});
+  }
+
   if (action === 'get') {
-    const targetSessionId = sessionId || getActiveSession()?.sessionId;
-    
-    if (!targetSessionId) {
-      return {
-        action: 'get',
-        sessionId: null,
-        found: false,
-        message: 'No active session found. Use action=update to create one.',
-      };
-    }
-    
-    const session = loadSession(targetSessionId);
-    
-    if (!session) {
-      return {
+    const reader = allowReadSideEffects ? withStateDb : withStateDbSnapshot;
+    return reader(async (db) => {
+      const suppressReadSideEffects = !allowReadSideEffects;
+      const activeSessionId = getActiveSessionId(db);
+      const wantsAutoResume = sessionId === undefined || sessionId === AUTO_RESUME_SESSION_ID;
+      let targetSessionId = sessionId && sessionId !== AUTO_RESUME_SESSION_ID
+        ? sessionId
+        : activeSessionId;
+      let resumeMeta = activeSessionId
+        ? {
+            autoResumed: false,
+            resumeSource: 'active',
+            recommendedSessionId: activeSessionId,
+          }
+        : null;
+
+      if (!targetSessionId && wantsAutoResume) {
+        const resolution = resolveAutoResumeTarget(db, {
+          forceRecommended: sessionId === AUTO_RESUME_SESSION_ID,
+          cleanup: allowReadSideEffects,
+        });
+        if (!resolution.found) {
+          return addRepoSafety({
+            action: 'get',
+            sessionId: null,
+            found: false,
+            autoResumed: false,
+            ambiguous: resolution.ambiguous,
+            candidates: resolution.candidates,
+            recommendedSessionId: resolution.recommendedSessionId,
+            message: resolution.message,
+          });
+        }
+
+        targetSessionId = resolution.sessionId;
+        resumeMeta = resolution;
+      }
+
+      if (!targetSessionId) {
+        return addRepoSafety({
+          action: 'get',
+          sessionId: null,
+          found: false,
+          message: 'No active session found. Use action=update to create one.',
+        });
+      }
+
+      const session = hydrateSession(getSessionRow(db, targetSessionId));
+      if (!session) {
+        return addRepoSafety({
+          action: 'get',
+          sessionId: targetSessionId,
+          found: false,
+          message: 'Session not found.',
+        });
+      }
+
+      if (resumeMeta?.autoResumed && allowReadSideEffects) {
+        writeActiveSession(db, targetSessionId, session.updatedAt);
+      }
+
+      const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(session, maxTokens);
+      const rawTokens = countTokens(JSON.stringify(session));
+      const summaryMetrics = buildSummaryMetrics(rawTokens, tokens);
+
+      if (allowReadSideEffects) {
+        cacheSummary(db, targetSessionId, {
+          compressed,
+          tokens,
+          compressionLevel,
+          omitted,
+          updatedAt: session.updatedAt,
+        });
+
+        persistMetrics({
+          tool: 'smart_summary',
+          action: 'get',
+          sessionId: targetSessionId,
+          ...summaryMetrics,
+          latencyMs: Date.now() - startTime,
+        });
+      }
+
+      return addRepoSafety({
         action: 'get',
         sessionId: targetSessionId,
-        found: false,
-        message: 'Session not found.',
-      };
-    }
-    
-    const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(session, maxTokens);
-    
-    const rawTokens = countTokens(JSON.stringify(session));
-    const summaryMetrics = buildSummaryMetrics(rawTokens, tokens);
+        found: true,
+        summary: compressed,
+        tokens,
+        truncated,
+        omitted,
+        compressionLevel,
+        autoResumed: resumeMeta?.autoResumed ?? false,
+        resumeSource: resumeMeta?.resumeSource ?? 'direct',
+        ambiguous: resumeMeta?.ambiguous ?? false,
+        recommendedSessionId: resumeMeta?.recommendedSessionId ?? targetSessionId,
+        ...(resumeMeta?.candidates ? { candidates: resumeMeta.candidates } : {}),
+        ...(suppressReadSideEffects ? { sideEffectsSuppressed: true } : {}),
+        schemaVersion: session.schemaVersion ?? 1,
+        updatedAt: session.updatedAt,
+      });
+    }, allowReadSideEffects ? undefined : {});
+  }
 
-    persistMetrics({
-      tool: 'smart_summary',
-      action: 'get',
-      sessionId: targetSessionId,
-      ...summaryMetrics,
-      latencyMs: Date.now() - startTime,
-    });
-    
-    return {
-      action: 'get',
-      sessionId: targetSessionId,
-      found: true,
-      summary: compressed,
-      tokens,
-      truncated,
-      omitted,
-      compressionLevel,
-      schemaVersion: session.schemaVersion ?? 1,
-      updatedAt: session.updatedAt,
-    };
-  }
-  
   if (action === 'reset') {
-    const targetSessionId = sessionId || getActiveSession()?.sessionId;
-    
-    if (!targetSessionId) {
-      return {
-        action: 'reset',
-        sessionId: null,
-        message: 'No session to reset.',
-      };
+    if (shouldBlockWrites) {
+      return buildMutationBlockedResponse({
+        action,
+        sessionId,
+        repoSafety: mutationSafety.repoSafety,
+        reasons: mutationSafety.reasons,
+      });
     }
-    
-    const activeSession = getActiveSession();
-    const isActiveSession = activeSession?.sessionId === targetSessionId;
-    
-    const sessionPath = getSessionPath(targetSessionId);
-    if (fs.existsSync(sessionPath)) {
-      fs.unlinkSync(sessionPath);
-    }
-    
-    if (isActiveSession) {
-      const activeSessionFile = getActiveSessionFile();
-      if (fs.existsSync(activeSessionFile)) {
-        fs.unlinkSync(activeSessionFile);
+
+    return withStateDb((db) => {
+      const targetSessionId = sessionId || getActiveSessionId(db);
+      if (!targetSessionId) {
+        return addRepoSafety({
+          action: 'reset',
+          sessionId: null,
+          message: 'No session to reset.',
+        });
       }
-    }
-    
-    return {
-      action: 'reset',
-      sessionId: targetSessionId,
-      message: 'Session cleared.',
-    };
+
+      const isActiveSession = getActiveSessionId(db) === targetSessionId;
+
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM sessions WHERE session_id = ?').run(targetSessionId);
+        if (isActiveSession) {
+          db.prepare('DELETE FROM active_session WHERE scope = ?').run(ACTIVE_SESSION_SCOPE);
+        }
+        db.prepare('DELETE FROM summary_cache WHERE session_id = ?').run(targetSessionId);
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+
+      return addRepoSafety({
+        action: 'reset',
+        sessionId: targetSessionId,
+        message: 'Session cleared.',
+      });
+    });
   }
-  
-  if (action === 'update' || action === 'append') {
+
+  if (action === 'compact') {
+    if (shouldBlockWrites) {
+      return buildMutationBlockedResponse({
+        action,
+        sessionId,
+        repoSafety: mutationSafety.repoSafety,
+        reasons: mutationSafety.reasons,
+      });
+    }
+
+    return compactState({
+      retentionDays,
+      keepLatestEventsPerSession,
+      keepLatestMetrics,
+      vacuum,
+    });
+  }
+
+  if (action === 'cleanup_legacy') {
+    return cleanupLegacyState({ apply });
+  }
+
+  if (action === 'update' || action === 'append' || action === 'auto_append' || action === 'checkpoint') {
     validateUpdateInput(update);
-    
-    let targetSessionId = sessionId;
-    let existingData = {};
-    
-    if (!targetSessionId || targetSessionId === 'new') {
-      if (action === 'append') {
-        const activeSession = getActiveSession();
-        if (activeSession) {
-          targetSessionId = activeSession.sessionId;
-          existingData = activeSession;
+
+    if (shouldBlockWrites) {
+      return buildMutationBlockedResponse({
+        action,
+        sessionId,
+        repoSafety: mutationSafety.repoSafety,
+        reasons: mutationSafety.reasons,
+      });
+    }
+
+    return withStateDb(async (db) => {
+      let targetSessionId = sessionId;
+      let existingData = {};
+
+      if (!targetSessionId || targetSessionId === 'new') {
+        if (action === 'append' || action === 'auto_append' || action === 'checkpoint') {
+          const activeSessionId = getActiveSessionId(db);
+          if (activeSessionId) {
+            targetSessionId = activeSessionId;
+            existingData = hydrateSession(getSessionRow(db, activeSessionId)) ?? {};
+          } else {
+            if ((action === 'auto_append' || action === 'checkpoint') && !hasMeaningfulAutoAppendInput(update)) {
+              return addRepoSafety({
+                action,
+                sessionId: null,
+                skipped: true,
+                changedFields: [],
+                message: 'Skipped auto-append because the update had no meaningful content.',
+              });
+            }
+            targetSessionId = generateSessionId(update.goal);
+          }
         } else {
           targetSessionId = generateSessionId(update.goal);
         }
       } else {
-        targetSessionId = generateSessionId(update.goal);
+        existingData = hydrateSession(getSessionRow(db, targetSessionId)) ?? {};
       }
-    } else {
-      const existing = loadSession(targetSessionId);
-      if (existing) {
-        existingData = existing;
-      }
-    }
-    
-    const resolvedStatus = normalizeStatus(update.status, normalizeStatus(existingData.status));
-    const completed = action === 'append'
-      ? mergeUniqueStrings(existingData.completed, update.completed)
-      : mergeUniqueStrings(update.completed);
-    const decisions = action === 'append'
-      ? mergeUniqueStrings(existingData.decisions, update.decisions)
-      : mergeUniqueStrings(update.decisions);
-    const touchedFiles = action === 'append'
-      ? mergeUniqueStrings(existingData.touchedFiles, update.touchedFiles)
-      : mergeUniqueStrings(update.touchedFiles);
-    const mergedData = action === 'append'
-      ? {
-          goal: update.goal || existingData.goal || 'Untitled session',
-          status: resolvedStatus,
-          pinnedContext: mergeUniqueStrings(existingData.pinnedContext, update.pinnedContext),
-          unresolvedQuestions: mergeUniqueStrings(existingData.unresolvedQuestions, update.unresolvedQuestions),
-          currentFocus: update.currentFocus || existingData.currentFocus || '',
-          whyBlocked: update.whyBlocked || existingData.whyBlocked || '',
-          completed,
-          decisions,
-          blockers: update.blockers !== undefined ? mergeUniqueStrings(update.blockers) : (existingData.blockers || []),
-          nextStep: update.nextStep || existingData.nextStep || '',
-          touchedFiles,
-          completedCount: completed.length,
-          decisionsCount: decisions.length,
-          touchedFilesCount: touchedFiles.length,
-        }
-      : {
-          goal: update.goal || 'Untitled session',
-          status: normalizeStatus(update.status),
-          pinnedContext: mergeUniqueStrings(update.pinnedContext),
-          unresolvedQuestions: mergeUniqueStrings(update.unresolvedQuestions),
-          currentFocus: update.currentFocus ?? '',
-          whyBlocked: update.whyBlocked ?? '',
-          completed,
-          decisions,
-          blockers: mergeUniqueStrings(update.blockers),
-          nextStep: update.nextStep ?? '',
-          touchedFiles,
-          completedCount: completed.length,
-          decisionsCount: decisions.length,
-          touchedFilesCount: touchedFiles.length,
-        };
-    
-    const savedData = saveSession(targetSessionId, mergedData);
-    const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(savedData, maxTokens);
-    
-    const rawTokens = countTokens(JSON.stringify(savedData));
-    const summaryMetrics = buildSummaryMetrics(rawTokens, tokens);
 
-    persistMetrics({
-      tool: 'smart_summary',
-      action,
-      sessionId: targetSessionId,
-      ...summaryMetrics,
-      latencyMs: Date.now() - startTime,
+      const mergedData = action === 'append' || action === 'auto_append' || action === 'checkpoint'
+        ? buildAppendData(existingData, update)
+        : buildReplaceData(update);
+      const checkpointDecision = action === 'checkpoint'
+        ? resolveCheckpointDecision({ event, force, existingData, mergedData })
+        : null;
+      const changedFields = action === 'auto_append'
+        ? getAutoAppendChanges(existingData, mergedData)
+        : checkpointDecision?.changedFields ?? [];
+
+      if (action === 'auto_append' && changedFields.length === 0) {
+        const currentSession = hydrateSession(getSessionRow(db, targetSessionId)) ?? mergedData;
+        const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(currentSession, maxTokens);
+        const rawTokens = countTokens(JSON.stringify(currentSession));
+
+        persistMetrics({
+          tool: 'smart_summary',
+          action,
+          sessionId: targetSessionId,
+          ...buildSummaryMetrics(rawTokens, tokens),
+          latencyMs: Date.now() - startTime,
+          skipped: true,
+        });
+
+        return addRepoSafety({
+          action,
+          sessionId: targetSessionId,
+          skipped: true,
+          changedFields,
+          summary: compressed,
+          tokens,
+          truncated,
+          omitted,
+          compressionLevel,
+          schemaVersion: currentSession.schemaVersion ?? SQLITE_SCHEMA_VERSION,
+          updatedAt: currentSession.updatedAt,
+          message: 'Skipped auto-append because no meaningful context changed.',
+        });
+      }
+
+      if (action === 'checkpoint' && !checkpointDecision.shouldPersist) {
+        const currentSession = hydrateSession(getSessionRow(db, targetSessionId)) ?? mergedData;
+        const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(currentSession, maxTokens);
+        const rawTokens = countTokens(JSON.stringify(currentSession));
+
+        persistMetrics({
+          tool: 'smart_summary',
+          action,
+          sessionId: targetSessionId,
+          ...buildSummaryMetrics(rawTokens, tokens),
+          latencyMs: Date.now() - startTime,
+          skipped: true,
+          checkpointEvent: checkpointDecision.event,
+        });
+
+        return addRepoSafety({
+          action,
+          sessionId: targetSessionId,
+          skipped: true,
+          changedFields,
+          checkpoint: {
+            event: checkpointDecision.event,
+            shouldPersist: false,
+            reason: checkpointDecision.reason,
+            score: checkpointDecision.score,
+            threshold: checkpointDecision.threshold,
+            scoreByField: checkpointDecision.scoreByField,
+          },
+          summary: compressed,
+          tokens,
+          truncated,
+          omitted,
+          compressionLevel,
+          schemaVersion: currentSession.schemaVersion ?? SQLITE_SCHEMA_VERSION,
+          updatedAt: currentSession.updatedAt,
+          message: checkpointDecision.reason,
+        });
+      }
+
+      const savedData = saveSession(db, targetSessionId, mergedData, {
+        action,
+        eventPayload: action === 'auto_append' || action === 'checkpoint'
+          ? {
+              ...update,
+              changedFields,
+              ...(action === 'checkpoint'
+                ? {
+                    checkpointEvent: checkpointDecision.event,
+                    checkpointReason: checkpointDecision.reason,
+                  }
+                : {}),
+            }
+          : update,
+      });
+      const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(savedData, maxTokens);
+      const rawTokens = countTokens(JSON.stringify(savedData));
+      const summaryMetrics = buildSummaryMetrics(rawTokens, tokens);
+
+      cacheSummary(db, targetSessionId, {
+        compressed,
+        tokens,
+        compressionLevel,
+        omitted,
+        updatedAt: savedData.updatedAt,
+      });
+
+      persistMetrics({
+        tool: 'smart_summary',
+        action,
+        sessionId: targetSessionId,
+        ...summaryMetrics,
+        latencyMs: Date.now() - startTime,
+        ...(action === 'checkpoint' ? { checkpointEvent: checkpointDecision.event } : {}),
+      });
+
+      return addRepoSafety({
+        action,
+        sessionId: targetSessionId,
+        skipped: false,
+        ...(action === 'auto_append' || action === 'checkpoint' ? { changedFields } : {}),
+        ...(action === 'checkpoint'
+          ? {
+              checkpoint: {
+                event: checkpointDecision.event,
+                shouldPersist: true,
+                reason: checkpointDecision.reason,
+                score: checkpointDecision.score,
+                threshold: checkpointDecision.threshold,
+                scoreByField: checkpointDecision.scoreByField,
+              },
+            }
+          : {}),
+        summary: compressed,
+        tokens,
+        truncated,
+        omitted,
+        compressionLevel,
+        schemaVersion: savedData.schemaVersion,
+        updatedAt: savedData.updatedAt,
+        message: action === 'append' || action === 'auto_append' || action === 'checkpoint'
+          ? 'Session updated incrementally.'
+          : 'Session saved.',
+      });
     });
-    
-    return {
-      action,
-      sessionId: targetSessionId,
-      summary: compressed,
-      tokens,
-      truncated,
-      omitted,
-      compressionLevel,
-      schemaVersion: savedData.schemaVersion,
-      updatedAt: savedData.updatedAt,
-      message: action === 'append' ? 'Session updated incrementally.' : 'Session saved.',
-    };
   }
-  
-  throw new Error(`Invalid action: ${action}. Valid actions: get, update, append, reset, list_sessions`);
+
+  throw new Error(`Invalid action: ${action}. Valid actions: get, update, append, auto_append, checkpoint, reset, list_sessions, compact, cleanup_legacy`);
 };

@@ -14,10 +14,22 @@ const readArgValue = (name) => {
   return process.argv[index + 1] ?? null;
 };
 
+const readEnvValue = (...names) => {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
 const defaultDevctxRoot = path.resolve(currentDir, '..', '..');
 const defaultProjectRoot = path.resolve(defaultDevctxRoot, '..', '..');
 const projectRootArg = readArgValue('--project-root');
-const projectRootEnv = process.env.DEVCTX_PROJECT_ROOT ?? null;
+const projectRootEnv = readEnvValue('DEVCTX_PROJECT_ROOT', 'MCP_PROJECT_ROOT');
 const rawProjectRoot = projectRootArg ?? projectRootEnv ?? defaultProjectRoot;
 
 export const devctxRoot = defaultDevctxRoot;

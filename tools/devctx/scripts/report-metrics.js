@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
 import path from 'node:path';
-import { getLegacyMetricsFilePath, getMetricsFilePath } from '../src/metrics.js';
+import { fileURLToPath } from 'node:url';
+import { smartMetrics } from '../src/tools/smart-metrics.js';
 
 const requireValue = (argv, index, flag) => {
   const value = argv[index + 1];
@@ -11,7 +11,7 @@ const requireValue = (argv, index, flag) => {
   return value;
 };
 
-const parseArgs = (argv) => {
+export const parseArgs = (argv) => {
   const options = {
     file: null,
     json: false,
@@ -44,109 +44,23 @@ const parseArgs = (argv) => {
   return options;
 };
 
-const unique = (items) => [...new Set(items.filter(Boolean))];
+const formatNumber = (value) => new Intl.NumberFormat('en-US').format(value);
 
-const resolveMetricsInput = (options) => {
-  if (options.file) {
-    return { filePath: options.file, source: 'explicit' };
-  }
-
-  const defaultPath = getMetricsFilePath();
-  const legacyPath = getLegacyMetricsFilePath();
-  const candidates = unique([defaultPath, legacyPath]);
-  const existing = candidates.find((filePath) => fs.existsSync(filePath));
-
-  if (existing) {
-    return {
-      filePath: existing,
-      source: existing === legacyPath ? 'legacy' : 'default',
-    };
-  }
-
-  return { filePath: defaultPath, source: 'default' };
-};
-
-const readEntries = (filePath) => {
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`No metrics file found at ${filePath}`);
-  }
-
-  const lines = fs.readFileSync(filePath, 'utf8')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const entries = [];
-  const invalidLines = [];
-
-  lines.forEach((line, index) => {
-    try {
-      entries.push(JSON.parse(line));
-    } catch {
-      invalidLines.push(index + 1);
-    }
+export const createReport = async (options) => {
+  const result = await smartMetrics({
+    file: options.file,
+    tool: options.tool,
+    window: 'all',
+    latest: 100,
   });
-
-  return { entries, invalidLines };
-};
-
-const getCompressedTokens = (entry) => Number(entry.compressedTokens ?? entry.finalTokens ?? 0);
-
-const getSavedTokens = (entry, compressedTokens) => {
-  if (entry.savedTokens !== undefined) {
-    return Number(entry.savedTokens ?? 0);
-  }
-
-  return Math.max(0, Number(entry.rawTokens ?? 0) - compressedTokens);
-};
-
-const aggregate = (entries) => {
-  const byTool = new Map();
-  let rawTokens = 0;
-  let compressedTokens = 0;
-  let savedTokens = 0;
-
-  for (const entry of entries) {
-    const tool = entry.tool ?? 'unknown';
-    const compressedTokensForEntry = getCompressedTokens(entry);
-    const savedTokensForEntry = getSavedTokens(entry, compressedTokensForEntry);
-    const current = byTool.get(tool) ?? {
-      tool,
-      count: 0,
-      rawTokens: 0,
-      compressedTokens: 0,
-      savedTokens: 0,
-    };
-
-    current.count += 1;
-    current.rawTokens += Number(entry.rawTokens ?? 0);
-    current.compressedTokens += compressedTokensForEntry;
-    current.savedTokens += savedTokensForEntry;
-    byTool.set(tool, current);
-
-    rawTokens += Number(entry.rawTokens ?? 0);
-    compressedTokens += compressedTokensForEntry;
-    savedTokens += savedTokensForEntry;
-  }
-
-  const tools = [...byTool.values()]
-    .map((item) => ({
-      ...item,
-      savingsPct: item.rawTokens > 0 ? +((item.savedTokens / item.rawTokens) * 100).toFixed(2) : 0,
-    }))
-    .sort((a, b) => b.savedTokens - a.savedTokens || b.count - a.count || a.tool.localeCompare(b.tool));
-
   return {
-    count: entries.length,
-    rawTokens,
-    compressedTokens,
-    savedTokens,
-    savingsPct: rawTokens > 0 ? +((savedTokens / rawTokens) * 100).toFixed(2) : 0,
-    tools,
+    filePath: result.filePath,
+    source: result.source,
+    toolFilter: options.tool,
+    invalidLines: result.invalidLines,
+    summary: result.summary,
   };
 };
-
-const formatNumber = (value) => new Intl.NumberFormat('en-US').format(value);
 
 const printHuman = (report) => {
   console.log('');
@@ -176,20 +90,9 @@ const printHuman = (report) => {
   }
 };
 
-const main = () => {
+export const main = async () => {
   const options = parseArgs(process.argv.slice(2));
-  const resolved = resolveMetricsInput(options);
-  const { entries, invalidLines } = readEntries(resolved.filePath);
-  const filteredEntries = options.tool ? entries.filter((entry) => entry.tool === options.tool) : entries;
-  const summary = aggregate(filteredEntries);
-
-  const report = {
-    filePath: resolved.filePath,
-    source: resolved.source,
-    toolFilter: options.tool,
-    invalidLines,
-    summary,
-  };
+  const report = await createReport(options);
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -199,9 +102,11 @@ const main = () => {
   printHuman(report);
 };
 
-try {
-  main();
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
+const isDirectExecution = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
 }

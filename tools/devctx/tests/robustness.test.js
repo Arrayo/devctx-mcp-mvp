@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { smartShell } from '../src/tools/smart-shell.js';
 import { smartSearch, isSmartCaseSensitive, walk, searchWithFallback, intentWeights, VALID_INTENTS } from '../src/tools/smart-search.js';
 import { buildIndex, buildIndexIncremental, removeFileFromIndex, queryIndex, queryRelated, isTestFile, isFileStale, reindexFile, persistIndex, loadIndex, getGraphCoverage } from '../src/index.js';
@@ -174,6 +174,7 @@ describe('metrics rotation (real path)', () => {
 
   it('persistMetrics writes entries and triggers rotation above 1MB', async () => {
     const { buildMetrics, persistMetrics, KEEP_LINES_AFTER_ROTATION } = await import('../src/metrics.js');
+    const metricsFile = tmpMetricsFile;
 
     const bigPadding = 'x'.repeat(600);
     const seedLines = 2000;
@@ -181,9 +182,10 @@ describe('metrics rotation (real path)', () => {
     for (let i = 0; i < seedLines; i++) {
       seeds.push(JSON.stringify({ tool: 'seed', target: 'seed', i, padding: bigPadding }));
     }
-    await fsp.writeFile(tmpMetricsFile, seeds.join('\n') + '\n', 'utf8');
+    process.env.DEVCTX_METRICS_FILE = metricsFile;
+    await fsp.writeFile(metricsFile, seeds.join('\n') + '\n', 'utf8');
 
-    const statBefore = await fsp.stat(tmpMetricsFile);
+    const statBefore = await fsp.stat(metricsFile);
     assert.ok(statBefore.size > 1024 * 1024, `seed file should exceed 1MB (got ${statBefore.size})`);
 
     const entry = buildMetrics({
@@ -194,7 +196,7 @@ describe('metrics rotation (real path)', () => {
     });
     await persistMetrics(entry);
 
-    const content = await fsp.readFile(tmpMetricsFile, 'utf8');
+    const content = await fsp.readFile(metricsFile, 'utf8');
     const lines = content.trim().split('\n');
 
     assert.ok(lines.length <= KEEP_LINES_AFTER_ROTATION + 1, `should have rotated to ~${KEEP_LINES_AFTER_ROTATION} lines (got ${lines.length})`);
@@ -205,6 +207,7 @@ describe('metrics rotation (real path)', () => {
 
   it('persistMetrics creates file from scratch in custom dir', async () => {
     const { buildMetrics, persistMetrics } = await import('../src/metrics.js');
+    const metricsFile = tmpMetricsFile;
 
     const entry = buildMetrics({
       tool: 'test',
@@ -212,9 +215,10 @@ describe('metrics rotation (real path)', () => {
       rawText: 'abc',
       compressedText: 'a',
     });
+    process.env.DEVCTX_METRICS_FILE = metricsFile;
     await persistMetrics(entry);
 
-    const content = await fsp.readFile(tmpMetricsFile, 'utf8');
+    const content = await fsp.readFile(metricsFile, 'utf8');
     const parsed = JSON.parse(content.trim());
     assert.equal(parsed.target, 'fresh');
     assert.ok(parsed.rawTokens >= parsed.compressedTokens);
@@ -276,9 +280,8 @@ describe('metrics reporting', () => {
     ];
     await fsp.writeFile(tmpMetricsFile, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
 
-    const scriptPath = path.resolve(__dirname, '..', 'scripts', 'report-metrics.js');
-    const { stdout } = await execFile(process.execPath, [scriptPath, '--file', tmpMetricsFile, '--json']);
-    const report = JSON.parse(stdout);
+    const { createReport } = await import('../scripts/report-metrics.js');
+    const report = await createReport({ file: tmpMetricsFile, json: true, tool: null });
 
     assert.equal(report.summary.count, 3);
     assert.equal(report.summary.rawTokens, 580);
@@ -297,9 +300,8 @@ describe('metrics reporting', () => {
     ];
     await fsp.writeFile(tmpMetricsFile, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
 
-    const scriptPath = path.resolve(__dirname, '..', 'scripts', 'report-metrics.js');
-    const { stdout } = await execFile(process.execPath, [scriptPath, '--file', tmpMetricsFile, '--json']);
-    const report = JSON.parse(stdout);
+    const { createReport } = await import('../scripts/report-metrics.js');
+    const report = await createReport({ file: tmpMetricsFile, json: true, tool: null });
 
     assert.equal(report.summary.count, 2);
     assert.equal(report.summary.rawTokens, 400);
@@ -404,7 +406,7 @@ describe('smart_read symbol mode', () => {
   it('extracts a JS function by name', async () => {
     const result = await smartRead({ filePath: 'tools/devctx/src/server.js', mode: 'symbol', symbol: 'createDevctxServer' });
     assert.match(result.content, /createDevctxServer/);
-    assert.match(result.content, /return server/);
+    assert.match(result.content, /server\.tool/);
     assert.ok(result.metrics.compressedTokens < result.metrics.rawTokens);
   });
 
@@ -441,25 +443,25 @@ describe('smart_read symbol mode', () => {
 
   it('extracts multiple symbols in one call', async () => {
     const result = await smartRead({
-      filePath: 'tools/devctx/src/server.js',
+      filePath: 'tools/devctx/src/tools/smart-turn.js',
       mode: 'symbol',
-      symbol: ['createDevctxServer', 'runDevctxServer'],
+      symbol: ['startTurn', 'endTurn'],
     });
-    assert.match(result.content, /--- createDevctxServer ---/);
-    assert.match(result.content, /--- runDevctxServer ---/);
-    assert.match(result.content, /return server/);
-    assert.match(result.content, /new StdioServerTransport/);
+    assert.match(result.content, /--- startTurn ---/);
+    assert.match(result.content, /--- endTurn ---/);
+    assert.match(result.content, /ensureSession/);
+    assert.match(result.content, /const endTurn/);
     assert.ok(result.metrics.compressedTokens > 0, 'should have compressedTokens');
     assert.ok(result.metrics.rawTokens > 0, 'should have rawTokens');
   });
 
   it('multi-symbol with partial miss returns found + not-found', async () => {
     const result = await smartRead({
-      filePath: 'tools/devctx/src/server.js',
+      filePath: 'tools/devctx/src/tools/smart-turn.js',
       mode: 'symbol',
-      symbol: ['createDevctxServer', 'doesNotExist'],
+      symbol: ['startTurn', 'doesNotExist'],
     });
-    assert.match(result.content, /--- createDevctxServer ---/);
+    assert.match(result.content, /--- startTurn ---/);
     assert.match(result.content, /--- doesNotExist ---/);
     assert.match(result.content, /Symbol not found: doesNotExist/);
   });
@@ -471,6 +473,7 @@ describe('smart_read symbol mode', () => {
 
 describe('devctx-init agent rules', () => {
   const initScript = path.resolve(__dirname, '..', 'scripts', 'init-clients.js');
+  const protectScript = path.resolve(__dirname, '..', 'scripts', 'check-repo-safety.js');
   let tmpDir;
 
   beforeEach(async () => {
@@ -487,24 +490,42 @@ describe('devctx-init agent rules', () => {
     const cursorRule = await fsp.readFile(path.join(tmpDir, '.cursor', 'rules', 'devctx.mdc'), 'utf8');
     assert.match(cursorRule, /alwaysApply: true/);
     assert.match(cursorRule, /smart_read/);
+    assert.match(cursorRule, /smart_turn/);
+    assert.match(cursorRule, /phase=end/);
+    assert.match(cursorRule, /repoSafety/);
 
     const agentsMd = await fsp.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
     assert.match(agentsMd, /devctx:start/);
     assert.match(agentsMd, /smart_read/);
+    assert.match(agentsMd, /smart_turn/);
+    assert.match(agentsMd, /phase=end/);
 
     const claudeMd = await fsp.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
     assert.match(claudeMd, /devctx:start/);
     assert.match(claudeMd, /smart_search/);
+    assert.match(claudeMd, /smart_turn/);
+    assert.match(claudeMd, /repoSafety/);
+
+    const claudeSettings = JSON.parse(await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'));
+    assert.ok(Array.isArray(claudeSettings.hooks.SessionStart));
+    assert.ok(Array.isArray(claudeSettings.hooks.UserPromptSubmit));
+    assert.ok(Array.isArray(claudeSettings.hooks.PostToolUse));
+    assert.ok(Array.isArray(claudeSettings.hooks.Stop));
+    assert.match(claudeSettings.hooks.UserPromptSubmit[0].hooks[0].command, /claude-hook\.js/);
+    assert.match(claudeSettings.hooks.PostToolUse[0].matcher, /smart_turn/);
   });
 
   it('is idempotent — running twice does not duplicate sections', async () => {
     await execFile(process.execPath, [initScript, '--target', tmpDir]);
     const firstRun = await fsp.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
+    const firstClaudeSettings = await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8');
 
     await execFile(process.execPath, [initScript, '--target', tmpDir]);
     const secondRun = await fsp.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
+    const secondClaudeSettings = await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8');
 
     assert.equal(firstRun, secondRun);
+    assert.equal(firstClaudeSettings, secondClaudeSettings);
   });
 
   it('respects --clients flag — only cursor generates cursor rule', async () => {
@@ -540,6 +561,56 @@ describe('devctx-init agent rules', () => {
     assert.match(config, new RegExp(`command = ${JSON.stringify(process.execPath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   });
 
+  it('includes DEVCTX_PROJECT_ROOT env in generated config for all clients', async () => {
+    await execFile(process.execPath, [initScript, '--target', tmpDir]);
+
+    const cursorConfig = await fsp.readFile(path.join(tmpDir, '.cursor', 'mcp.json'), 'utf8');
+    const cursorJson = JSON.parse(cursorConfig);
+    assert.strictEqual(cursorJson.mcpServers.devctx.env.DEVCTX_PROJECT_ROOT, tmpDir);
+
+    const codexConfig = await fsp.readFile(path.join(tmpDir, '.codex', 'config.toml'), 'utf8');
+    assert.match(codexConfig, /env = \{/);
+    assert.match(codexConfig, new RegExp(`"DEVCTX_PROJECT_ROOT" = ${JSON.stringify(tmpDir).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+
+    const claudeConfig = await fsp.readFile(path.join(tmpDir, '.mcp.json'), 'utf8');
+    const claudeJson = JSON.parse(claudeConfig);
+    assert.strictEqual(claudeJson.mcpServers.devctx.env.DEVCTX_PROJECT_ROOT, tmpDir);
+
+    const claudeSettings = JSON.parse(await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'));
+    assert.match(claudeSettings.hooks.UserPromptSubmit[0].hooks[0].command, /\$CLAUDE_PROJECT_DIR/);
+  });
+
+  it('runtime config accepts legacy MCP_PROJECT_ROOT env', async () => {
+    const runtimeConfig = pathToFileURL(
+      path.resolve(__dirname, '..', 'src', 'utils', 'runtime-config.js')
+    ).href;
+    const legacyRoot = path.join(tmpDir, 'legacy-root');
+    const originalDevctxProjectRoot = process.env.DEVCTX_PROJECT_ROOT;
+    const originalMcpProjectRoot = process.env.MCP_PROJECT_ROOT;
+    await fsp.mkdir(legacyRoot, { recursive: true });
+
+    delete process.env.DEVCTX_PROJECT_ROOT;
+    process.env.MCP_PROJECT_ROOT = legacyRoot;
+
+    try {
+      const runtimeModule = await import(`${runtimeConfig}?legacy=${Date.now()}`);
+      assert.strictEqual(runtimeModule.projectRoot, legacyRoot);
+      assert.strictEqual(runtimeModule.projectRootSource, 'env');
+    } finally {
+      if (originalDevctxProjectRoot === undefined) {
+        delete process.env.DEVCTX_PROJECT_ROOT;
+      } else {
+        process.env.DEVCTX_PROJECT_ROOT = originalDevctxProjectRoot;
+      }
+
+      if (originalMcpProjectRoot === undefined) {
+        delete process.env.MCP_PROJECT_ROOT;
+      } else {
+        process.env.MCP_PROJECT_ROOT = originalMcpProjectRoot;
+      }
+    }
+  });
+
   it('adds .devctx to the target gitignore', async () => {
     await execFile(process.execPath, [initScript, '--target', tmpDir]);
 
@@ -556,6 +627,51 @@ describe('devctx-init agent rules', () => {
     const gitignore = await fsp.readFile(path.join(tmpDir, '.gitignore'), 'utf8');
     const matches = gitignore.match(/^\.devctx\/$/gm) ?? [];
     assert.equal(matches.length, 1);
+  });
+
+  it('installs an idempotent pre-commit hook for git repositories', async () => {
+    await execFile('git', ['init'], { cwd: tmpDir });
+
+    await execFile(process.execPath, [initScript, '--target', tmpDir]);
+    const firstHook = await fsp.readFile(path.join(tmpDir, '.git', 'hooks', 'pre-commit'), 'utf8');
+
+    assert.match(firstHook, /^#!\/bin\/sh/m);
+    assert.match(firstHook, /devctx:start/);
+    assert.match(firstHook, /check-repo-safety\.js/);
+    assert.match(firstHook, /commit blocked by repo safety checks/);
+
+    await execFile(process.execPath, [initScript, '--target', tmpDir]);
+    const secondHook = await fsp.readFile(path.join(tmpDir, '.git', 'hooks', 'pre-commit'), 'utf8');
+
+    assert.equal(firstHook, secondHook);
+  });
+
+  it('repo safety script blocks commits when state sqlite is staged', async () => {
+    await execFile('git', ['init'], { cwd: tmpDir });
+    await fsp.writeFile(path.join(tmpDir, '.gitignore'), '.devctx/\n', 'utf8');
+    await fsp.mkdir(path.join(tmpDir, '.devctx'), { recursive: true });
+    await fsp.writeFile(path.join(tmpDir, '.devctx', 'state.sqlite'), 'sqlite-fixture', 'utf8');
+    await execFile('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: tmpDir });
+
+    await assert.rejects(
+      execFile(process.execPath, [protectScript, '--project-root', tmpDir]),
+      (error) => {
+        assert.equal(error.code, 1);
+        const output = `${error.stdout ?? ''}\n${error.stderr ?? ''}`;
+        assert.match(output, /staged for commit/i);
+        return true;
+      },
+    );
+  });
+
+  it('repo safety script passes when state sqlite is ignored and unstaged', async () => {
+    await execFile('git', ['init'], { cwd: tmpDir });
+    await fsp.writeFile(path.join(tmpDir, '.gitignore'), '.devctx/\n', 'utf8');
+    await fsp.mkdir(path.join(tmpDir, '.devctx'), { recursive: true });
+    await fsp.writeFile(path.join(tmpDir, '.devctx', 'state.sqlite'), 'sqlite-fixture', 'utf8');
+
+    const result = await execFile(process.execPath, [protectScript, '--project-root', tmpDir]);
+    assert.match(result.stdout, /repo safety: ok/i);
   });
 });
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -118,11 +119,33 @@ const writeFile = (filePath, content, dryRun) => {
   console.log(`updated ${filePath}`);
 };
 
-const getServerConfig = ({ name, command, args }) => ({
+const runGit = (args, cwd) => {
+  try {
+    const stdout = execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return {
+      ok: true,
+      stdout: stdout.trim(),
+    };
+  } catch {
+    return {
+      ok: false,
+      stdout: '',
+    };
+  }
+};
+
+const getServerConfig = ({ name, command, args, cwd }) => ({
   name,
   config: {
     command,
     args,
+    env: {
+      DEVCTX_PROJECT_ROOT: cwd,
+    },
   },
 });
 
@@ -130,7 +153,14 @@ const updateCursorConfig = (targetDir, serverConfig, dryRun) => {
   const filePath = path.join(targetDir, '.cursor', 'mcp.json');
   const current = readJson(filePath, { mcpServers: {} });
   current.mcpServers ??= {};
-  current.mcpServers[serverConfig.name] = serverConfig.config;
+  const existing = current.mcpServers[serverConfig.name] || {};
+  current.mcpServers[serverConfig.name] = {
+    ...serverConfig.config,
+    env: {
+      ...existing.env,
+      ...serverConfig.config.env,
+    },
+  };
   writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, dryRun);
 };
 
@@ -138,10 +168,69 @@ const updateClaudeConfig = (targetDir, serverConfig, dryRun) => {
   const filePath = path.join(targetDir, '.mcp.json');
   const current = readJson(filePath, { mcpServers: {} });
   current.mcpServers ??= {};
+  const existing = current.mcpServers[serverConfig.name] || {};
   current.mcpServers[serverConfig.name] = {
     ...serverConfig.config,
-    env: current.mcpServers[serverConfig.name]?.env ?? {},
+    env: {
+      ...existing.env,
+      ...serverConfig.config.env,
+    },
   };
+  writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, dryRun);
+};
+
+const buildClaudeHookCommand = (targetDir, eventName) => {
+  const scriptPath = normalizeCommandPath(path.relative(targetDir, path.join(devctxDir, 'scripts', 'claude-hook.js')));
+  return `"${process.execPath}" "${scriptPath}" --event ${eventName} --project-root "$CLAUDE_PROJECT_DIR"`;
+};
+
+const getClaudeHookMatcher = (eventName) => {
+  if (eventName === 'SessionStart') {
+    return 'startup|resume|clear|compact';
+  }
+
+  if (eventName === 'PostToolUse') {
+    return 'Write|Edit|MultiEdit|mcp__.*__smart_turn|mcp__.*__smart_summary';
+  }
+
+  return '*';
+};
+
+const upsertClaudeHook = (settings, eventName, matcher, command) => {
+  settings.hooks ??= {};
+  settings.hooks[eventName] = Array.isArray(settings.hooks[eventName]) ? settings.hooks[eventName] : [];
+
+  const normalizedMatcher = matcher ?? '*';
+  const existingGroup = settings.hooks[eventName].find((group) => (group.matcher ?? '*') === normalizedMatcher);
+
+  if (existingGroup) {
+    existingGroup.hooks = Array.isArray(existingGroup.hooks) ? existingGroup.hooks : [];
+    const alreadyPresent = existingGroup.hooks.some((hook) => hook?.type === 'command' && hook?.command === command);
+    if (!alreadyPresent) {
+      existingGroup.hooks.push({ type: 'command', command });
+    }
+    return;
+  }
+
+  settings.hooks[eventName].push({
+    matcher: normalizedMatcher,
+    hooks: [{ type: 'command', command }],
+  });
+};
+
+const updateClaudeHooksConfig = (targetDir, dryRun) => {
+  const filePath = path.join(targetDir, '.claude', 'settings.json');
+  const current = readJson(filePath, {});
+
+  ['SessionStart', 'UserPromptSubmit', 'PostToolUse', 'Stop'].forEach((eventName) => {
+    upsertClaudeHook(
+      current,
+      eventName,
+      getClaudeHookMatcher(eventName),
+      buildClaudeHookCommand(targetDir, eventName),
+    );
+  });
+
   writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, dryRun);
 };
 
@@ -151,7 +240,14 @@ const updateQwenConfig = (targetDir, serverConfig, dryRun) => {
   current.mcp ??= {};
   current.mcp.enabled = true;
   current.mcpServers ??= {};
-  current.mcpServers[serverConfig.name] = serverConfig.config;
+  const existing = current.mcpServers[serverConfig.name] || {};
+  current.mcpServers[serverConfig.name] = {
+    ...serverConfig.config,
+    env: {
+      ...existing.env,
+      ...serverConfig.config.env,
+    },
+  };
   writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, dryRun);
 };
 
@@ -162,9 +258,16 @@ const buildCodexSection = (serverConfig) => {
     'required = false',
     `command = ${JSON.stringify(serverConfig.config.command)}`,
     `args = [${serverConfig.config.args.map((value) => JSON.stringify(value)).join(', ')}]`,
-    'startup_timeout_sec = 15.0',
-    'tool_timeout_sec = 30.0',
   ];
+
+  if (serverConfig.config.env && Object.keys(serverConfig.config.env).length > 0) {
+    const envEntries = Object.entries(serverConfig.config.env)
+      .map(([key, value]) => `  ${JSON.stringify(key)} = ${JSON.stringify(value)}`)
+      .join(',\n');
+    body.push(`env = {\n${envEntries}\n}`);
+  }
+
+  body.push('startup_timeout_sec = 15.0', 'tool_timeout_sec = 30.0');
 
   return { header, body };
 };
@@ -213,6 +316,18 @@ const upsertTomlSection = (content, header, bodyLines) => {
   return `${preserved}\n\n${section}\n`;
 };
 
+const upsertSentinelSection = (content, startMarker, endMarker, section) => {
+  const startIdx = content.indexOf(startMarker);
+  const endIdx = content.indexOf(endMarker);
+
+  if (startIdx !== -1 && endIdx !== -1) {
+    return content.slice(0, startIdx) + section + content.slice(endIdx + endMarker.length);
+  }
+
+  const trimmed = content.trimEnd();
+  return trimmed.length === 0 ? `${section}\n` : `${trimmed}\n\n${section}\n`;
+};
+
 const updateCodexConfig = (targetDir, serverConfig, dryRun) => {
   const filePath = path.join(targetDir, '.codex', 'config.toml');
   const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
@@ -221,12 +336,53 @@ const updateCodexConfig = (targetDir, serverConfig, dryRun) => {
   writeFile(filePath, nextContent, dryRun);
 };
 
+const HOOK_SECTION_START = '# devctx:start';
+const HOOK_SECTION_END = '# devctx:end';
+
+const buildPreCommitHookSection = (targetDir) => {
+  const scriptPath = normalizeCommandPath(path.relative(targetDir, path.join(devctxDir, 'scripts', 'check-repo-safety.js')));
+  return `${HOOK_SECTION_START}
+# Prevent committing project-local devctx state.
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+"${process.execPath}" "${scriptPath}" --project-root "$repo_root"
+status=$?
+if [ "$status" -ne 0 ]; then
+  echo "devctx: commit blocked by repo safety checks." >&2
+  exit "$status"
+fi
+${HOOK_SECTION_END}`;
+};
+
+const updatePreCommitHook = (targetDir, dryRun) => {
+  const hookPathResult = runGit(['rev-parse', '--git-path', 'hooks/pre-commit'], targetDir);
+  if (!hookPathResult.ok || !hookPathResult.stdout) {
+    console.log(`skipped git hook installation for ${targetDir} (not a git repository)`);
+    return;
+  }
+
+  const filePath = path.resolve(targetDir, hookPathResult.stdout);
+  const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+  const nextBody = upsertSentinelSection(current, HOOK_SECTION_START, HOOK_SECTION_END, buildPreCommitHookSection(targetDir));
+  const nextContent = nextBody.startsWith('#!') ? nextBody : `#!/bin/sh\n\n${nextBody}`;
+  writeFile(filePath, nextContent, dryRun);
+
+  if (!dryRun) {
+    fs.chmodSync(filePath, 0o755);
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Agent rules — instruct agents to prefer devctx tools over built-in ones
 // ---------------------------------------------------------------------------
 
-const agentRuleBody = `Always prefer devctx MCP tools over built-in file reading, code search, and diagnostics.
+const agentRuleBody = `Always prefer devctx MCP tools over built-in file reading, code search, diagnostics, and context recovery.
 
+- For every non-trivial user prompt, start with smart_turn phase=start before exploring the codebase. Pass the current user prompt and ensureSession=true for a meaningful new task.
+- Treat smart_turn phase=start as the default entrypoint for context recovery instead of manually deciding whether to call smart_summary(get).
+- Inspect repoSafety from smart_turn or smart_summary responses. If .devctx/state.sqlite is tracked or staged, mutating context writes are blocked until git hygiene is fixed.
+- If smart_turn phase=start reports ambiguous_resume, choose the recommended session explicitly with smart_summary sessionId="auto" before continuing.
+- After meaningful milestones, end the turn with smart_turn phase=end and the appropriate event (milestone, decision, blocker, task_complete, session_end) so persistence stays event-driven.
+- Before ending work, persist the latest nextStep with smart_turn phase=end and event=session_end.
 - Use smart_read outline or signatures before full (~90% token savings).
 - Use smart_read symbol (string or array) to extract specific functions/classes before editing.
 - Use smart_read range for specific lines when you know the location.
@@ -234,14 +390,15 @@ const agentRuleBody = `Always prefer devctx MCP tools over built-in file reading
 - Use smart_search instead of grep/ripgrep — it groups, ranks, and filters automatically.
 - Pass intent to smart_search to get task-aware ranking (implementation/debug/tests/config/docs/explore).
 - Use smart_shell for diagnostics: git status, ls, find, pwd, test output.
+- Use smart_metrics to report token savings or recent devctx usage instead of reading metrics files manually.
 
 By task:
-- Debugging: smart_search with intent=debug → read signatures → inspect symbol → smart_shell for tests/errors.
-- Review: smart_search with intent=implementation → read outline/signatures, focus on changed symbols, minimal changes.
-- Refactor: smart_search with intent=implementation → signatures for public API, preserve behavior, small edits, verify with tests.
-- Tests: smart_search with intent=tests → find existing tests, read symbol of function under test.
+- Debugging: smart_turn(start) → smart_search with intent=debug → read signatures → inspect symbol → smart_shell for tests/errors → smart_turn(end event=milestone or blocker).
+- Review: smart_turn(start) → smart_search with intent=implementation → read outline/signatures, focus on changed symbols, minimal changes → smart_turn(end event=milestone).
+- Refactor: smart_turn(start) → smart_search with intent=implementation → signatures for public API, preserve behavior, small edits, verify with tests → smart_turn(end event=milestone).
+- Tests: smart_turn(start) → smart_search with intent=tests → find existing tests, read symbol of function under test → smart_turn(end event=milestone).
 - Config: smart_search with intent=config → find settings, env vars, infrastructure files.
-- Architecture: smart_search with intent=explore → directory structure, outlines of key modules and API boundaries.`;
+- Architecture: smart_turn(start) → smart_search with intent=explore → directory structure, outlines of key modules and API boundaries → smart_turn(end event=task_switch or milestone).`;
 
 const cursorRuleContent = `---
 description: Prefer devctx MCP tools for file reading, code search, and diagnostics
@@ -319,10 +476,12 @@ const main = () => {
     name: options.name,
     command: options.command,
     args,
+    cwd: targetDir,
   });
 
   const clientSet = new Set(options.clients);
   ensureGitignoreEntry(targetDir, options.dryRun);
+  updatePreCommitHook(targetDir, options.dryRun);
 
   if (clientSet.has('cursor')) {
     updateCursorConfig(targetDir, serverConfig, options.dryRun);
@@ -340,6 +499,7 @@ const main = () => {
 
   if (clientSet.has('claude')) {
     updateClaudeConfig(targetDir, serverConfig, options.dryRun);
+    updateClaudeHooksConfig(targetDir, options.dryRun);
     updateClaudeMd(targetDir, options.dryRun);
   }
 
