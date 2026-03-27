@@ -8,6 +8,7 @@ It exposes:
 - `smart_read_batch`: read multiple files in one call — reduces round-trip latency
 - `smart_search`: ripgrep-first code search with grouped, ranked results and intent-aware ranking
 - `smart_context`: one-call context planner that combines search + read + graph expansion
+- `smart_summary`: maintain compressed conversation state across sessions without token bloat
 - `smart_shell`: safe diagnostic shell execution with a restricted allowlist
 - `build_index`: lightweight symbol index for faster lookups and smarter ranking
 
@@ -109,7 +110,7 @@ After installing and running `smart-context-init`, each client picks up the serv
 
 ### Cursor
 
-Open the project in Cursor. The MCP server starts automatically. Enable it in **Cursor Settings > MCP** if needed. All six tools are available in Agent mode.
+Open the project in Cursor. The MCP server starts automatically. Enable it in **Cursor Settings > MCP** if needed. All seven tools are available in Agent mode.
 
 ### Codex CLI
 
@@ -355,6 +356,73 @@ When using diff mode, the response includes a `diffSummary`:
 }
 ```
 
+### `smart_summary`
+
+Maintain compressed conversation state across sessions. Solves the context-loss problem when resuming work after hours or days.
+
+**Actions:**
+
+| Action | Purpose | Returns |
+|--------|---------|---------|
+| `get` | Retrieve current or specified session | Compressed summary (≤500 tokens) |
+| `update` | Create or replace session | New session with compressed state |
+| `append` | Add to existing session | Merged session state |
+| `reset` | Clear session | Confirmation |
+| `list_sessions` | Show all available sessions | Array of sessions with metadata |
+
+**Parameters:**
+- `action` (required) — one of the actions above
+- `sessionId` (optional) — session identifier; auto-generated from `goal` if omitted
+- `update` (required for update/append) — object with:
+  - `goal`: primary objective
+  - `status`: current state (`planning` | `in_progress` | `blocked` | `completed`)
+  - `completed`: array of completed steps
+  - `decisions`: array of key decisions with rationale
+  - `blockers`: array of current blockers
+  - `nextStep`: immediate next action
+  - `touchedFiles`: array of modified files
+- `maxTokens` (optional, default 500) — hard cap on summary size
+
+**Storage:**
+- Sessions persist in `.devctx/sessions/<sessionId>.json`
+- Active session tracked in `.devctx/sessions/active.json`
+- 30-day retention for inactive sessions
+- No expiration for active sessions
+
+**Compression strategy:**
+- Keeps last 5 completed steps (discards older)
+- Keeps last 3 decisions (discards older)
+- Keeps last 10 touched files (deduplicates)
+- Prioritizes blockers and next step
+- Auto-truncates if exceeds `maxTokens`
+
+**Example workflow:**
+
+```javascript
+// Start of work session
+smart_summary({ action: "get" })
+// → retrieves last active session or returns "not found"
+
+// After implementing auth middleware
+smart_summary({ 
+  action: "append",
+  update: {
+    completed: ["auth middleware"],
+    decisions: ["JWT with 1h expiry, refresh tokens in Redis"],
+    touchedFiles: ["src/middleware/auth.js"],
+    nextStep: "add role-based access control"
+  }
+})
+
+// Monday after weekend - resume work
+smart_summary({ action: "get" })
+// → full context restored, continue from nextStep
+
+// List all sessions
+smart_summary({ action: "list_sessions" })
+// → see all available sessions, pick one to resume
+```
+
 ### `build_index`
 
 - Builds a lightweight symbol index for the project (functions, classes, methods, types, etc.)
@@ -403,8 +471,9 @@ Metrics include: P@5, P@10, Recall, wrong-file rate, retrieval honesty, follow-u
 ## Notes
 
 - `@vscode/ripgrep` provides a bundled `rg` binary, so a system install is not required.
-- Metrics are written under `.devctx/metrics.jsonl` in the package root.
-- Symbol index stored in `.devctx/index.json` when `build_index` is used.
+- Metrics are written to `<projectRoot>/.devctx/metrics.jsonl` (override with `DEVCTX_METRICS_FILE` env var).
+- Symbol index stored in `<projectRoot>/.devctx/index.json` when `build_index` is used.
+- Conversation sessions stored in `<projectRoot>/.devctx/sessions/` when `smart_summary` is used.
 - This package is a navigation and diagnostics layer, not a full semantic code intelligence system.
 
 ## Repository

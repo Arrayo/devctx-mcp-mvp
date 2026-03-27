@@ -8,6 +8,7 @@ import { smartSearch } from './tools/smart-search.js';
 import { smartContext } from './tools/smart-context.js';
 import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
+import { smartSummary } from './tools/smart-summary.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
 
 const require = createRequire(import.meta.url);
@@ -118,6 +119,27 @@ export const createDevctxServer = () => {
       const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
       return asTextResult({ status: 'ok', files: fileCount, symbols: symbolCount });
     },
+  );
+
+  server.tool(
+    'smart_summary',
+    'Maintain compressed conversation state across turns. Actions: get (retrieve current/last session), update (create/replace session), append (add to existing session), reset (clear session), list_sessions (show all sessions). Sessions persist in .devctx/sessions/ with 30-day retention. Auto-generates sessionId from goal if not provided. Returns compressed summary capped at maxTokens (default 500). Tracks: goal, status, completed steps, key decisions, blockers, next step, touched files.',
+    {
+      action: z.enum(['get', 'update', 'append', 'reset', 'list_sessions']),
+      sessionId: z.string().optional(),
+      update: z.object({
+        goal: z.string().optional(),
+        status: z.string().optional(),
+        completed: z.array(z.string()).optional(),
+        decisions: z.array(z.string()).optional(),
+        blockers: z.array(z.string()).optional(),
+        nextStep: z.string().optional(),
+        touchedFiles: z.array(z.string()).optional(),
+      }).optional(),
+      maxTokens: z.number().int().min(100).max(2000).optional(),
+    },
+    async ({ action, sessionId, update, maxTokens }) =>
+      asTextResult(await smartSummary({ action, sessionId, update, maxTokens })),
   );
 
   return server;

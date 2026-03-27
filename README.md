@@ -2,12 +2,13 @@
 
 MCP server that reduces agent token usage and improves response quality with compact file summaries, ranked code search, and curated context.
 
-It provides six focused tools:
+It provides seven focused tools:
 
 - `smart_read`: compact file summaries instead of full file dumps
 - `smart_read_batch`: read multiple files in one call — reduces round-trip latency
 - `smart_search`: ripgrep-first code search with intent-aware, grouped, ranked results
 - `smart_context`: one-call context planner — search + read + graph expansion in a single response
+- `smart_summary`: maintain compressed conversation state across sessions without token bloat
 - `smart_shell`: safe diagnostic shell execution with restricted commands
 - `build_index`: lightweight symbol index for faster lookups and smarter ranking
 
@@ -21,14 +22,17 @@ The project is already useful across real repos. It is strongest in modern web/b
 | Read multiple files at once | `smart_read_batch` | array of `{ path, mode, symbol }` |
 | Search code by keyword/pattern | `smart_search` | `query`, `intent`: `debug` \| `implementation` \| `tests` \| `config` |
 | Get full context for a task | `smart_context` | `task` (natural language), `detail`: `minimal` \| `balanced` \| `deep` |
+| Maintain conversation context | `smart_summary` | `action`: `get` \| `update` \| `append` \| `reset` \| `list_sessions` |
 | Run diagnostic commands | `smart_shell` | `command` (allowlisted only) |
 | Build symbol index (once) | `build_index` | `incremental`: `true` for faster updates |
 
 **When to use what:**
-- **Starting a task?** → `smart_context` with your goal
+- **Starting a task?** → `smart_summary` to get context, then `smart_context` with your goal
 - **Need specific file content?** → `smart_read` in `outline` or `signatures` mode
 - **Searching for a pattern?** → `smart_search` with appropriate `intent`
 - **Reading many files?** → `smart_read_batch` to reduce round-trips
+- **After each milestone?** → `smart_summary` with `action: "append"` to track progress
+- **Resuming after break?** → `smart_summary` with `action: "get"` to restore context
 - **First time in repo?** → `build_index` once for better ranking
 
 ## Best fit
@@ -64,7 +68,7 @@ After installing, each client picks up the server automatically:
 
 ### Cursor
 
-Open the project in Cursor. The MCP server starts automatically. Enable it in **Cursor Settings > MCP** if needed. All tools (`smart_read`, `smart_read_batch`, `smart_search`, `smart_context`, `smart_shell`, `build_index`) are available in Agent mode.
+Open the project in Cursor. The MCP server starts automatically. Enable it in **Cursor Settings > MCP** if needed. All tools (`smart_read`, `smart_read_batch`, `smart_search`, `smart_context`, `smart_summary`, `smart_shell`, `build_index`) are available in Agent mode.
 
 Config: `.cursor/mcp.json`
 
@@ -130,7 +134,7 @@ npm start
 
 For normal IDE use, the MCP client should start the server automatically from its project config.
 
-The package exposes two binaries: `smart-context-server` and `smart-context-init`.
+The package exposes three binaries: `smart-context-server`, `smart-context-init`, and `smart-context-report`.
 
 ## Use against another repo
 
@@ -349,6 +353,73 @@ task input → intent detection → search/diff → graph expansion → smart_re
 
 Diff mode is ideal for PR review and debugging recent changes — reads only changed files plus their tests and dependencies.
 
+### `smart_summary`
+
+Maintain compressed conversation state across sessions. Solves the context-loss problem when resuming work after hours or days.
+
+**Actions:**
+
+| Action | Purpose | Returns |
+|--------|---------|---------|
+| `get` | Retrieve current or specified session | Compressed summary (≤500 tokens) |
+| `update` | Create or replace session | New session with compressed state |
+| `append` | Add to existing session | Merged session state |
+| `reset` | Clear session | Confirmation |
+| `list_sessions` | Show all available sessions | Array of sessions with metadata |
+
+**Parameters:**
+- `action` (required) — one of the actions above
+- `sessionId` (optional) — session identifier; auto-generated from `goal` if omitted
+- `update` (required for update/append) — object with:
+  - `goal`: primary objective
+  - `status`: current state (`planning` | `in_progress` | `blocked` | `completed`)
+  - `completed`: array of completed steps
+  - `decisions`: array of key decisions with rationale
+  - `blockers`: array of current blockers
+  - `nextStep`: immediate next action
+  - `touchedFiles`: array of modified files
+- `maxTokens` (optional, default 500) — hard cap on summary size
+
+**Storage:**
+- Sessions persist in `.devctx/sessions/<sessionId>.json`
+- Active session tracked in `.devctx/sessions/active.json`
+- 30-day retention for inactive sessions
+- No expiration for active sessions
+
+**Compression strategy:**
+- Keeps last 5 completed steps (discards older)
+- Keeps last 3 decisions (discards older)
+- Keeps last 10 touched files (deduplicates)
+- Prioritizes blockers and next step
+- Auto-truncates if exceeds `maxTokens`
+
+**Example workflow:**
+
+```javascript
+// Start of work session
+smart_summary({ action: "get" })
+// → retrieves last active session or returns "not found"
+
+// After implementing auth middleware
+smart_summary({ 
+  action: "append",
+  update: {
+    completed: ["auth middleware"],
+    decisions: ["JWT with 1h expiry, refresh tokens in Redis"],
+    touchedFiles: ["src/middleware/auth.js"],
+    nextStep: "add role-based access control"
+  }
+})
+
+// Monday after weekend - resume work
+smart_summary({ action: "get" })
+// → full context restored, continue from nextStep
+
+// List all sessions
+smart_summary({ action: "list_sessions" })
+// → see all available sessions, pick one to resume
+```
+
 ### `build_index`
 
 - Builds a lightweight symbol index (functions, classes, methods, types, etc.)
@@ -394,7 +465,8 @@ The harness supports `--root=`, `--corpus=`, and `--tool=search|context|both` fo
 ## Notes
 
 - Paths are resolved relative to the effective project root, not the caller cwd.
-- Metrics are written to `tools/devctx/.devctx/metrics.jsonl`.
-- Symbol index stored in `.devctx/index.json` when `build_index` is used.
+- Metrics are written to `<projectRoot>/.devctx/metrics.jsonl` (override with `DEVCTX_METRICS_FILE` env var).
+- Symbol index stored in `<projectRoot>/.devctx/index.json` when `build_index` is used.
+- Conversation sessions stored in `<projectRoot>/.devctx/sessions/` when `smart_summary` is used.
 - `smart_shell` is intentionally conservative by design.
 - Today this is a strong navigation and diagnostics layer, not a full semantic code intelligence system.
