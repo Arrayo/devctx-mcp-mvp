@@ -148,8 +148,8 @@
   {
     "id": "self-config-01",
     "taskType": "config",
-    "description": "where is the package configuration for devctx?",
-    "query": "devctx-mcp",
+    "description": "where is the package configuration for smart-context?",
+    "query": "smart-context-mcp",
     "expectedFiles": [
       "tools/devctx/package.json"
     ],
@@ -169,7 +169,7 @@
     "id": "self-explore-01",
     "taskType": "explore",
     "description": "what is the main server entry point for this project?",
-    "query": "devctx-server",
+    "query": "smart-context-server",
     "expectedFiles": [
       "tools/devctx/scripts/devctx-server.js"
     ],

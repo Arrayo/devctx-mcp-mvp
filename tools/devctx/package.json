@@ -1,7 +1,7 @@
 {
-  "name": "devctx-mcp",
+  "name": "smart-context-mcp",
   "version": "0.8.0",
-  "description": "Local MCP server that gives AI agents compact file summaries, ranked code search, and safe diagnostic shell access.",
+  "description": "MCP server that reduces agent token usage and improves response quality with compact file summaries, ranked code search, and curated context.",
   "author": "Francisco Caballero Portero <fcp1978@hotmail.com>",
   "type": "module",
   "repository": {
@@ -13,9 +13,9 @@
     "url": "https://github.com/Arrayo/devctx-mcp-mvp/issues"
   },
   "bin": {
-    "devctx-server": "scripts/devctx-server.js",
-    "devctx-init": "scripts/init-clients.js",
-    "devctx-report": "scripts/report-metrics.js"
+    "smart-context-server": "scripts/devctx-server.js",
+    "smart-context-init": "scripts/init-clients.js",
+    "smart-context-report": "scripts/report-metrics.js"
   },
   "exports": {
     ".": "./src/server.js",

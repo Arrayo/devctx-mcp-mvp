@@ -1,6 +1,6 @@
-# devctx-mcp
+# smart-context-mcp
 
-`devctx-mcp` is a local MCP server for AI coding agents that need less raw context and more useful signal.
+`smart-context-mcp` is an MCP server that reduces agent token usage and improves response quality with compact file summaries, ranked code search, and curated context.
 
 It exposes:
 
@@ -14,30 +14,30 @@ It exposes:
 ## Quick start
 
 ```bash
-npm install devctx-mcp
-npx devctx-init --target .
+npm install smart-context-mcp
+npx smart-context-init --target .
 ```
 
-This installs the MCP server and generates client configs for Cursor, Codex, Qwen, and Claude Code. Open the project with your IDE/agent and devctx starts automatically.
+This installs the MCP server and generates client configs for Cursor, Codex, Qwen, and Claude Code. Open the project with your IDE/agent and the server starts automatically.
 
 ## Binaries
 
 The package exposes three binaries:
 
-- `devctx-server`
-- `devctx-init`
-- `devctx-report`
+- `smart-context-server`
+- `smart-context-init`
+- `smart-context-report`
 
 Start the MCP server against the current project:
 
 ```bash
-devctx-server
+smart-context-server
 ```
 
 Start it against another repository:
 
 ```bash
-devctx-server --project-root /path/to/target-repo
+smart-context-server --project-root /path/to/target-repo
 ```
 
 ## Generate client configs
@@ -45,19 +45,19 @@ devctx-server --project-root /path/to/target-repo
 Generate MCP config files for a target project:
 
 ```bash
-devctx-init --target /path/to/project
+smart-context-init --target /path/to/project
 ```
 
 Limit the generated clients if needed:
 
 ```bash
-devctx-init --target /path/to/project --clients cursor,codex,qwen,claude
+smart-context-init --target /path/to/project --clients cursor,codex,qwen,claude
 ```
 
 Override the command used in generated configs:
 
 ```bash
-devctx-init --target /path/to/project --command node --args '["./tools/devctx/src/mcp-server.js"]'
+smart-context-init --target /path/to/project --command node --args '["./tools/devctx/src/mcp-server.js"]'
 ```
 
 ## Metrics
@@ -68,19 +68,19 @@ Each tool call persists token metrics to the target repo by default in:
 .devctx/metrics.jsonl
 ```
 
-This makes per-repo usage visible without digging into `node_modules`. Running `devctx-init` also adds `.devctx/` to the target repo's `.gitignore` idempotently.
+This makes per-repo usage visible without digging into `node_modules`. Running `smart-context-init` also adds `.devctx/` to the target repo's `.gitignore` idempotently.
 
 Show a quick report:
 
 ```bash
-devctx-report
+smart-context-report
 ```
 
 Show JSON output or a custom file:
 
 ```bash
-devctx-report --json
-devctx-report --file ./.devctx/metrics.jsonl
+smart-context-report --json
+smart-context-report --file ./.devctx/metrics.jsonl
 ```
 
 Example output:
@@ -105,7 +105,7 @@ If you want to override the location entirely, set `DEVCTX_METRICS_FILE`.
 
 ## Usage per client
 
-After installing and running `devctx-init`, each client picks up devctx automatically:
+After installing and running `smart-context-init`, each client picks up the server automatically:
 
 ### Cursor
 
@@ -135,55 +135,37 @@ Open the project in Qwen Code. The MCP server starts from `.qwen/settings.json`.
 
 ## Agent rules
 
-`devctx-init` also generates agent rules that instruct AI agents to prefer devctx tools over their built-in equivalents. This is what makes agents actually use `smart_read` in outline/signatures mode instead of reading full files.
+`smart-context-init` generates agent rules that instruct AI agents to prefer devctx tools over their built-in equivalents. This is what makes agents use `smart_read` in outline/signatures mode instead of reading full files.
 
-The rules include task-specific strategies with `intent` parameter for `smart_search`:
+### Intent-based workflows
 
-- **Debugging**: `intent=debug` → search error → read signatures → inspect symbol → smart_shell for errors
-- **Review**: `intent=implementation` → read outline/signatures, focus on changed symbols, minimal changes
-- **Refactor**: `intent=implementation` → signatures for public API, preserve behavior, small edits
-- **Tests**: `intent=tests` → find existing tests (test files rank higher), read symbol of function under test
-- **Config**: `intent=config` → find settings, env vars, infrastructure files (config files rank higher)
-- **Architecture**: `intent=explore` → directory structure, outlines of key modules and API boundaries
+The `intent` parameter in `smart_search` and `smart_context` adjusts ranking and suggests optimal workflows:
 
-Generated files per client:
+| Intent | Ranking priority | Suggested workflow |
+|--------|-----------------|-------------------|
+| `debug` | Error messages, stack traces, logs | Search error → read signatures → inspect symbol → smart_shell |
+| `implementation` | Source files, changed files | Read outline/signatures → focus on changed symbols |
+| `tests` | Test files, spec files | Find tests → read symbol of function under test |
+| `config` | Config files, env vars, YAML/JSON | Find settings → read full config files |
+| `explore` | Entry points, main modules | Directory structure → outlines of key modules |
+
+### Generated files per client
 
 - **Cursor**: `.cursor/rules/devctx.mdc` (always-apply rule)
 - **Codex**: `AGENTS.md` (devctx section with sentinel markers)
 - **Claude Code**: `CLAUDE.md` (devctx section with sentinel markers)
 
-The rules are idempotent — running `devctx-init` again updates the section without duplicating it. Existing content in `AGENTS.md` and `CLAUDE.md` is preserved.
+The rules are idempotent — running `smart-context-init` again updates the section without duplicating it. Existing content in `AGENTS.md` and `CLAUDE.md` is preserved.
 
 ## What it is good at
 
-Strong fit:
-
-- JavaScript / TypeScript apps and monorepos
-- React, Next.js, Node.js backends
-- Python services and scripts
-- Infra / platform repos with Terraform, Docker, YAML, shell, SQL
-
-Good fit:
-
-- Go services
-- Rust services and libraries
-- Java backends with straightforward structure
-- C# / .NET projects
-- Kotlin backends and Android projects
-- PHP applications (Laravel, Symfony, etc.)
-- Swift projects and iOS codebases
-
-Partial fit:
-
-- Large enterprise Java/C# codebases with heavy framework magic
-- Repos with a lot of generated code
-- Polyglot monorepos where semantic ranking matters more than text structure
-
-Not a strong fit yet:
-
-- Ruby, Elixir, Scala
-- Codebases that need deep semantic understanding everywhere
-- Use cases where `smart_shell` must behave like a general shell
+| Level | Languages / Stack | Use cases |
+|-------|------------------|-----------|
+| **Strong** | JS/TS, React, Next.js, Node.js, Python | Modern web apps, monorepos, backend services, scripts |
+| **Strong** | Terraform, Docker, YAML, shell, SQL | Infra/platform repos, config-heavy codebases |
+| **Good** | Go, Rust, Java, C#/.NET, Kotlin, PHP, Swift | Services, libraries, Android/iOS, Laravel/Symfony |
+| **Partial** | Enterprise Java/C# with heavy frameworks | Generated code, polyglot monorepos needing semantic ranking |
+| **Limited** | Ruby, Elixir, Scala | Deep semantic understanding required, general shell needs |
 
 ## Tool behavior
 
@@ -219,22 +201,27 @@ Token budget mode:
 
 Responses are cached in memory per session. If the same file+mode is requested again and the file's `mtime` has not changed, the cached result is returned without re-parsing. The response includes `cached: true` when served from cache.
 
-Every response includes a unified `confidence` block:
+Every response includes a `confidence` block:
 
 ```json
-{ "parser": "ast", "truncated": false, "cached": false }
+{ "parser": "ast|heuristic|fallback|raw", "truncated": false, "cached": false }
 ```
 
-- `parser` — `"ast"` (JS/TS via TypeScript compiler), `"heuristic"` (line-based patterns), `"fallback"` (structural text extraction), or `"raw"` (full and range modes only).
-- `truncated` — `true` when output was capped, so the agent knows to request a more targeted mode
-- `cached` — `true` when served from in-memory cache without re-parsing
-- `graphCoverage` — (symbol mode with `context: true` only) `{ imports, tests }` each `"full"|"partial"|"none"`
+Additional metadata: `indexHint` (symbol mode), `chosenMode`/`budgetApplied` (token budget), `graphCoverage` (symbol+context mode).
 
-Additional flat metadata fields (backward-compatible):
+**Example response (outline mode):**
 
-- `indexHint` — (symbol mode only) `true` when the symbol index guided the extraction
-- `chosenMode` — (token budget only) the mode that was actually used after cascade
-- `budgetApplied` — (token budget only) `true` when the mode was downgraded to fit the budget
+```json
+{
+  "mode": "outline",
+  "parser": "ast",
+  "truncated": false,
+  "cached": false,
+  "tokens": 245,
+  "confidence": { "parser": "ast", "truncated": false, "cached": false },
+  "content": "import express from 'express';\nexport class AuthMiddleware { ... }\nexport function requireRole(role: string) { ... }"
+}
+```
 
 Current support:
 
@@ -275,13 +262,9 @@ Response:
 - Optional `intent` parameter adjusts ranking: `implementation`, `debug`, `tests`, `config`, `docs`, `explore`
 - When a symbol index exists (via `build_index`), files with matching definitions get +50 ranking bonus, and related files (importers, tests, neighbors) get +25 graph boost
 - Index is loaded from `projectRoot`, so subdirectory searches still benefit from the project-level index
-- Returns a unified `confidence` block: `{ "level": "high", "indexFreshness": "fresh" }`
-- `retrievalConfidence`: `"high"` (rg), `"medium"` (walk, no skips), `"low"` (walk with skipped files)
-- `indexFreshness`: `"fresh"`, `"stale"` (files modified since last build), or `"unavailable"`
-- Returns `sourceBreakdown`: how many top-10 results came from text match, index boost, or graph boost
-- When fallback is used, includes `provenance` with `fallbackReason`, `caseMode`, `partial`, skip counts, and `warnings`
+- Returns `confidence` block: `{ "level": "high", "indexFreshness": "fresh" }`
 
-Example response:
+**Example response:**
 
 ```json
 {
@@ -290,8 +273,9 @@ Example response:
   "indexFreshness": "fresh",
   "confidence": { "level": "high", "indexFreshness": "fresh" },
   "sourceBreakdown": { "textMatch": 7, "indexBoost": 2, "graphBoost": 1 },
-  "intent": "tests",
-  "indexBoosted": 2
+  "results": [
+    { "file": "src/auth/middleware.js", "matches": 3, "rank": 150, "preview": "export class AuthMiddleware { ..." }
+  ]
 }
 ```
 
@@ -299,36 +283,39 @@ Example response:
 
 One-call context planner. Instead of the manual cycle of `smart_search` → `smart_read` → `smart_read` → ..., `smart_context` receives a task description and returns curated context in a single response.
 
-Parameters:
+**Pipeline:**
 
-- `task` (required) — natural language task description (e.g., `"debug the auth flow in AuthMiddleware"`)
-- `intent` (optional) — override auto-detected intent (`implementation`, `debug`, `tests`, `config`, `docs`, `explore`)
-- `maxTokens` (optional, default 8000) — token budget for the response; fewer files are included with tighter budgets
-- `entryFile` (optional) — hint file to guarantee inclusion as primary context
-- `diff` (optional) — scope context to changed files only. Pass `true` for uncommitted changes vs HEAD, or a git ref string (`"main"`, `"HEAD~1"`, `"origin/main"`) to diff against that ref. Requires a git repository.
-- `detail` (optional, default `balanced`) — control response detail level:
-  - `minimal`: index-first mode, returns file paths, roles, `reasonIncluded`, `evidence`, symbols, signatures, and `symbolPreviews` from the index without reading file content (fastest, lowest tokens)
-  - `balanced`: default mode, reads file content with smart compression (outline/signatures modes)
-  - `deep`: full content mode (highest tokens, most detail)
-- `include` (optional, default `["content","graph","hints","symbolDetail"]`) — array of fields to include in the response. Omit fields to reduce payload size:
-  - `content`: file content blocks (if omitted, only metadata and signatures are returned)
-  - `graph`: relational graph summary (imports, tests, dependents, neighbors)
-  - `hints`: actionable suggestions for follow-up reads or index rebuilds
-  - `symbolDetail`: focused symbol extraction for identifiers detected in the task
+```
+task input → intent detection → search/diff → graph expansion → smart_read_batch → symbol extraction → response
+```
 
-Pipeline:
+**Parameters:**
+- `task` (required) — natural language description (e.g., `"debug the auth flow in AuthMiddleware"`)
+- `intent` (optional) — override auto-detected intent
+- `detail` (optional) — `minimal` | `balanced` (default) | `deep`
+- `maxTokens` (optional, default 8000) — token budget
+- `entryFile` (optional) — guarantee specific file inclusion
+- `diff` (optional) — `true` (vs HEAD) or git ref (`"main"`) to scope to changed files only
+- `include` (optional) — `["content","graph","hints","symbolDetail"]` to control response fields
 
-1. **Search mode** (default): Extracts search queries and symbol candidates from the task, runs `smart_search` with the best query and intent
-2. **Diff mode** (when `diff` is provided): Runs `git diff --name-only <ref>` to get changed files, skips search entirely
-3. Expands top results via the relational graph (`queryRelated`): imports, importedBy, tests, neighbors
-4. **Index-first mode** (when `detail=minimal` or `include` omits `content`): Returns file metadata, evidence, symbols, signatures, and short symbol previews from the index without opening files
-5. **Batch read mode** (when `detail=balanced|deep` and `include` has `content`): Uses `smart_read_batch` internally to read multiple files in one batched call, reducing round-trips
-6. Allocates read modes per file role: `outline` for primary files in `balanced`, `signatures` for tests/dependencies, and `full` reads in `deep`
-7. Extracts symbol details when identifiers (camelCase/PascalCase/snake_case) are detected in the task (if `include` has `symbolDetail`)
-8. **Deduplication** (when `detail=minimal`): If `symbolDetail` is included, omits redundant outline content from the same file to save tokens
-9. Assembles everything into a single response with graph summary, actionable hints, and per-file inclusion evidence
+**Detail modes:**
 
-Diff mode is ideal for PR review and debugging recent changes — instead of searching the full codebase, it reads only the changed files plus their tests and dependencies.
+| Mode | Behavior | Use when |
+|------|----------|----------|
+| `minimal` | Index-first: paths, roles, evidence, signatures, symbol previews (no file reads) | Fastest exploration, budget-constrained |
+| `balanced` | Batch read with smart compression (outline/signatures) | Default, most tasks |
+| `deep` | Full content reads | Deep investigation, debugging |
+
+**How it works:**
+
+1. **Search or diff**: Extracts queries from task and runs `smart_search`, OR runs `git diff` when `diff` parameter provided
+2. **Graph expansion**: Expands top results via relational graph (imports, importedBy, tests, neighbors)
+3. **Read strategy**: Index-first mode (no file reads) OR batch read mode using `smart_read_batch` with role-based compression
+4. **Symbol extraction**: Detects identifiers in task and extracts focused symbol details
+5. **Deduplication**: In `minimal` mode, omits redundant outline when `symbolDetail` covers same file
+6. **Assembly**: Returns curated context with `reasonIncluded` / `evidence` per item, graph summary, hints, and confidence block
+
+Diff mode is ideal for PR review and debugging recent changes — reads only changed files plus their tests and dependencies.
 
 Example response:
 
@@ -392,15 +379,22 @@ When using diff mode, the response includes a `diffSummary`:
 The eval harness and corpora are available in the [source repository](https://github.com/Arrayo/devctx-mcp-mvp) but are **not included in the npm package**. Clone the repo to run evaluations.
 
 ```bash
-# from the repo root:
 cd tools/devctx
-npm run eval                # synthetic corpus with index + intent
-npm run eval -- --baseline  # baseline without index/intent
-npm run eval:self           # self-eval against the real devctx repo
-npm run eval:context        # evaluate smart_context alongside search
-npm run eval:both           # search + context evaluation
-npm run eval:report         # scorecard with delta vs baseline
+npm run eval
+npm run eval -- --baseline
+npm run eval:self
+npm run eval:context
+npm run eval:both
+npm run eval:report
 ```
+
+Commands:
+- `eval` — synthetic corpus with index + intent
+- `eval -- --baseline` — baseline without index/intent
+- `eval:self` — self-eval against the real devctx repo
+- `eval:context` — evaluate smart_context alongside search
+- `eval:both` — search + context evaluation
+- `eval:report` — scorecard with delta vs baseline
 
 The harness supports `--root=` and `--corpus=` for evaluating against any repo with custom task corpora. Use `--tool=search|context|both` to control which tools are evaluated. When `--tool=context`, pass/fail is determined by `smart_context` precision; when `--tool=both`, both search and context must pass.
 
