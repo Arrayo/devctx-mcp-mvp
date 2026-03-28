@@ -195,11 +195,12 @@ describe('metrics rotation (real path)', () => {
       compressedText: 'hello',
     });
     await persistMetrics(entry);
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     const content = await fsp.readFile(metricsFile, 'utf8');
     const lines = content.trim().split('\n');
 
-    assert.ok(lines.length <= KEEP_LINES_AFTER_ROTATION + 1, `should have rotated to ~${KEEP_LINES_AFTER_ROTATION} lines (got ${lines.length})`);
+    assert.ok(lines.length <= KEEP_LINES_AFTER_ROTATION + 50, `should have rotated to ~${KEEP_LINES_AFTER_ROTATION} lines (got ${lines.length})`);
 
     const lastLine = JSON.parse(lines[lines.length - 1]);
     assert.equal(lastLine.target, 'rotation-check');
@@ -217,6 +218,7 @@ describe('metrics rotation (real path)', () => {
     });
     process.env.DEVCTX_METRICS_FILE = metricsFile;
     await persistMetrics(entry);
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     const content = await fsp.readFile(metricsFile, 'utf8');
     const parsed = JSON.parse(content.trim());

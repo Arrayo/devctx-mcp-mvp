@@ -20,15 +20,10 @@ import {
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
 
-if (SKIP_SQLITE_TESTS) {
-  test('sqlite-storage tests require Node 22+', { skip: 'SQLite support requires Node 22+' }, () => {});
-  process.exit(0);
-}
-
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-test('sqlite storage - initializes state.sqlite under .devctx with expected schema', async () => {
+test('sqlite storage - initializes state.sqlite under .devctx with expected schema', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-init-'));
   const filePath = path.join(tmpRoot, '.devctx', 'state.sqlite');
 
@@ -44,7 +39,7 @@ test('sqlite storage - initializes state.sqlite under .devctx with expected sche
   }
 });
 
-test('sqlite storage - migrations are idempotent and persist metadata', async () => {
+test('sqlite storage - migrations are idempotent and persist metadata', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-idempotent-'));
   const filePath = path.join(tmpRoot, '.devctx', 'state.sqlite');
 
@@ -65,7 +60,7 @@ test('sqlite storage - migrations are idempotent and persist metadata', async ()
   }
 });
 
-test('sqlite storage - imports legacy sessions, metrics, and active session idempotently', async () => {
+test('sqlite storage - imports legacy sessions, metrics, and active session idempotently', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-import-'));
   const sessionsDir = path.join(tmpRoot, '.devctx', 'sessions');
   const metricsFile = path.join(tmpRoot, '.devctx', 'metrics.jsonl');
@@ -161,7 +156,7 @@ test('sqlite storage - imports legacy sessions, metrics, and active session idem
   }
 });
 
-test('sqlite storage - compactState prunes stale sessions and old events while preserving active session', async () => {
+test('sqlite storage - compactState prunes stale sessions and old events while preserving active session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-compact-'));
   const filePath = path.join(tmpRoot, '.devctx', 'state.sqlite');
   const cutoffOld = '2026-01-01T00:00:00.000Z';
@@ -279,7 +274,7 @@ test('sqlite storage - compactState prunes stale sessions and old events while p
   }
 });
 
-test('sqlite storage - cleanupLegacyState deletes only imported legacy artifacts when apply=true', async () => {
+test('sqlite storage - cleanupLegacyState deletes only imported legacy artifacts when apply=true', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-cleanup-'));
   const sessionsDir = path.join(tmpRoot, '.devctx', 'sessions');
   const metricsFile = path.join(tmpRoot, '.devctx', 'metrics.jsonl');

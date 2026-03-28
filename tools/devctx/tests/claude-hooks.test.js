@@ -16,28 +16,25 @@ import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
 
-if (SKIP_SQLITE_TESTS) {
-  test('claude-hooks tests require Node 22+', { skip: 'SQLite support requires Node 22+' }, () => {});
-  process.exit(0);
-}
-
 const originalProjectRoot = projectRoot;
 let hookTestRoot = null;
 
 before(() => {
+  if (SKIP_SQLITE_TESTS) return;
   hookTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-claude-hooks-'));
   setProjectRoot(hookTestRoot);
   execFileSync('git', ['init'], { cwd: hookTestRoot, stdio: 'ignore' });
 });
 
 after(() => {
+  if (SKIP_SQLITE_TESTS) return;
   setProjectRoot(originalProjectRoot);
   if (hookTestRoot) {
     fs.rmSync(hookTestRoot, { recursive: true, force: true });
   }
 });
 
-test('claude UserPromptSubmit hook rehydrates context and tracks the turn in SQLite', async () => {
+test('claude UserPromptSubmit hook rehydrates context and tracks the turn in SQLite', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const response = await handleClaudeHookEvent({
     hook_event_name: 'UserPromptSubmit',
     session_id: 'claude-hook-user-prompt',
@@ -59,7 +56,7 @@ test('claude UserPromptSubmit hook rehydrates context and tracks the turn in SQL
   await deleteHookTurnState({ hookKey: 'claude:main:claude-hook-user-prompt' });
 });
 
-test('claude PostToolUse hook marks devctx end-of-turn checkpoints', async () => {
+test('claude PostToolUse hook marks devctx end-of-turn checkpoints', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await setHookTurnState({
     hookKey: 'claude:main:claude-hook-post-tool',
     state: {
@@ -98,7 +95,7 @@ test('claude PostToolUse hook marks devctx end-of-turn checkpoints', async () =>
   await deleteHookTurnState({ hookKey: 'claude:main:claude-hook-post-tool' });
 });
 
-test('claude Stop hook blocks once and then auto-appends carryover on the second stop', async () => {
+test('claude Stop hook blocks once and then auto-appends carryover on the second stop', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'claude-hook-stop-session',
@@ -161,7 +158,7 @@ test('claude Stop hook blocks once and then auto-appends carryover on the second
   await smartSummary({ action: 'reset', sessionId: 'claude-hook-stop-session' });
 });
 
-test('claude Stop hook ignores low-signal turns without writes or concrete carryover', async () => {
+test('claude Stop hook ignores low-signal turns without writes or concrete carryover', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await setHookTurnState({
     hookKey: 'claude:main:claude-hook-stop-trivial',
     state: {

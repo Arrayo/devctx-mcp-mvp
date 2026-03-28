@@ -11,11 +11,6 @@ import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
 
-if (SKIP_SQLITE_TESTS) {
-  test('smart_summary tests require Node 22+', { skip: 'SQLite support requires Node 22+' }, () => {});
-  process.exit(0);
-}
-
 const originalProjectRoot = projectRoot;
 let summaryTestRoot = null;
 const getSessionsDir = () => path.join(projectRoot, '.devctx', 'sessions');
@@ -67,6 +62,7 @@ const ageSession = (sessionId, updatedAt) => withProjectStateDb((db) => {
 });
 
 before(() => {
+  if (SKIP_SQLITE_TESTS) return;
   summaryTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-suite-'));
   setProjectRoot(summaryTestRoot);
   fs.mkdirSync(getSessionsDir(), { recursive: true });
@@ -74,13 +70,14 @@ before(() => {
 });
 
 after(() => {
+  if (SKIP_SQLITE_TESTS) return;
   setProjectRoot(originalProjectRoot);
   if (summaryTestRoot) {
     fs.rmSync(summaryTestRoot, { recursive: true, force: true });
   }
 });
 
-test('smart_summary - create new session with update', async () => {
+test('smart_summary - create new session with update', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'update',
     sessionId: TEST_SESSION_ID,
@@ -104,7 +101,7 @@ test('smart_summary - create new session with update', async () => {
   assert.ok(result.updatedAt);
 });
 
-test('smart_summary - get existing session', async () => {
+test('smart_summary - get existing session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'get',
     sessionId: TEST_SESSION_ID,
@@ -118,7 +115,7 @@ test('smart_summary - get existing session', async () => {
   assert.strictEqual(result.schemaVersion, SQLITE_SCHEMA_VERSION);
 });
 
-test('smart_summary - append to existing session', async () => {
+test('smart_summary - append to existing session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'append',
     sessionId: TEST_SESSION_ID,
@@ -141,7 +138,7 @@ test('smart_summary - append to existing session', async () => {
   assert.ok(result.summary.hotFiles.includes('src/middleware/auth.js'));
 });
 
-test('smart_summary - update replaces prior session state', async () => {
+test('smart_summary - update replaces prior session state', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-update-replace',
@@ -187,7 +184,7 @@ test('smart_summary - update replaces prior session state', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-update-replace' });
 });
 
-test('smart_summary - update allows clearing scalar fields explicitly', async () => {
+test('smart_summary - update allows clearing scalar fields explicitly', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-update-clear-scalars',
@@ -220,7 +217,7 @@ test('smart_summary - update allows clearing scalar fields explicitly', async ()
   await smartSummary({ action: 'reset', sessionId: 'test-update-clear-scalars' });
 });
 
-test('smart_summary - list sessions', async () => {
+test('smart_summary - list sessions', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'list_sessions',
   });
@@ -231,7 +228,7 @@ test('smart_summary - list sessions', async () => {
   assert.ok(result.sessions.some(s => s.sessionId === TEST_SESSION_ID));
 });
 
-test('smart_summary - auto-generate sessionId from goal', async () => {
+test('smart_summary - auto-generate sessionId from goal', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'update',
     update: {
@@ -246,7 +243,7 @@ test('smart_summary - auto-generate sessionId from goal', async () => {
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
-test('smart_summary - compression under token budget', async () => {
+test('smart_summary - compression under token budget', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const largeUpdate = {
     goal: 'Large feature',
     status: 'in_progress',
@@ -273,7 +270,7 @@ test('smart_summary - compression under token budget', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-compression' });
 });
 
-test('smart_summary - reset session', async () => {
+test('smart_summary - reset session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'reset',
     sessionId: TEST_SESSION_ID,
@@ -289,7 +286,7 @@ test('smart_summary - reset session', async () => {
   assert.strictEqual(getResult.found, false);
 });
 
-test('smart_summary - reset active session clears active session state', async () => {
+test('smart_summary - reset active session clears active session state', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-reset-active',
@@ -306,7 +303,7 @@ test('smart_summary - reset active session clears active session state', async (
   assert.strictEqual(getResult.found, false, 'get without sessionId should return not found after active reset');
 });
 
-test('smart_summary - get non-existent session', async () => {
+test('smart_summary - get non-existent session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'get',
     sessionId: 'non-existent-session',
@@ -316,7 +313,7 @@ test('smart_summary - get non-existent session', async () => {
   assert.ok(result.message);
 });
 
-test('smart_summary - orphaned legacy active.json is ignored automatically', async () => {
+test('smart_summary - orphaned legacy active.json is ignored automatically', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const activeFile = getActiveSessionFile();
   fs.writeFileSync(activeFile, JSON.stringify({
     sessionId: 'missing-session',
@@ -329,7 +326,7 @@ test('smart_summary - orphaned legacy active.json is ignored automatically', asy
   assert.strictEqual(await getActiveSessionId(), null);
 });
 
-test('smart_summary - append without sessionId uses active session', async () => {
+test('smart_summary - append without sessionId uses active session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const updateResult = await smartSummary({
     action: 'update',
     sessionId: 'test-active-append',
@@ -357,7 +354,7 @@ test('smart_summary - append without sessionId uses active session', async () =>
   await smartSummary({ action: 'reset', sessionId: 'test-active-append' });
 });
 
-test('smart_summary - auto_append skips no-op updates', async () => {
+test('smart_summary - auto_append skips no-op updates', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-auto-append-skip',
@@ -388,7 +385,7 @@ test('smart_summary - auto_append skips no-op updates', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-auto-append-skip' });
 });
 
-test('smart_summary - auto_append persists meaningful changes', async () => {
+test('smart_summary - auto_append persists meaningful changes', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-auto-append-save',
@@ -420,7 +417,7 @@ test('smart_summary - auto_append persists meaningful changes', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-auto-append-save' });
 });
 
-test('smart_summary - checkpoint persists milestone events with relevant changes', async () => {
+test('smart_summary - checkpoint persists milestone events with relevant changes', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-checkpoint-milestone',
@@ -453,7 +450,7 @@ test('smart_summary - checkpoint persists milestone events with relevant changes
   await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-milestone' });
 });
 
-test('smart_summary - checkpoint suppresses read_only events', async () => {
+test('smart_summary - checkpoint suppresses read_only events', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-checkpoint-read-only',
@@ -485,7 +482,7 @@ test('smart_summary - checkpoint suppresses read_only events', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-read-only' });
 });
 
-test('smart_summary - checkpoint force overrides suppressed events', async () => {
+test('smart_summary - checkpoint force overrides suppressed events', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-checkpoint-force',
@@ -516,7 +513,7 @@ test('smart_summary - checkpoint force overrides suppressed events', async () =>
   await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-force' });
 });
 
-test('smart_summary - checkpoint suppresses weak single-file changes', async () => {
+test('smart_summary - checkpoint suppresses weak single-file changes', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-checkpoint-file-change-weak',
@@ -548,7 +545,7 @@ test('smart_summary - checkpoint suppresses weak single-file changes', async () 
   await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-file-change-weak' });
 });
 
-test('smart_summary - checkpoint persists strong decision changes with score details', async () => {
+test('smart_summary - checkpoint persists strong decision changes with score details', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-checkpoint-decision-strong',
@@ -582,7 +579,7 @@ test('smart_summary - checkpoint persists strong decision changes with score det
   await smartSummary({ action: 'reset', sessionId: 'test-checkpoint-decision-strong' });
 });
 
-test('smart_summary - repoSafety warns when state.sqlite is tracked', async () => {
+test('smart_summary - repoSafety warns when state.sqlite is tracked', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-repo-safety',
@@ -610,7 +607,7 @@ test('smart_summary - repoSafety warns when state.sqlite is tracked', async () =
   await smartSummary({ action: 'reset', sessionId: 'test-repo-safety' });
 });
 
-test('smart_summary - mutating actions are blocked when state.sqlite is tracked or staged', async () => {
+test('smart_summary - mutating actions are blocked when state.sqlite is tracked or staged', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-repo-safety-blocked',
@@ -651,7 +648,7 @@ test('smart_summary - mutating actions are blocked when state.sqlite is tracked 
   await smartSummary({ action: 'reset', sessionId: 'test-repo-safety-blocked' });
 });
 
-test('smart_summary - reset non-active session preserves active.json', async () => {
+test('smart_summary - reset non-active session preserves active.json', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-active-preserved',
@@ -679,7 +676,7 @@ test('smart_summary - reset non-active session preserves active.json', async () 
   await smartSummary({ action: 'reset', sessionId: 'test-active-preserved' });
 });
 
-test('smart_summary - hard cap maxTokens with long strings', async () => {
+test('smart_summary - hard cap maxTokens with long strings', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const veryLongGoal = 'A'.repeat(500);
   const veryLongNextStep = 'B'.repeat(500);
   const longBlockers = Array.from({ length: 10 }, (_, i) => 'C'.repeat(200));
@@ -704,7 +701,7 @@ test('smart_summary - hard cap maxTokens with long strings', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-hard-cap' });
 });
 
-test('smart_summary - direct calls reject invalid status', async () => {
+test('smart_summary - direct calls reject invalid status', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await assert.rejects(
     () => smartSummary({
       action: 'update',
@@ -718,7 +715,7 @@ test('smart_summary - direct calls reject invalid status', async () => {
   );
 });
 
-test('smart_summary - hard cap with pathological touchedFiles', async () => {
+test('smart_summary - hard cap with pathological touchedFiles', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const longPaths = Array.from({ length: 50 }, (_, i) => 
     `src/very/deep/nested/directory/structure/module${i}/component${i}/subcomponent${i}/file${i}.tsx`
   );
@@ -743,7 +740,7 @@ test('smart_summary - hard cap with pathological touchedFiles', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-long-paths' });
 });
 
-test('smart_summary - extreme compression still respects hard cap', async () => {
+test('smart_summary - extreme compression still respects hard cap', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const massiveUpdate = {
     goal: 'X'.repeat(1000),
     status: 'in_progress',
@@ -767,7 +764,7 @@ test('smart_summary - extreme compression still respects hard cap', async () => 
   await smartSummary({ action: 'reset', sessionId: 'test-extreme' });
 });
 
-test('smart_summary - hard cap with pathological currentFocus string', async () => {
+test('smart_summary - hard cap with pathological currentFocus string', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const hugeFocus = 'F'.repeat(2000);
   
   const result = await smartSummary({
@@ -791,7 +788,7 @@ test('smart_summary - hard cap with pathological currentFocus string', async () 
   await smartSummary({ action: 'reset', sessionId: 'test-huge-focus' });
 });
 
-test('smart_summary - all fields pathological still respects cap', async () => {
+test('smart_summary - all fields pathological still respects cap', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const allHuge = {
     goal: 'G'.repeat(2000),
     status: 'blocked',
@@ -817,7 +814,7 @@ test('smart_summary - all fields pathological still respects cap', async () => {
   await smartSummary({ action: 'reset', sessionId: 'test-all-huge' });
 });
 
-test('smart_summary - blocked sessions preserve whyBlocked and nextStep', async () => {
+test('smart_summary - blocked sessions preserve whyBlocked and nextStep', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'update',
     sessionId: 'test-blocked-context',
@@ -845,7 +842,7 @@ test('smart_summary - blocked sessions preserve whyBlocked and nextStep', async 
   await smartSummary({ action: 'reset', sessionId: 'test-blocked-context' });
 });
 
-test('smart_summary - duplicate append values are deduplicated in resume summary', async () => {
+test('smart_summary - duplicate append values are deduplicated in resume summary', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'test-dedup',
@@ -875,7 +872,7 @@ test('smart_summary - duplicate append values are deduplicated in resume summary
   await smartSummary({ action: 'reset', sessionId: 'test-dedup' });
 });
 
-test('smart_summary - empty fields are omitted from resume summary', async () => {
+test('smart_summary - empty fields are omitted from resume summary', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'update',
     sessionId: 'test-omit-empty',
@@ -905,7 +902,7 @@ test('smart_summary - empty fields are omitted from resume summary', async () =>
   await smartSummary({ action: 'reset', sessionId: 'test-omit-empty' });
 });
 
-test('smart_summary - nextStep survives before goal under tight budget', async () => {
+test('smart_summary - nextStep survives before goal under tight budget', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'update',
     sessionId: 'test-nextstep-priority',
@@ -927,7 +924,7 @@ test('smart_summary - nextStep survives before goal under tight budget', async (
   await smartSummary({ action: 'reset', sessionId: 'test-nextstep-priority' });
 });
 
-test('smart_summary - legacy session without schemaVersion still loads', async () => {
+test('smart_summary - legacy session without schemaVersion still loads', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const legacySessionId = 'test-legacy-session';
   const legacyPath = path.join(getSessionsDir(), `${legacySessionId}.json`);
   fs.writeFileSync(legacyPath, JSON.stringify({
@@ -955,7 +952,7 @@ test('smart_summary - legacy session without schemaVersion still loads', async (
   await smartSummary({ action: 'reset', sessionId: legacySessionId });
 });
 
-test('smart_summary - counts stay available when history is compressed away', async () => {
+test('smart_summary - counts stay available when history is compressed away', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartSummary({
     action: 'update',
     sessionId: 'test-counts-survive',
@@ -978,7 +975,7 @@ test('smart_summary - counts stay available when history is compressed away', as
   await smartSummary({ action: 'reset', sessionId: 'test-counts-survive' });
 });
 
-test('smart_summary - token-dense pathological strings still respect cap', async () => {
+test('smart_summary - token-dense pathological strings still respect cap', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const denseText = Array.from(
     { length: 400 },
     (_, i) => `token_${i}_alpha_${(i * 17) % 97}_beta_${(i * 31) % 89}`,
@@ -1006,7 +1003,7 @@ test('smart_summary - token-dense pathological strings still respect cap', async
   await smartSummary({ action: 'reset', sessionId: 'test-token-dense' });
 });
 
-test('smart_summary - stale sessions are auto-deleted on list', async () => {
+test('smart_summary - stale sessions are auto-deleted on list', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const staleSessionId = 'test-stale-session';
   const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -1027,7 +1024,7 @@ test('smart_summary - stale sessions are auto-deleted on list', async () => {
   assert.strictEqual(await sessionExists(staleSessionId), false);
 });
 
-test('smart_summary - stale active session is preserved', async () => {
+test('smart_summary - stale active session is preserved', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const staleActiveId = 'test-stale-but-active';
   const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
   
@@ -1053,7 +1050,7 @@ test('smart_summary - stale active session is preserved', async () => {
   await smartSummary({ action: 'reset', sessionId: staleActiveId });
 });
 
-test('smart_summary - get auto-resumes a single saved session without active.json', async () => {
+test('smart_summary - get auto-resumes a single saved session without active.json', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-auto-single-'));
   const previousRoot = projectRoot;
 
@@ -1082,7 +1079,7 @@ test('smart_summary - get auto-resumes a single saved session without active.jso
   }
 });
 
-test('smart_summary - get returns candidates when multiple recent sessions are ambiguous', async () => {
+test('smart_summary - get returns candidates when multiple recent sessions are ambiguous', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-auto-many-'));
   const previousRoot = projectRoot;
 
@@ -1119,7 +1116,7 @@ test('smart_summary - get returns candidates when multiple recent sessions are a
   }
 });
 
-test('smart_summary - get with sessionId auto accepts the recommended session', async () => {
+test('smart_summary - get with sessionId auto accepts the recommended session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-auto-force-'));
   const previousRoot = projectRoot;
 
@@ -1157,7 +1154,7 @@ test('smart_summary - get with sessionId auto accepts the recommended session', 
   }
 });
 
-test('smart_summary - compact prunes retained events and stale non-active sessions', async () => {
+test('smart_summary - compact prunes retained events and stale non-active sessions', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-compact-'));
   const previousRoot = projectRoot;
 
@@ -1220,7 +1217,7 @@ test('smart_summary - compact prunes retained events and stale non-active sessio
   }
 });
 
-test('smart_summary - cleanup_legacy supports dry-run and apply for imported files', async () => {
+test('smart_summary - cleanup_legacy supports dry-run and apply for imported files', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-summary-cleanup-legacy-'));
   const previousRoot = projectRoot;
   const legacySessionId = 'cleanup-legacy-session';

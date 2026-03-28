@@ -11,28 +11,25 @@ import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
 
-if (SKIP_SQLITE_TESTS) {
-  test('smart_turn tests require Node 22+', { skip: 'SQLite support requires Node 22+' }, () => {});
-  process.exit(0);
-}
-
 const originalProjectRoot = projectRoot;
 let turnTestRoot = null;
 
 before(() => {
+  if (SKIP_SQLITE_TESTS) return;
   turnTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-turn-suite-'));
   setProjectRoot(turnTestRoot);
   execFileSync('git', ['init'], { cwd: turnTestRoot, stdio: 'ignore' });
 });
 
 after(() => {
+  if (SKIP_SQLITE_TESTS) return;
   setProjectRoot(originalProjectRoot);
   if (turnTestRoot) {
     fs.rmSync(turnTestRoot, { recursive: true, force: true });
   }
 });
 
-test('smart_turn start reuses aligned persisted context', async () => {
+test('smart_turn start reuses aligned persisted context', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'turn-aligned',
@@ -61,7 +58,7 @@ test('smart_turn start reuses aligned persisted context', async () => {
   await smartSummary({ action: 'reset', sessionId: 'turn-aligned' });
 });
 
-test('smart_turn start can auto-create a planning session for a substantial new prompt', async () => {
+test('smart_turn start can auto-create a planning session for a substantial new prompt', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await smartTurn({
     phase: 'start',
     prompt: 'Design the final orchestration layer so every meaningful agent turn rehydrates context and checkpoints progress automatically',
@@ -78,7 +75,7 @@ test('smart_turn start can auto-create a planning session for a substantial new 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
-test('smart_turn end checkpoints a meaningful turn update', async () => {
+test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'turn-end',

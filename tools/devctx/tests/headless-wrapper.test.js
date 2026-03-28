@@ -11,28 +11,25 @@ import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
 
-if (SKIP_SQLITE_TESTS) {
-  test('headless-wrapper tests require Node 22+', { skip: 'SQLite support requires Node 22+' }, () => {});
-  process.exit(0);
-}
-
 const originalProjectRoot = projectRoot;
 let wrapperTestRoot = null;
 
 before(() => {
+  if (SKIP_SQLITE_TESTS) return;
   wrapperTestRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-headless-wrapper-'));
   setProjectRoot(wrapperTestRoot);
   execFileSync('git', ['init'], { cwd: wrapperTestRoot, stdio: 'ignore' });
 });
 
 after(() => {
+  if (SKIP_SQLITE_TESTS) return;
   setProjectRoot(originalProjectRoot);
   if (wrapperTestRoot) {
     fs.rmSync(wrapperTestRoot, { recursive: true, force: true });
   }
 });
 
-test('headless wrapper builds an enriched prompt in dry-run mode', async () => {
+test('headless wrapper builds an enriched prompt in dry-run mode', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await runHeadlessWrapper({
     client: 'codex',
     prompt: 'Finish the wrapper orchestration layer and keep the persisted context aligned',
@@ -49,7 +46,7 @@ test('headless wrapper builds an enriched prompt in dry-run mode', async () => {
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
-test('headless wrapper checkpoints the run after a successful child command', async () => {
+test('headless wrapper checkpoints the run after a successful child command', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await runHeadlessWrapper({
     client: 'qwen',
     prompt: 'Summarize the next concrete step after running the wrapper command',
@@ -77,7 +74,7 @@ test('headless wrapper checkpoints the run after a successful child command', as
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
-test('headless wrapper isolates a new session when continuity is only a weak partial match', async () => {
+test('headless wrapper isolates a new session when continuity is only a weak partial match', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',
     sessionId: 'existing-wrapper-session',
