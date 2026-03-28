@@ -8,6 +8,14 @@ import { runHeadlessWrapper } from '../src/orchestration/headless-wrapper.js';
 import { smartSummary } from '../src/tools/smart-summary.js';
 import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+const SKIP_SQLITE_TESTS = nodeMajor < 22;
+
+if (SKIP_SQLITE_TESTS) {
+  test('headless-wrapper tests require Node 22+', { skip: 'SQLite support requires Node 22+' }, () => {});
+  process.exit(0);
+}
+
 const originalProjectRoot = projectRoot;
 let wrapperTestRoot = null;
 

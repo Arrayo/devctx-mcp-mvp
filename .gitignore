@@ -6,6 +6,8 @@ node_modules/
 .qwen/
 .mcp.json
 
+# Note: .cursor/rules/ should be committed (agent rules for the project)
+
 # Runtime data
 .devctx/
 tools/devctx/.devctx/

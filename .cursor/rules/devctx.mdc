@@ -1,0 +1,29 @@
+---
+description: Prefer devctx MCP tools for file reading, code search, and diagnostics
+alwaysApply: true
+---
+
+Always prefer devctx MCP tools over built-in file reading, code search, diagnostics, and context recovery.
+
+- For every non-trivial user prompt, start with smart_turn phase=start before exploring the codebase. Pass the current user prompt and ensureSession=true for a meaningful new task.
+- Treat smart_turn phase=start as the default entrypoint for context recovery instead of manually deciding whether to call smart_summary(get).
+- Inspect repoSafety from smart_turn or smart_summary responses. If .devctx/state.sqlite is tracked or staged, mutating context writes are blocked until git hygiene is fixed.
+- If smart_turn phase=start reports ambiguous_resume, choose the recommended session explicitly with smart_summary sessionId="auto" before continuing.
+- After meaningful milestones, end the turn with smart_turn phase=end and the appropriate event (milestone, decision, blocker, task_complete, session_end) so persistence stays event-driven.
+- Before ending work, persist the latest nextStep with smart_turn phase=end and event=session_end.
+- Use smart_read outline or signatures before full (~90% token savings).
+- Use smart_read symbol (string or array) to extract specific functions/classes before editing.
+- Use smart_read range for specific lines when you know the location.
+- Use full mode only when outline/signatures/symbol are insufficient.
+- Use smart_search instead of grep/ripgrep — it groups, ranks, and filters automatically.
+- Pass intent to smart_search to get task-aware ranking (implementation/debug/tests/config/docs/explore).
+- Use smart_shell for diagnostics: git status, ls, find, pwd, test output.
+- Use smart_metrics to report token savings or recent devctx usage instead of reading metrics files manually.
+
+By task:
+- Debugging: smart_turn(start) → smart_search with intent=debug → read signatures → inspect symbol → smart_shell for tests/errors → smart_turn(end event=milestone or blocker).
+- Review: smart_turn(start) → smart_search with intent=implementation → read outline/signatures, focus on changed symbols, minimal changes → smart_turn(end event=milestone).
+- Refactor: smart_turn(start) → smart_search with intent=implementation → signatures for public API, preserve behavior, small edits, verify with tests → smart_turn(end event=milestone).
+- Tests: smart_turn(start) → smart_search with intent=tests → find existing tests, read symbol of function under test → smart_turn(end event=milestone).
+- Config: smart_search with intent=config → find settings, env vars, infrastructure files.
+- Architecture: smart_turn(start) → smart_search with intent=explore → directory structure, outlines of key modules and API boundaries → smart_turn(end event=task_switch or milestone).
