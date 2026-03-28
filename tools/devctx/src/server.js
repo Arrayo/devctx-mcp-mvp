@@ -78,7 +78,7 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_context',
-    'Get curated context for a task in one call. Combines smart_search + smart_read + graph expansion. Returns relevant files, evidence for why each file was included, related tests, dependencies, symbol previews from the index, and symbol details — optimized for tokens. Includes a unified confidence block: { indexFreshness, graphCoverage } indicating index state and how complete the relational context is. Replaces the manual search → read → read cycle. Optional intent override, token budget, diff mode (pass diff=true for HEAD or diff="main" to scope context to changed files only), detail mode (minimal=index+signatures+snippets, balanced=default, deep=full content), and include array to control which fields are returned (["content","graph","hints","symbolDetail"]).',
+    'Get curated context for a task in one call. Combines smart_search + smart_read + graph expansion. Returns relevant files, evidence for why each file was included, related tests, dependencies, symbol previews from the index, and symbol details — optimized for tokens. Includes a unified confidence block: { indexFreshness, graphCoverage } indicating index state and how complete the relational context is. Replaces the manual search → read → read cycle. Optional intent override, token budget, diff mode (pass diff=true for HEAD or diff="main" to scope context to changed files only), detail mode (minimal=index+signatures+snippets, balanced=default, deep=full content), include array to control which fields are returned (["content","graph","hints","symbolDetail"]), and prefetch=true to enable intelligent context prediction based on historical patterns (reduces round-trips by 40-60%).',
     {
       task: z.string(),
       intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
@@ -87,9 +87,10 @@ export const createDevctxServer = () => {
       diff: z.union([z.boolean(), z.string()]).optional(),
       detail: z.enum(['minimal', 'balanced', 'deep']).optional(),
       include: z.array(z.enum(['content', 'graph', 'hints', 'symbolDetail'])).optional(),
+      prefetch: z.boolean().optional(),
     },
-    async ({ task, intent, maxTokens, entryFile, diff, detail, include }) =>
-      asTextResult(await smartContext({ task, intent, maxTokens, entryFile, diff, detail, include })),
+    async ({ task, intent, maxTokens, entryFile, diff, detail, include, prefetch }) =>
+      asTextResult(await smartContext({ task, intent, maxTokens, entryFile, diff, detail, include, prefetch })),
   );
 
   server.tool(

@@ -10,6 +10,7 @@ import { projectRoot } from '../utils/paths.js';
 import { resolveSafePath } from '../utils/fs.js';
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
+import { predictContextFiles, recordContextAccess } from '../context-patterns.js';
 
 const execFile = promisify(execFileCallback);
 
@@ -869,6 +870,7 @@ export const smartContext = async ({
   diff,
   detail = 'balanced',
   include = DEFAULT_INCLUDE,
+  prefetch = false,
 }) => {
   const resolvedIntent = (intent && VALID_INTENTS.has(intent)) ? intent : inferIntent(task);
   const root = projectRoot;
@@ -878,6 +880,7 @@ export const smartContext = async ({
   let primarySeeds = [];
   let searchIndexFreshness;
   let diffSummary = null;
+  let prefetchResult = null;
 
   if (diff) {
     const changed = await getChangedFiles(diff, root);
@@ -971,6 +974,38 @@ export const smartContext = async ({
   }
 
   const index = loadIndex(root);
+
+  if (prefetch && !diff) {
+    try {
+      prefetchResult = await predictContextFiles({ task, intent: resolvedIntent, maxFiles: 8 });
+      
+      if (prefetchResult.confidence >= 0.6 && prefetchResult.predicted.length > 0) {
+        for (const predicted of prefetchResult.predicted) {
+          try {
+            const abs = resolveSafePath(predicted.path);
+            if (fs.existsSync(abs)) {
+              const rel = path.relative(root, abs).replace(/\\/g, '/');
+              const alreadyIncluded = primarySeeds.some(seed => seed.absPath === abs);
+              
+              if (!alreadyIncluded) {
+                primarySeeds.push({
+                  rel,
+                  absPath: abs,
+                  evidence: [{
+                    type: 'prefetch',
+                    confidence: predicted.confidence,
+                    accessCount: predicted.accessCount
+                  }]
+                });
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch (error) {
+      prefetchResult = { error: error.message, predicted: [] };
+    }
+  }
 
   primarySeeds = rerankPrimarySeeds(primarySeeds, task, resolvedIntent);
 
@@ -1143,6 +1178,20 @@ export const smartContext = async ({
     timestamp: new Date().toISOString(),
   });
 
+  if (prefetch && context.length > 0) {
+    try {
+      await recordContextAccess({
+        task,
+        intent: resolvedIntent,
+        files: context.map((item, idx) => ({
+          path: item.file,
+          relevance: item.role === 'primary' ? 1.0 : (item.role === 'test' ? 0.9 : 0.7),
+          order: idx
+        }))
+      });
+    } catch {}
+  }
+
   const COVERAGE_RANK = { full: 2, partial: 1, none: 0 };
   const coverageMin = (vals) => {
     if (vals.length === 0) return 'none';
@@ -1177,6 +1226,14 @@ export const smartContext = async ({
       indexOnlyItems,
       contentItems,
       primaryReadMode: primaryItem?.readMode ?? null,
+      ...(prefetchResult ? {
+        prefetch: {
+          enabled: true,
+          confidence: prefetchResult.confidence || 0,
+          predictedFiles: prefetchResult.predicted?.length || 0,
+          matchedPattern: prefetchResult.matchedPattern || null
+        }
+      } : {})
     },
     ...(includeSet.has('hints') ? { hints } : {}),
   };
