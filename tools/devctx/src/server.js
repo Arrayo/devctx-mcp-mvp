@@ -108,11 +108,12 @@ export const createDevctxServer = () => {
 
   server.tool(
     'build_index',
-    'Build a lightweight symbol index for the project. Speeds up smart_search ranking and smart_read symbol lookups. Pass incremental=true to only reindex files with changed mtime (much faster for large repos). Without incremental, rebuilds from scratch. Sends progress notifications during indexing for large projects.',
+    'Build a lightweight symbol index for the project. Speeds up smart_search ranking and smart_read symbol lookups. Pass incremental=true to only reindex files with changed mtime (much faster for large repos). Pass warmCache=true to preload frequently accessed files after indexing. Without incremental, rebuilds from scratch. Sends progress notifications during indexing for large projects.',
     {
       incremental: z.boolean().optional(),
+      warmCache: z.boolean().optional(),
     },
-    async ({ incremental }) => {
+    async ({ incremental, warmCache }) => {
       const { createProgressReporter } = await import('./streaming.js');
       const progress = createProgressReporter('build_index');
 
@@ -122,6 +123,13 @@ export const createDevctxServer = () => {
           await persistIndex(index, projectRoot);
           const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
           const result = { status: 'ok', files: stats.total, symbols: symbolCount, ...stats };
+          
+          if (warmCache) {
+            const { warmCache: warmCacheFn } = await import('./cache-warming.js');
+            const warmResult = await warmCacheFn(projectRoot, progress);
+            result.cacheWarming = warmResult;
+          }
+          
           progress.complete(result);
           return asTextResult(result);
         }
@@ -131,6 +139,34 @@ export const createDevctxServer = () => {
         const fileCount = Object.keys(index.files).length;
         const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
         const result = { status: 'ok', files: fileCount, symbols: symbolCount };
+        
+        if (warmCache) {
+          const { warmCache: warmCacheFn } = await import('./cache-warming.js');
+          const warmResult = await warmCacheFn(projectRoot, progress);
+          result.cacheWarming = warmResult;
+        }
+        
+        progress.complete(result);
+        return asTextResult(result);
+      } catch (error) {
+        progress.error(error);
+        throw error;
+      }
+    },
+  );
+
+  server.tool(
+    'warm_cache',
+    'Preload frequently accessed files into OS cache to reduce cold-start latency. Analyzes last 30 days of access patterns and warms the top 50 most-used files (configurable via DEVCTX_WARM_FILES env). Skips files >1MB. Returns warmed/skipped counts. Use after build_index or before starting intensive work sessions.',
+    {},
+    async () => {
+      const { createProgressReporter } = await import('./streaming.js');
+      const { warmCache: warmCacheFn } = await import('./cache-warming.js');
+      
+      const progress = createProgressReporter('warm_cache');
+      
+      try {
+        const result = await warmCacheFn(projectRoot, progress);
         progress.complete(result);
         return asTextResult(result);
       } catch (error) {

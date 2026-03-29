@@ -5,10 +5,11 @@ import path from 'node:path';
 import { projectRoot } from '../utils/runtime-config.js';
 
 export const STATE_DB_FILENAME = 'state.sqlite';
-export const SQLITE_SCHEMA_VERSION = 3;
+export const SQLITE_SCHEMA_VERSION = 4;
 export const ACTIVE_SESSION_SCOPE = 'project';
 export const EXPECTED_TABLES = [
   'active_session',
+  'context_access',
   'hook_turn_state',
   'meta',
   'metrics_events',
@@ -123,6 +124,25 @@ const MIGRATIONS = [
       )`,
       `CREATE INDEX IF NOT EXISTS idx_hook_turn_state_claude_session
         ON hook_turn_state(claude_session_id, updated_at DESC)`,
+    ],
+  },
+  {
+    version: 4,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS context_access (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        task TEXT NOT NULL,
+        intent TEXT,
+        file_path TEXT NOT NULL,
+        relevance REAL,
+        access_order INTEGER,
+        timestamp TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_context_access_file_timestamp
+        ON context_access(file_path, timestamp DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_context_access_session
+        ON context_access(session_id, timestamp DESC)`,
     ],
   },
 ];
