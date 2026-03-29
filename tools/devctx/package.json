@@ -51,6 +51,7 @@
     "init:clients": "node ./scripts/init-clients.js",
     "smoke:formats": "node ./scripts/format-smoke.js",
     "test": "node --test --test-concurrency=1 ./tests/*.test.js",
+    "verify": "node ./scripts/verify-features-direct.js",
     "eval": "node ./evals/harness.js",
     "eval:context": "node ./evals/harness.js --tool=context",
     "eval:both": "node ./evals/harness.js --tool=both",
