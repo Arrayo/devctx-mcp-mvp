@@ -12,6 +12,7 @@ import { smartSummary } from './tools/smart-summary.js';
 import { smartMetrics } from './tools/smart-metrics.js';
 import { smartTurn } from './tools/smart-turn.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
+import { setServerForStreaming } from './streaming.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
@@ -30,6 +31,9 @@ export const createDevctxServer = () => {
     name: 'devctx',
     version,
   });
+
+  // Enable streaming progress notifications
+  setServerForStreaming(server);
 
   server.tool(
     'smart_read',
@@ -104,23 +108,35 @@ export const createDevctxServer = () => {
 
   server.tool(
     'build_index',
-    'Build a lightweight symbol index for the project. Speeds up smart_search ranking and smart_read symbol lookups. Pass incremental=true to only reindex files with changed mtime (much faster for large repos). Without incremental, rebuilds from scratch.',
+    'Build a lightweight symbol index for the project. Speeds up smart_search ranking and smart_read symbol lookups. Pass incremental=true to only reindex files with changed mtime (much faster for large repos). Without incremental, rebuilds from scratch. Sends progress notifications during indexing for large projects.',
     {
       incremental: z.boolean().optional(),
     },
     async ({ incremental }) => {
-      if (incremental) {
-        const { index, stats } = buildIndexIncremental(projectRoot);
-        await persistIndex(index, projectRoot);
-        const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
-        return asTextResult({ status: 'ok', files: stats.total, symbols: symbolCount, ...stats });
-      }
+      const { createProgressReporter } = await import('./streaming.js');
+      const progress = createProgressReporter('build_index');
 
-      const index = buildIndex(projectRoot);
-      await persistIndex(index, projectRoot);
-      const fileCount = Object.keys(index.files).length;
-      const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
-      return asTextResult({ status: 'ok', files: fileCount, symbols: symbolCount });
+      try {
+        if (incremental) {
+          const { index, stats } = buildIndexIncremental(projectRoot, progress);
+          await persistIndex(index, projectRoot);
+          const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
+          const result = { status: 'ok', files: stats.total, symbols: symbolCount, ...stats };
+          progress.complete(result);
+          return asTextResult(result);
+        }
+
+        const index = buildIndex(projectRoot, progress);
+        await persistIndex(index, projectRoot);
+        const fileCount = Object.keys(index.files).length;
+        const symbolCount = Object.values(index.files).reduce((sum, f) => sum + f.symbols.length, 0);
+        const result = { status: 'ok', files: fileCount, symbols: symbolCount };
+        progress.complete(result);
+        return asTextResult(result);
+      } catch (error) {
+        progress.error(error);
+        throw error;
+      }
     },
   );
 

@@ -658,11 +658,18 @@ const walkForIndex = (dir, files = []) => {
 // Build index
 // ---------------------------------------------------------------------------
 
-export const buildIndex = (root) => {
+export const buildIndex = (root, progress = null) => {
   const files = walkForIndex(root);
   const fileEntries = {};
   const invertedIndex = {};
   const rawImports = {};
+  const total = files.length;
+  let processed = 0;
+  let lastReportAt = 0;
+
+  if (progress) {
+    progress.report({ phase: 'scanning', total });
+  }
 
   for (const fullPath of files) {
     try {
@@ -696,6 +703,26 @@ export const buildIndex = (root) => {
     } catch {
       // skip unreadable files
     }
+
+    processed++;
+    
+    // Report progress every 50 files or 5% of total
+    if (progress && (processed - lastReportAt >= 50 || processed - lastReportAt >= total * 0.05)) {
+      const percentage = Math.floor((processed / total) * 100);
+      progress.report({ 
+        phase: 'indexing', 
+        processed, 
+        total, 
+        percentage,
+        files: Object.keys(fileEntries).length,
+        symbols: Object.keys(invertedIndex).length,
+      });
+      lastReportAt = processed;
+    }
+  }
+
+  if (progress) {
+    progress.report({ phase: 'resolving', total: Object.keys(rawImports).length });
   }
 
   const knownRelPaths = new Set(Object.keys(fileEntries));
@@ -873,10 +900,13 @@ export const removeFileFromIndex = (index, relPath) => {
   delete index.files[relPath];
 };
 
-export const buildIndexIncremental = (root) => {
+export const buildIndexIncremental = (root, progress = null) => {
   const existing = loadIndex(root);
   if (!existing) {
-    const index = buildIndex(root);
+    if (progress) {
+      progress.report({ phase: 'full_rebuild', reason: 'no_existing_index' });
+    }
+    const index = buildIndex(root, progress);
     const total = Object.keys(index.files).length;
     return { index, stats: { total, reindexed: total, removed: 0, unchanged: 0, fullRebuild: true } };
   }
@@ -885,6 +915,12 @@ export const buildIndexIncremental = (root) => {
   const diskRelPaths = new Set();
   const reindexedPaths = [];
   let unchanged = 0;
+  const total = diskFiles.length;
+  let processed = 0;
+
+  if (progress) {
+    progress.report({ phase: 'scanning', total });
+  }
 
   for (const fullPath of diskFiles) {
     try {
@@ -900,6 +936,19 @@ export const buildIndexIncremental = (root) => {
         unchanged++;
       }
     } catch { /* skip unreadable */ }
+
+    processed++;
+    if (progress && processed % 100 === 0) {
+      const percentage = Math.floor((processed / total) * 100);
+      progress.report({ 
+        phase: 'checking', 
+        processed, 
+        total, 
+        percentage,
+        stale: reindexedPaths.length,
+        unchanged,
+      });
+    }
   }
 
   const indexedPaths = Object.keys(existing.files);
@@ -945,8 +994,8 @@ export const buildIndexIncremental = (root) => {
 
   existing.generatedAt = new Date().toISOString();
 
-  const total = Object.keys(existing.files).length;
-  return { index: existing, stats: { total, reindexed: reindexedPaths.length, removed, unchanged, fullRebuild: false } };
+  const finalTotal = Object.keys(existing.files).length;
+  return { index: existing, stats: { total: finalTotal, reindexed: reindexedPaths.length, removed, unchanged, fullRebuild: false } };
 };
 
 // ---------------------------------------------------------------------------

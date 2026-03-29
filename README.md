@@ -41,9 +41,22 @@ Eight focused tools that work automatically:
 - `smart_turn`: one-call turn orchestration for start/end context recovery and checkpointing
 - `smart_metrics`: inspect saved token metrics and recent usage through MCP
 - `smart_shell`: safe diagnostic shell execution with restricted commands (18x compression)
-- `build_index`: lightweight symbol index for faster lookups and smarter ranking
+- `build_index`: lightweight symbol index for faster lookups and smarter ranking (with **streaming progress**)
 
 **Strongest in:** Modern web/backend codebases (JS/TS, React, Next.js, Node.js, Python, Go, Rust), infra repos (Terraform, Docker, YAML)
+
+### NEW: Streaming Progress Notifications
+
+Long-running operations (like `build_index`) now send real-time progress updates:
+
+```javascript
+// Client receives progress notifications:
+// { phase: "scanning", total: 1000 }
+// { phase: "indexing", processed: 500, total: 1000, percentage: 50 }
+// { phase: "complete", files: 1000, symbols: 5000 }
+```
+
+See [STREAMING.md](./STREAMING.md) for full documentation.
 
 ### NEW: Intelligent Context Prediction
 
