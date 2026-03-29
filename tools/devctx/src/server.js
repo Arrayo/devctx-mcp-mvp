@@ -19,6 +19,14 @@ import {
   findSymbolsByAuthor, 
   getRecentlyModifiedSymbols 
 } from './git-blame.js';
+import {
+  discoverRelatedProjects,
+  searchAcrossProjects,
+  readAcrossProjects,
+  findSymbolAcrossProjects,
+  getCrossProjectDependencies,
+  getCrossProjectStats,
+} from './cross-project.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
@@ -226,6 +234,77 @@ export const createDevctxServer = () => {
         throw new Error(`Unknown mode: ${mode}`);
       } catch (error) {
         return asTextResult({ error: error.message, mode, filePath, authorQuery });
+      }
+    },
+  );
+
+  server.tool(
+    'cross_project',
+    'Work with multiple related projects (monorepos, microservices, shared libraries). Modes: discover (list related projects), search (search across projects), read (read files from multiple projects), symbol (find symbol definitions across projects), deps (get cross-project dependency graph), stats (usage statistics). Requires .devctx-projects.json config file in project root.',
+    {
+      mode: z.enum(['discover', 'search', 'read', 'symbol', 'deps', 'stats']),
+      query: z.string().optional(),
+      intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs']).optional(),
+      symbolName: z.string().optional(),
+      fileRefs: z.array(z.object({
+        project: z.string(),
+        file: z.string(),
+        mode: z.enum(['full', 'outline', 'symbols']).optional(),
+      })).optional(),
+      maxResultsPerProject: z.number().int().min(1).max(20).optional(),
+      includeProjects: z.array(z.string()).optional(),
+      excludeProjects: z.array(z.string()).optional(),
+    },
+    async ({ mode, query, intent, symbolName, fileRefs, maxResultsPerProject, includeProjects, excludeProjects }) => {
+      try {
+        if (mode === 'discover') {
+          const projects = discoverRelatedProjects(projectRoot);
+          return asTextResult({ mode, projects });
+        }
+
+        if (mode === 'search') {
+          if (!query) {
+            throw new Error('query is required for search mode');
+          }
+          const results = await searchAcrossProjects(query, {
+            root: projectRoot,
+            intent: intent || 'implementation',
+            maxResultsPerProject: maxResultsPerProject || 5,
+            includeProjects,
+            excludeProjects,
+          });
+          return asTextResult({ mode, query, intent, totalProjects: results.length, results });
+        }
+
+        if (mode === 'read') {
+          if (!fileRefs || fileRefs.length === 0) {
+            throw new Error('fileRefs is required for read mode');
+          }
+          const results = await readAcrossProjects(fileRefs, projectRoot);
+          return asTextResult({ mode, filesRead: results.length, results });
+        }
+
+        if (mode === 'symbol') {
+          if (!symbolName) {
+            throw new Error('symbolName is required for symbol mode');
+          }
+          const results = await findSymbolAcrossProjects(symbolName, projectRoot);
+          return asTextResult({ mode, symbolName, matches: results.length, results });
+        }
+
+        if (mode === 'deps') {
+          const deps = getCrossProjectDependencies(projectRoot);
+          return asTextResult({ mode, ...deps });
+        }
+
+        if (mode === 'stats') {
+          const stats = getCrossProjectStats(projectRoot);
+          return asTextResult({ mode, ...stats });
+        }
+
+        throw new Error(`Unknown mode: ${mode}`);
+      } catch (error) {
+        return asTextResult({ error: error.message, mode });
       }
     },
   );

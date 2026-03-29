@@ -44,6 +44,7 @@ Eight focused tools that work automatically:
 - `build_index`: lightweight symbol index for faster lookups and smarter ranking (with **streaming progress** and **cache warming**)
 - `warm_cache`: preload frequently accessed files to eliminate cold-start latency (5x faster first query)
 - `git_blame`: symbol-level code attribution - find who authored each function/class, not just files
+- `cross_project`: share context across monorepos, microservices, and related projects
 
 **Strongest in:** Modern web/backend codebases (JS/TS, React, Next.js, Node.js, Python, Go, Rust), infra repos (Terraform, Docker, YAML)
 
@@ -229,6 +230,65 @@ await gitBlame({
 - `recent`: Recently modified symbols across the project
 
 See [GIT-BLAME.md](./GIT-BLAME.md) for full documentation.
+
+### NEW: Cross-Project Context
+
+Share context across multiple related codebases (monorepos, microservices, shared libraries):
+
+```json
+// .devctx-projects.json
+{
+  "version": "1.0",
+  "projects": [
+    { "name": "main-app", "path": ".", "type": "main" },
+    { "name": "shared-lib", "path": "../shared-lib", "type": "library" },
+    { "name": "api-service", "path": "../api-service", "type": "service" }
+  ]
+}
+```
+
+```javascript
+// Search across all projects
+await crossProject({
+  mode: 'search',
+  query: 'AuthService',
+  intent: 'implementation'
+});
+
+// Find symbol definitions across projects
+await crossProject({
+  mode: 'symbol',
+  symbolName: 'validateToken'
+});
+
+// Read files from multiple projects
+await crossProject({
+  mode: 'read',
+  fileRefs: [
+    { project: 'main-app', file: 'src/auth.js' },
+    { project: 'shared-lib', file: 'src/crypto.js' }
+  ]
+});
+
+// Get cross-project dependency graph
+await crossProject({ mode: 'deps' });
+```
+
+**6 modes:**
+- `discover`: List all related projects
+- `search`: Search code across projects
+- `read`: Read files from multiple projects
+- `symbol`: Find symbol definitions across projects
+- `deps`: Get cross-project dependency graph
+- `stats`: Usage statistics
+
+**Perfect for:**
+- **Monorepos**: Multiple packages in one repo
+- **Microservices**: Related services with shared contracts
+- **Shared libraries**: Common utilities across projects
+- **Frontend + Backend**: Separate repos with shared types
+
+See [CROSS-PROJECT.md](./CROSS-PROJECT.md) for full documentation.
 
 ## Example: Before vs After
 
