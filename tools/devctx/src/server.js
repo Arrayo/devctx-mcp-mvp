@@ -13,6 +13,12 @@ import { smartMetrics } from './tools/smart-metrics.js';
 import { smartTurn } from './tools/smart-turn.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
 import { setServerForStreaming } from './streaming.js';
+import { 
+  getSymbolBlame, 
+  getFileAuthorshipStats, 
+  findSymbolsByAuthor, 
+  getRecentlyModifiedSymbols 
+} from './git-blame.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
@@ -172,6 +178,54 @@ export const createDevctxServer = () => {
       } catch (error) {
         progress.error(error);
         throw error;
+      }
+    },
+  );
+
+  server.tool(
+    'git_blame',
+    'Get symbol-level git blame attribution. Modes: symbol (blame for specific file symbols), file (aggregated file stats), author (find symbols by author), recent (recently modified symbols). Returns author, email, date, commit, and authorship percentage for each symbol. Requires git repository and symbol index.',
+    {
+      mode: z.enum(['symbol', 'file', 'author', 'recent']),
+      filePath: z.string().optional(),
+      authorQuery: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      daysBack: z.number().int().min(1).max(365).optional(),
+    },
+    async ({ mode, filePath, authorQuery, limit, daysBack }) => {
+      try {
+        if (mode === 'symbol') {
+          if (!filePath) {
+            throw new Error('filePath is required for symbol mode');
+          }
+          const result = await getSymbolBlame(filePath, projectRoot);
+          return asTextResult({ mode, filePath, symbols: result });
+        }
+
+        if (mode === 'file') {
+          if (!filePath) {
+            throw new Error('filePath is required for file mode');
+          }
+          const result = await getFileAuthorshipStats(filePath, projectRoot);
+          return asTextResult({ mode, filePath, ...result });
+        }
+
+        if (mode === 'author') {
+          if (!authorQuery) {
+            throw new Error('authorQuery is required for author mode');
+          }
+          const result = await findSymbolsByAuthor(authorQuery, projectRoot, limit || 50);
+          return asTextResult({ mode, authorQuery, matches: result.length, symbols: result });
+        }
+
+        if (mode === 'recent') {
+          const result = await getRecentlyModifiedSymbols(projectRoot, limit || 20, daysBack || 30);
+          return asTextResult({ mode, daysBack: daysBack || 30, symbols: result });
+        }
+
+        throw new Error(`Unknown mode: ${mode}`);
+      } catch (error) {
+        return asTextResult({ error: error.message, mode, filePath, authorQuery });
       }
     },
   );

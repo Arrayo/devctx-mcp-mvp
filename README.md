@@ -43,6 +43,7 @@ Eight focused tools that work automatically:
 - `smart_shell`: safe diagnostic shell execution with restricted commands (18x compression)
 - `build_index`: lightweight symbol index for faster lookups and smarter ranking (with **streaming progress** and **cache warming**)
 - `warm_cache`: preload frequently accessed files to eliminate cold-start latency (5x faster first query)
+- `git_blame`: symbol-level code attribution - find who authored each function/class, not just files
 
 **Strongest in:** Modern web/backend codebases (JS/TS, React, Next.js, Node.js, Python, Go, Rust), infra repos (Terraform, Docker, YAML)
 
@@ -172,6 +173,62 @@ Perfect for:
 - Intensive work sessions
 
 See [CACHE-WARMING.md](./CACHE-WARMING.md) for full documentation.
+
+### NEW: Symbol-Level Git Blame
+
+Fine-grained code attribution at function/class level instead of just file level:
+
+```javascript
+// Find who authored specific functions
+await gitBlame({ 
+  mode: 'symbol',
+  filePath: 'src/server.js'
+});
+
+// Returns:
+{
+  symbols: [
+    {
+      symbol: "createServer",
+      kind: "function",
+      author: "Alice",
+      email: "alice@example.com",
+      authorshipPercentage: 89,
+      contributors: 2,
+      lineStart: 10,
+      lineEnd: 45
+    }
+  ]
+}
+
+// Find all code by a specific author
+await gitBlame({
+  mode: 'author',
+  authorQuery: 'Alice',
+  limit: 20
+});
+
+// Get recently modified symbols
+await gitBlame({
+  mode: 'recent',
+  daysBack: 7,
+  limit: 10
+});
+```
+
+**Use cases:**
+- **Code review assignment**: Find the right person to review changes
+- **Onboarding**: Show new team members who owns what
+- **Hotspot analysis**: Identify frequently changed areas
+- **Ownership boundaries**: Find shared vs single-owner code
+
+**4 modes:**
+- `symbol`: Function/class-level attribution for a file
+- `file`: Aggregated authorship stats (lines, commits, percentages)
+- `author`: Find all symbols authored by a person
+- `recent`: Recently modified symbols across the project
+
+See [GIT-BLAME.md](./GIT-BLAME.md) for full documentation.
 
 ## Example: Before vs After
 
