@@ -11,6 +11,13 @@ import { resolveSafePath } from '../utils/fs.js';
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
 import { predictContextFiles, recordContextAccess } from '../context-patterns.js';
+import { 
+  getDetailedDiff, 
+  analyzeChangeImpact, 
+  expandChangedContext, 
+  generateDiffSummary as generateDetailedDiffSummary,
+  getChangedSymbols,
+} from '../diff-analysis.js';
 
 const execFile = promisify(execFileCallback);
 
@@ -884,17 +891,61 @@ export const smartContext = async ({
 
   if (diff) {
     const changed = await getChangedFiles(diff, root);
-    primarySeeds = changed.files.map((rel, idx) => ({
-      rel,
-      absPath: path.join(root, rel),
-      evidence: [{ type: 'diffHit', ref: changed.ref, rank: idx + 1 }],
-    }));
+    
+    // Get detailed diff stats
+    const detailedChanges = await getDetailedDiff(changed.ref, root);
+    const index = loadIndex(root);
+    
+    // Analyze impact and prioritize
+    const prioritized = analyzeChangeImpact(detailedChanges, index);
+    
+    // Expand to include related files (importers, dependencies, tests)
+    const expandedFiles = expandChangedContext(changed.files, index, 10);
+    
+    // Build primary seeds with priority and impact data
+    primarySeeds = Array.from(expandedFiles).map(rel => {
+      const changeInfo = prioritized.find(c => c.file === rel);
+      const evidence = [{ 
+        type: 'diffHit', 
+        ref: changed.ref, 
+        priority: changeInfo?.priority || 'related',
+        impact: changeInfo?.impactScore || 0,
+      }];
+      
+      // Mark files that were expanded (not directly changed)
+      if (!changed.files.includes(rel)) {
+        evidence[0].expanded = true;
+      }
+      
+      return {
+        rel,
+        absPath: path.join(root, rel),
+        evidence,
+      };
+    });
+    
+    // Sort by impact (critical changes first)
+    primarySeeds.sort((a, b) => {
+      const impactA = a.evidence[0].impact || 0;
+      const impactB = b.evidence[0].impact || 0;
+      return impactB - impactA;
+    });
+    
     diffSummary = {
       ref: changed.ref,
       totalChanged: changed.files.length + changed.skippedDeleted,
-      included: Math.min(changed.files.length, 5),
+      included: Math.min(primarySeeds.length, maxTokens > 4000 ? 10 : 5),
+      expanded: expandedFiles.size - changed.files.length,
       skippedDeleted: changed.skippedDeleted,
+      summary: generateDetailedDiffSummary(prioritized.slice(0, 10)),
+      topImpact: prioritized.slice(0, 3).map(c => ({
+        file: c.file,
+        priority: c.priority,
+        changes: `+${c.additions}/-${c.deletions}`,
+        type: c.changeType,
+      })),
     };
+    
     if (changed.error) diffSummary.error = changed.error;
     searchIndexFreshness = null;
   } else {
@@ -1208,6 +1259,7 @@ export const smartContext = async ({
   };
 
   const result = {
+    success: true,
     task,
     intent: resolvedIntent,
     indexFreshness,

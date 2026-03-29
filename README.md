@@ -58,6 +58,58 @@ Long-running operations (like `build_index`) now send real-time progress updates
 
 See [STREAMING.md](./STREAMING.md) for full documentation.
 
+### NEW: Diff-Aware Context (Smart Change Analysis)
+
+`smart_context` now intelligently analyzes git diffs to provide context optimized for code review and change understanding:
+
+```javascript
+// Basic diff mode
+await smartContext({ 
+  task: "Review recent changes", 
+  diff: "HEAD"  // or "main", "feature-branch", etc.
+});
+
+// Returns prioritized context with:
+// - Change impact analysis (critical/high/medium/low)
+// - Automatic expansion to related files (importers, dependencies, tests)
+// - Detailed diff summary with file categorization
+// - Symbol-level change detection
+```
+
+**Key Features:**
+
+- **Impact-Based Prioritization**: Implementation files with many dependents rank higher than config files
+- **Smart Context Expansion**: Automatically includes files that import changed code, tests, and direct dependencies
+- **Change Type Detection**: Classifies changes as additions, deletions, modifications, or refactors
+- **Symbol-Level Awareness**: Detects which functions/classes were modified
+- **Token-Efficient**: Only includes most relevant context within your budget
+
+**Example Output:**
+
+```javascript
+{
+  success: true,
+  context: "... prioritized file contents ...",
+  diffSummary: {
+    ref: "HEAD",
+    totalChanged: 5,
+    included: 8,      // 5 changed + 3 expanded
+    expanded: 3,      // Related files added
+    summary: "5 files changed, 247 lines modified\n  2 new files (+89 lines)\n  3 modifications",
+    topImpact: [
+      { file: "src/server.js", priority: "critical", changes: "+45/-12", type: "modification" },
+      { file: "src/handler.js", priority: "high", changes: "+23/-5", type: "refactor" }
+    ]
+  }
+}
+```
+
+Perfect for:
+- Pre-commit code review
+- Understanding blast radius of changes
+- Finding affected tests automatically
+- Quick change summaries for PRs
+
 ### NEW: Intelligent Context Prediction
 
 `smart_context` now includes an optional intelligent prefetch system that learns from historical patterns:
