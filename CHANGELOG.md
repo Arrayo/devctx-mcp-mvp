@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.1] - 2026-03-30
 
 ### Changed
 - **All Visibility Features Now Enabled by Default:**
@@ -15,15 +15,19 @@ All notable changes to this project will be documented in this file.
   - Updated all documentation (README, tool README, feature docs)
   - Goal: Maximize visibility, drive adoption, make non-usage immediately obvious
 
-- **Added .cursorrules for Automatic MCP Enforcement:**
-  - New `.cursorrules` file with mandatory devctx usage policy
+### Added
+- **Multi-Client Agent Rules:**
+  - New `.cursorrules` file for Cursor (committed to git)
+  - Updated `CLAUDE.md` for Claude Desktop (gitignored, user-specific)
+  - Updated `AGENTS.md` for other agents (gitignored, user-specific)
+  - New `docs/agent-rules-template.md` with templates for all clients
+  - All rules enforce MANDATORY devctx usage policy
   - Enforces: Use smart_read instead of Read, smart_search instead of Grep, etc.
   - Provides recommended workflow and preflight checklist
   - Explains when to use devctx vs native tools
   - Requires agent to explain if native tools are used
-  - Goal: Ensure agents use devctx when MCP is installed
+  - Goal: Ensure agents use devctx when MCP is installed, across all clients
 
-### Added
 - **MCP Prompts (Automatic Forcing):**
   - New MCP prompts feature allows automatic injection of forcing instructions
   - 3 prompts available: `use-devctx`, `devctx-workflow`, `devctx-preflight`

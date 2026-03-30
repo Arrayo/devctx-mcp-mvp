@@ -817,7 +817,9 @@ See [Client Compatibility Guide](./docs/client-compatibility.md) for detailed co
 
 ## Installation
 
-### Minimal (Any Client)
+### Step 1: Install the MCP Server
+
+#### Minimal (Any Client)
 
 ```bash
 npm install -g smart-context-mcp
@@ -936,6 +938,46 @@ analyze → smart_turn(end)
 **Savings:** 90% (300K → 30K tokens)
 
 **Key insight:** The value isn't just in the tools—it's in teaching agents **when** and **how** to use them.
+
+---
+
+### Step 2: Set Up Agent Rules (Recommended)
+
+To ensure agents use devctx automatically, set up client-specific rules:
+
+#### Cursor Users
+
+Already included: `.cursorrules` is committed in the project.
+
+**Verify it's working:**
+- Agent should mention devctx usage policy
+- Agent should use devctx tools automatically
+
+#### Claude Desktop Users
+
+Create `CLAUDE.md` in your project root:
+
+```bash
+# Copy template
+cp docs/agent-rules-template.md CLAUDE.md
+# Edit to keep only the CLAUDE.md section
+```
+
+Or copy the content from `docs/agent-rules-template.md`.
+
+#### Other Agent Clients
+
+Create `AGENTS.md` in your project root using the same template.
+
+**Why these rules matter:**
+- ✅ Agents use devctx automatically (no manual forcing)
+- ✅ Consistent behavior across all clients
+- ✅ Visible feedback when devctx is used
+- ✅ Warnings when devctx should be used but isn't
+
+See [Agent Rules Template](./docs/agent-rules-template.md) for complete setup.
+
+---
 
 ### Feedback When Not Used
 

@@ -1,15 +1,20 @@
-# Publishing smart-context-mcp 1.3.0 to npm
+# Publishing smart-context-mcp 1.3.1 to npm
 
 ## Pre-publish Checklist
 
-✅ Version bumped to 1.3.0 in package.json
+✅ Version bumped to 1.3.1 in package.json
 ✅ All tests passing (553 tests, 552 pass, 1 skipped)
 ✅ CHANGELOG.md updated with all changes
 ✅ README.md updated with new features
-✅ All commits made (5 new commits ready)
+✅ All commits made (8 new commits ready)
 ✅ Working tree clean
 
-## What's New in 1.3.0
+## What's New in 1.3.1
+
+### Breaking Changes (Positive)
+- **All visibility features now ENABLED BY DEFAULT**
+- Usage feedback, decision explainer, and missed opportunities detector are always on
+- Users can disable with env vars if too verbose
 
 ### Major Features
 - **Real-Time Usage Feedback** - See which devctx tools were used and tokens saved in each response
@@ -42,6 +47,13 @@
 - Invoke with `/prompt use-devctx` in Cursor
 - Automatic injection of forcing instructions
 - No manual typing needed
+
+### Multi-Client Agent Rules
+- `.cursorrules` for Cursor (committed to git)
+- `CLAUDE.md` template for Claude Desktop
+- `AGENTS.md` template for other agents
+- All enforce MANDATORY devctx usage policy
+- Template in `docs/agent-rules-template.md`
 
 ### Files Added
 - `src/usage-feedback.js` - Real-time usage tracking
@@ -82,14 +94,14 @@ npm publish
 This will:
 - Build the package
 - Include files listed in `files` field (src/, scripts/)
-- Publish as `smart-context-mcp@1.3.0`
+- Publish as `smart-context-mcp@1.3.1`
 - Make it available via `npm install smart-context-mcp`
 
 ### 4. Verify publication
 
 ```bash
 npm view smart-context-mcp version
-# Should show: 1.3.0
+# Should show: 1.3.1
 
 npm view smart-context-mcp
 # Should show updated description, keywords, etc.
@@ -106,7 +118,7 @@ npm update smart-context-mcp
 
 # Or reinstall
 npm uninstall smart-context-mcp
-npm install smart-context-mcp@1.3.0
+npm install smart-context-mcp@1.3.1
 
 # Restart Cursor
 # Settings → MCP → Check "smart-context" is active
@@ -128,15 +140,16 @@ Open a conversation and verify:
    Agent: Should receive forcing instructions automatically
    ```
 
-3. **New features work:**
-   ```bash
-   # Enable all features
-   export DEVCTX_SHOW_USAGE=true
-   export DEVCTX_EXPLAIN=true
-   export DEVCTX_DETECT_MISSED=true
-   
-   # Test in Cursor - should see feedback, explanations, and warnings
-   ```
+3. **Features enabled by default:**
+   - Should see usage feedback after every devctx tool call
+   - Should see decision explanations
+   - Should see missed opportunities warnings if devctx not used
+   - No env vars needed (all enabled by default)
+
+4. **Agent rules work:**
+   - Agent should mention devctx usage policy
+   - Agent should use devctx tools automatically
+   - If native tools used, agent should explain why
 
 ## Rollback (if needed)
 
@@ -144,10 +157,10 @@ If something goes wrong:
 
 ```bash
 # Unpublish (within 72 hours)
-npm unpublish smart-context-mcp@1.3.0
+npm unpublish smart-context-mcp@1.3.1
 
 # Or deprecate
-npm deprecate smart-context-mcp@1.3.0 "Use 1.2.0 instead"
+npm deprecate smart-context-mcp@1.3.1 "Use 1.2.0 instead"
 ```
 
 ## Post-publish
@@ -166,6 +179,7 @@ npm deprecate smart-context-mcp@1.3.0 "Use 1.2.0 instead"
 
 ## Version History
 
+- **1.3.1** (2026-03-30) - All features enabled by default, multi-client rules, agent rules template
 - **1.3.0** (2026-03-30) - Real-time feedback, decision explainer, missed opportunities, MCP prompts
 - **1.2.0** (2026-03-30) - Adoption metrics, client guidance, forcing prompts
 - **1.1.0** (2026-03-29) - Base rule reduction, preflight visibility, feedback policy
