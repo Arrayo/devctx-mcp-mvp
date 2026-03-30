@@ -151,7 +151,7 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - Agent follows rules consistently
 - Uses devctx tools for 50-80% of operations
 - Token usage drops 85-90%
-- Responses are faster and more accurate
+- Responses are faster and more focused on relevant context
 
 **Typical scenario:**
 - Agent uses devctx tools for complex tasks
@@ -166,6 +166,21 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - No harm done (MCP is passive)
 
 **You can check:** `npm run report:metrics` shows actual tool usage.
+
+### What "Better Context" Means
+
+**What we improve:**
+- ✅ Context relevance (right files for the task)
+- ✅ Signal-to-noise ratio (less boilerplate, more signal)
+- ✅ Context efficiency (more relevant info in less space)
+- ✅ Response speed (less data to process)
+
+**What we don't guarantee:**
+- ❌ Agent will always be correct
+- ❌ Responses will be perfect
+- ❌ Tasks will always succeed
+
+**The benefit:** Agents work with better input, but output quality still depends on agent capability and task complexity.
 
 ---
 
@@ -502,7 +517,7 @@ Build a symbol index for the project (functions, classes, imports).
 { incremental: true }  // Only reindex changed files
 ```
 
-**When to use:** Once after checkout, or after major changes. Improves search and context quality.
+**When to use:** Once after checkout, or after major changes. Improves search ranking and context relevance.
 
 ---
 

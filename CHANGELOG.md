@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Quality Claim Matization:**
+  - Replaced "Responses are faster and more accurate" with "Responses are faster and more focused on relevant context"
+  - Replaced "Improves search and context quality" with "Improves search ranking and context relevance"
+  - Added "What 'Better Context' Means" clarification section in README
+  - Rationale: "Accurate" is subjective and hard to measure; "focused on relevant context" is honest and verifiable
+  - New doc: docs/quality-claim-analysis.md with critical analysis and recommendations
+  - Goal: Avoid over-promising, align marketing with evidence, maintain credibility
+
 - **Naming Clarity: "Persistent Task Context" vs "Total Conversation Context":**
   - Replaced "context persistence" with "persistent task context" throughout docs
   - Replaced "session context" with "task checkpoint" for precision
