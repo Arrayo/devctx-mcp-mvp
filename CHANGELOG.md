@@ -16,6 +16,18 @@ All notable changes to this project will be documented in this file.
   - New doc: `docs/agent-rules/base-rule-reduction.md` with analysis and verification steps
 
 ### Added
+- **Feedback When devctx Not Used:**
+  - New rule: Agent adds note when not using devctx tools in non-trivial programming tasks
+  - Feedback format: "Note: devctx not used because: [reason]. To use devctx next time: [prompt]"
+  - Allowed reasons (constrained): task too simple | MCP unavailable | index not built | already had sufficient context | native tool more direct
+  - Forcing prompt: "Use smart-context-mcp: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)"
+  - Impact: Makes non-usage visible, educates users, increases adoption, identifies setup issues
+  - Fixed context cost: +3 lines (10 → 13 lines, still 68% smaller than original 42 lines)
+  - Goal: Maximize adoption by making ignoring devctx rare, visible, and easy to correct
+  - Updated: `.cursor/rules/devctx.mdc`, `tools/devctx/agent-rules/base.md`, `tools/devctx/agent-rules/compact.md`, `tools/devctx/scripts/init-clients.js`
+  - New doc: `docs/agent-rules/feedback-when-not-used.md` with rationale, examples, and expected behavior
+
+
 - **Security Rejection Examples:**
   - New test file: `tests/smart-shell-security.test.js` with 60+ security tests
   - New doc: `docs/security/rejection-examples.md` with 50+ concrete rejection examples

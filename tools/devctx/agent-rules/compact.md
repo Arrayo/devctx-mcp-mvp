@@ -14,4 +14,10 @@ Reading cascade: `outline` → `signatures` → `symbol` → `full` (last resort
 
 ---
 
+If you didn't use devctx tools in a non-trivial programming task, add at the end:
+
+**Note:** devctx not used because: [task too simple | MCP unavailable | index not built | already had sufficient context | native tool more direct for this case]. To use devctx next time: "Use smart-context-mcp: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)"
+
+---
+
 **These are suggestions, not guarantees.** You decide when devctx tools add value based on the task.

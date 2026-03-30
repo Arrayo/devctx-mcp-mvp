@@ -867,6 +867,21 @@ analyze → smart_turn(end)
 
 **Key insight:** The value isn't just in the tools—it's in teaching agents **when** and **how** to use them.
 
+### Feedback When Not Used
+
+If the agent doesn't use devctx tools in a non-trivial task, it will add a note:
+
+```
+Note: devctx not used because: [reason]
+To use devctx next time: "Use smart-context-mcp: smart_turn(start) → ..."
+```
+
+**Why this matters:**
+- Makes non-usage visible
+- Educates about when devctx adds value
+- Provides forcing prompt for next turn
+- Identifies setup issues (MCP unavailable, index not built)
+
 See [agent-rules/](./tools/devctx/agent-rules/) for complete profiles.
 
 ## Recommended Workflow
