@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Two-Layer Agent Rules Architecture:**
+  - Base rule ultra-short (~150 tokens, always active)
+  - Task-specific profiles compact (~100-150 tokens, conditional)
+  - Reduces fixed context cost by 75% (600 → 150 tokens)
+  - Profiles: debugging, code-review, refactoring, testing, architecture
+  - Cursor: `.cursor/rules/devctx.mdc` + `.cursor/rules/profiles-compact/*.mdc`
+  - Codex/Qwen/Claude: Updated `AGENTS.md` and `CLAUDE.md` with base rules
+  - Maintains compatibility with existing installations
+
 ### Added
 - **Simplified Installation Experience:**
   - Direct, copy-paste installation blocks per client (Cursor, Codex, Claude, Qwen)

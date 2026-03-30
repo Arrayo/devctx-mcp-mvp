@@ -555,12 +555,17 @@ describe('devctx-init agent rules', () => {
   it('generates cursor rule, AGENTS.md and CLAUDE.md', async () => {
     await execFile(process.execPath, [initScript, '--target', tmpDir]);
 
+    // Base rule (always active, ultra-short)
     const cursorRule = await fsp.readFile(path.join(tmpDir, '.cursor', 'rules', 'devctx.mdc'), 'utf8');
     assert.match(cursorRule, /alwaysApply: true/);
     assert.match(cursorRule, /smart_read/);
     assert.match(cursorRule, /smart_turn/);
     assert.match(cursorRule, /smart_turn\(end/);
-    assert.match(cursorRule, /repoSafety/);
+    
+    // Task profiles (conditional)
+    const debuggingProfile = await fsp.readFile(path.join(tmpDir, '.cursor', 'rules', 'profiles-compact', 'debugging.mdc'), 'utf8');
+    assert.match(debuggingProfile, /Debugging Workflow/);
+    assert.match(debuggingProfile, /smart_search\(intent=debug/);
 
     const agentsMd = await fsp.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
     assert.match(agentsMd, /devctx:start/);
@@ -572,7 +577,6 @@ describe('devctx-init agent rules', () => {
     assert.match(claudeMd, /devctx:start/);
     assert.match(claudeMd, /smart_search/);
     assert.match(claudeMd, /smart_turn/);
-    assert.match(claudeMd, /repoSafety/);
 
     const claudeSettings = JSON.parse(await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'));
     assert.ok(Array.isArray(claudeSettings.hooks.SessionStart));

@@ -375,54 +375,74 @@ const updatePreCommitHook = (targetDir, dryRun) => {
 // Agent rules — instruct agents to prefer devctx tools over built-in ones
 // ---------------------------------------------------------------------------
 
-const agentRuleBody = `Prefer devctx MCP over built-ins for better token efficiency:
-- smart_read(outline|signatures|symbol) instead of Read → 90% savings
-- smart_search(intent=...) instead of Grep → ranked results
-- smart_shell instead of Shell → safe diagnostics
-- smart_context instead of multiple reads → one-call builder
+const agentRuleBody = `For file reading, code search, and diagnostics, prefer devctx MCP tools when they add value:
 
-Context recovery:
-- Start: smart_turn(start, userPrompt, ensureSession=true)
-- End: smart_turn(end, event=milestone|blocker|task_complete)
-- If ambiguous_resume: smart_summary(sessionId='auto')
+Core tools:
+- smart_read(outline|signatures|symbol) - Compressed reading (90% savings)
+- smart_search(intent=...) - Intent-aware search with ranking
+- smart_context - One-call context builder
+- smart_shell - Safe diagnostic commands
 
-Reading strategy (cascade):
-1. outline - structure only (~90% savings)
-2. signatures - exported API
-3. symbol - specific function
-4. range - specific lines
-5. full - last resort
+Entry point for non-trivial tasks:
+  smart_turn(start, userPrompt, ensureSession=true)
+  → work with devctx tools
+  → smart_turn(end, event=milestone|blocker|task_complete)
 
-Search strategy:
-- Always pass intent: debug|implementation|tests|config|explore
-- debug → errors, logs, exceptions
-- implementation → source files, changed files
-- tests → test files
+Reading cascade (prefer compressed):
+1. outline - Structure only (~90% savings)
+2. signatures - Exported API
+3. symbol - Specific function
+4. full - Last resort
 
-By task:
-- Debugging: smart_turn(start) → smart_search(intent=debug) → smart_read(symbol) → smart_shell('npm test') → fix → smart_turn(end)
-- Code Review: smart_turn(start) → smart_context(diff=true) → smart_read(signatures) → review → smart_turn(end)
-- Refactoring: smart_turn(start) → smart_context(entryFile) → smart_read(signatures) → refactor → smart_shell('npm test') → smart_turn(end)
-- Testing: smart_turn(start) → smart_search(intent=tests) → smart_read(symbol) → write test → smart_shell('npm test') → smart_turn(end)
-- Architecture: smart_turn(start) → smart_context(detail=minimal) → smart_read(signatures) → analyze → smart_turn(end)
+These are suggestions, not guarantees. You decide when devctx tools add value based on the task.
 
-Repository safety:
-- Check repoSafety in responses
-- If .devctx/state.sqlite is tracked/staged, fix git hygiene first
-
-Important: These are suggestions, not guarantees. You decide when to use devctx tools based on the task.`;
+For detailed workflows, see: .cursor/rules/profiles-compact/ (debugging, code-review, refactoring, testing, architecture)`;
 
 const cursorRuleContent = `---
-description: Prefer devctx MCP tools for file reading, code search, and diagnostics
+description: Prefer devctx MCP tools when they add value (base rules)
 alwaysApply: true
 ---
 
 ${agentRuleBody}
 `;
 
+const cursorProfilesNote = `
+# Task-Specific Profiles
+
+For detailed workflows, see rules in this directory:
+- debugging.mdc - Error-first, symbol-focused (90% savings)
+- code-review.mdc - Diff-aware, API-focused (87% savings)
+- refactoring.mdc - Graph-aware, test-verified (89% savings)
+- testing.mdc - Coverage-aware, TDD-friendly (90% savings)
+- architecture.mdc - Index-first, minimal-detail (90% savings)
+
+These profiles are **conditionally applied** based on file globs and task context.
+The base rule (devctx.mdc) is **always active** but kept minimal to reduce fixed context cost.
+`;
+
 const updateCursorRule = (targetDir, dryRun) => {
-  const filePath = path.join(targetDir, '.cursor', 'rules', 'devctx.mdc');
-  writeFile(filePath, cursorRuleContent, dryRun);
+  const rulesDir = path.join(targetDir, '.cursor', 'rules');
+  const profilesDir = path.join(rulesDir, 'profiles-compact');
+  
+  // Write base rule (always active)
+  const baseFilePath = path.join(rulesDir, 'devctx.mdc');
+  writeFile(baseFilePath, cursorRuleContent, dryRun);
+  
+  // Write profiles README
+  const profilesReadmePath = path.join(profilesDir, 'README.md');
+  writeFile(profilesReadmePath, cursorProfilesNote, dryRun);
+  
+  // Copy compact profiles from package
+  const sourceProfilesDir = path.join(devctxDir, 'agent-rules', 'profiles-compact');
+  if (fs.existsSync(sourceProfilesDir)) {
+    const profiles = fs.readdirSync(sourceProfilesDir).filter(f => f.endsWith('.mdc'));
+    profiles.forEach(profile => {
+      const sourcePath = path.join(sourceProfilesDir, profile);
+      const targetPath = path.join(profilesDir, profile);
+      const content = fs.readFileSync(sourcePath, 'utf8');
+      writeFile(targetPath, content, dryRun);
+    });
+  }
 };
 
 const SECTION_START = '<!-- devctx:start -->';

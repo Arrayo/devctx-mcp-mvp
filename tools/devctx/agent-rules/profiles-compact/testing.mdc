@@ -1,0 +1,24 @@
+---
+description: Testing workflow with devctx
+globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**"]
+---
+
+## Testing Workflow
+
+```
+smart_turn(start)
+→ smart_search(intent=tests, query=<feature>)
+→ smart_read(mode=symbol, symbol=<function to test>)
+→ smart_context(entryFile=<function file>, detail=minimal)
+→ [write test]
+→ smart_shell('npm test')
+→ smart_turn(end, event=milestone)
+```
+
+**Key points:**
+- `intent=tests` finds existing test patterns
+- `mode=symbol` extracts function to test
+- `smart_context` reveals dependencies
+- Run tests immediately after writing
+
+**Token savings:** 90% (120K → 12K typical)

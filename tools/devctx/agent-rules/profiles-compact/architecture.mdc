@@ -1,0 +1,23 @@
+---
+description: Architecture exploration workflow with devctx
+globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
+---
+
+## Architecture Exploration Workflow
+
+```
+smart_turn(start)
+→ smart_context(detail=minimal)
+→ smart_search(intent=explore, query=<concept>)
+→ smart_read(mode=signatures, filePath=<key files>)
+→ cross_project({ mode: 'search', query: <shared concept> })
+→ smart_turn(end, event=milestone)
+```
+
+**Key points:**
+- `detail=minimal` for high-level overview
+- `mode=signatures` reveals API surface
+- `intent=explore` finds architectural patterns
+- `cross_project` for monorepo context
+
+**Token savings:** 90% (300K → 30K typical)

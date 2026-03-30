@@ -1,0 +1,24 @@
+---
+description: Debugging workflow with devctx
+globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**"]
+---
+
+## Debugging Workflow
+
+```
+smart_turn(start) 
+→ smart_search(intent=debug, query=<error message>)
+→ smart_read(mode=symbol, symbol=<failing function>)
+→ smart_shell('npm test')
+→ [fix]
+→ smart_shell('npm test')
+→ smart_turn(end, event=milestone)
+```
+
+**Key points:**
+- `intent=debug` prioritizes errors, exceptions, logs, recent changes
+- `mode=symbol` extracts failing function only (95% savings)
+- `smart_shell` for safe test execution
+- Checkpoint with `smart_turn(end)` for recovery
+
+**Token savings:** 90% (150K → 15K typical)

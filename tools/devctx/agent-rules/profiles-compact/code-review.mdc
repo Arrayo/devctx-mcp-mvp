@@ -1,0 +1,25 @@
+---
+description: Code review workflow with devctx
+globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
+---
+
+## Code Review Workflow
+
+```
+smart_turn(start)
+→ smart_context(diff=true, detail=moderate)
+→ smart_read(mode=signatures, filePath=<changed files>)
+→ [review API surface]
+→ smart_read(mode=symbol, symbol=<key functions>)
+→ git_blame({ mode: 'symbol', filePath: <file> })
+→ smart_shell('npm test')
+→ smart_turn(end, event=milestone)
+```
+
+**Key points:**
+- `diff=true` focuses on changed files
+- `mode=signatures` reviews API before implementation
+- `git_blame` for code attribution
+- Verify tests pass before approval
+
+**Token savings:** 87% (200K → 25K typical)

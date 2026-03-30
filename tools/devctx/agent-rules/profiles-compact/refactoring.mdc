@@ -1,0 +1,25 @@
+---
+description: Refactoring workflow with devctx
+globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
+---
+
+## Refactoring Workflow
+
+```
+smart_turn(start)
+→ smart_context(entryFile=<target>, detail=moderate)
+→ smart_read(mode=signatures, filePath=<files>)
+→ smart_read(mode=symbol, symbol=<function to refactor>)
+→ git_blame({ mode: 'symbol', filePath: <file> })
+→ [refactor]
+→ smart_shell('npm test')
+→ smart_turn(end, event=milestone)
+```
+
+**Key points:**
+- `smart_context` builds dependency graph
+- `mode=signatures` understands API before changes
+- `git_blame` checks authorship
+- Always verify tests after refactor
+
+**Token savings:** 89% (180K → 20K typical)
