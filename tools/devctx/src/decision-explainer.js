@@ -1,7 +1,7 @@
 /**
  * Decision explainer - tracks and explains why devctx tools were used or not used
  * 
- * Enable with environment variable: DEVCTX_EXPLAIN=true
+ * ENABLED BY DEFAULT - disable with: DEVCTX_EXPLAIN=false
  * 
  * Provides transparency into agent decision-making:
  * - Why was smart_read used instead of Read?
@@ -11,17 +11,37 @@
 
 const sessionDecisions = {
   decisions: [],
-  enabled: false,
+  enabled: true, // Changed: enabled by default
 };
 
 /**
  * Check if explanations are enabled
  */
+/**
+ * Check if decision explanations are enabled
+ * 
+ * Priority:
+ * 1. Explicit env var (DEVCTX_EXPLAIN=true/false)
+ * 2. Default: ENABLED (changed from disabled)
+ */
 export const isExplainEnabled = () => {
   const envValue = process.env.DEVCTX_EXPLAIN?.toLowerCase();
-  const enabled = envValue === 'true' || envValue === '1' || envValue === 'yes';
-  sessionDecisions.enabled = enabled;
-  return enabled;
+  
+  // Explicit enable
+  if (envValue === 'true' || envValue === '1' || envValue === 'yes') {
+    sessionDecisions.enabled = true;
+    return true;
+  }
+  
+  // Explicit disable
+  if (envValue === 'false' || envValue === '0' || envValue === 'no') {
+    sessionDecisions.enabled = false;
+    return false;
+  }
+  
+  // Default: ENABLED (changed)
+  sessionDecisions.enabled = true;
+  return true;
 };
 
 /**
@@ -100,6 +120,7 @@ export const formatDecisionExplanations = () => {
  */
 export const resetSessionDecisions = () => {
   sessionDecisions.decisions = [];
+  sessionDecisions.enabled = true; // Reset to default (enabled)
 };
 
 /**

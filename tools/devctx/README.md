@@ -62,7 +62,7 @@ Restart your AI client. Done.
 - ✅ Token savings: 85-90% on complex tasks
 
 Check actual usage:
-- **Real-time feedback** - See usage immediately (enable with `export DEVCTX_SHOW_USAGE=true`)
+- **Real-time feedback** - Enabled by default (disable with `export DEVCTX_SHOW_USAGE=false`)
 - `npm run report:metrics` - Tool-level savings + adoption analysis
 - `npm run report:workflows` - Workflow-level savings (requires `DEVCTX_WORKFLOW_TRACKING=true`)
 
@@ -105,16 +105,11 @@ Production usage: **14.5M tokens → 1.6M tokens** (89.87% reduction)
 
 ## Verify It's Working
 
-### Real-Time Feedback (Auto-enabled for First 10 Calls)
+### Real-Time Feedback (Enabled by Default)
 
-Feedback is **automatically enabled** for your first 10 tool calls (onboarding mode), then auto-disables.
+Feedback is **enabled by default** and shows after every devctx tool call.
 
-**To keep it enabled permanently:**
-```bash
-export DEVCTX_SHOW_USAGE=true
-```
-
-**To disable immediately:**
+**To disable:**
 ```bash
 export DEVCTX_SHOW_USAGE=false
 ```
@@ -130,7 +125,7 @@ You'll see at the end of agent responses:
 
 **Total saved:** ~57.0K tokens
 
-*Onboarding mode: showing for 3 more tool calls. To keep: `export DEVCTX_SHOW_USAGE=true`*
+*To disable this message: `export DEVCTX_SHOW_USAGE=false`*
 ```
 
 **Why this is useful:**
@@ -203,12 +198,12 @@ You'll see warnings like:
 - Low adoption (<30%)
 - Usage dropped mid-session
 
-**Combine all features:**
+**All features enabled by default.** To disable:
 
 ```bash
-export DEVCTX_SHOW_USAGE=true    # See what's used
-export DEVCTX_EXPLAIN=true       # Understand why
-export DEVCTX_DETECT_MISSED=true # Detect gaps
+export DEVCTX_SHOW_USAGE=false
+export DEVCTX_EXPLAIN=false
+export DEVCTX_DETECT_MISSED=false
 ```
 
 ## MCP Prompts

@@ -8,25 +8,20 @@ import {
   resetSessionUsage,
 } from '../src/usage-feedback.js';
 
-test('usage feedback - enabled by default in onboarding mode', () => {
+test('usage feedback - enabled by default always', () => {
   delete process.env.DEVCTX_SHOW_USAGE;
   resetSessionUsage();
   
-  // First call: onboarding mode active
+  // Default: enabled
   assert.equal(isFeedbackEnabled(), true);
   
-  // Record 9 tool calls (still under threshold of 10)
-  for (let i = 0; i < 9; i++) {
+  // Record many tool calls - stays enabled
+  for (let i = 0; i < 20; i++) {
     recordToolUsage({ tool: 'smart_read', savedTokens: 1000 });
   }
   
+  // Still enabled (no auto-disable)
   assert.equal(isFeedbackEnabled(), true);
-  
-  // 10th call: reaches threshold
-  recordToolUsage({ tool: 'smart_read', savedTokens: 1000 });
-  
-  // After threshold: auto-disabled
-  assert.equal(isFeedbackEnabled(), false);
 });
 
 test('usage feedback - enabled with DEVCTX_SHOW_USAGE=true', () => {

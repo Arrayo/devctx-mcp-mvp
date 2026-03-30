@@ -2,19 +2,17 @@
  * Usage feedback system - tracks devctx tool usage in current session
  * and provides visible feedback to users about what tools were used and tokens saved.
  * 
- * Enable with environment variable: DEVCTX_SHOW_USAGE=true
+ * ENABLED BY DEFAULT - disable with: DEVCTX_SHOW_USAGE=false
  * 
- * Auto-enabled for first 10 tool calls (onboarding mode), then auto-disables.
- * User can explicitly enable/disable at any time.
+ * Shows feedback after every devctx tool call to ensure visibility.
+ * User can explicitly disable if they find it too verbose.
  */
 
 const sessionUsage = {
   tools: new Map(), // toolName -> { count, savedTokens }
   totalSavedTokens: 0,
-  enabled: false,
+  enabled: true, // Changed: enabled by default
   totalToolCalls: 0,
-  onboardingMode: true,
-  ONBOARDING_THRESHOLD: 10, // Auto-disable after 10 tool calls
 };
 
 /**
@@ -22,8 +20,7 @@ const sessionUsage = {
  * 
  * Priority:
  * 1. Explicit env var (DEVCTX_SHOW_USAGE=true/false)
- * 2. Onboarding mode (first 10 tool calls)
- * 3. Default: disabled
+ * 2. Default: ENABLED (changed from disabled)
  */
 export const isFeedbackEnabled = () => {
   const envValue = process.env.DEVCTX_SHOW_USAGE?.toLowerCase();
@@ -31,30 +28,18 @@ export const isFeedbackEnabled = () => {
   // Explicit enable
   if (envValue === 'true' || envValue === '1' || envValue === 'yes') {
     sessionUsage.enabled = true;
-    sessionUsage.onboardingMode = false;
     return true;
   }
   
   // Explicit disable
   if (envValue === 'false' || envValue === '0' || envValue === 'no') {
     sessionUsage.enabled = false;
-    sessionUsage.onboardingMode = false;
     return false;
   }
   
-  // Onboarding mode: auto-enable for first N tool calls
-  if (sessionUsage.onboardingMode && sessionUsage.totalToolCalls < sessionUsage.ONBOARDING_THRESHOLD) {
-    sessionUsage.enabled = true;
-    return true;
-  }
-  
-  // After onboarding threshold, auto-disable
-  if (sessionUsage.onboardingMode && sessionUsage.totalToolCalls >= sessionUsage.ONBOARDING_THRESHOLD) {
-    sessionUsage.enabled = false;
-    sessionUsage.onboardingMode = false;
-  }
-  
-  return sessionUsage.enabled;
+  // Default: ENABLED (changed)
+  sessionUsage.enabled = true;
+  return true;
 };
 
 /**
@@ -128,14 +113,7 @@ export const formatUsageFeedback = () => {
   }
   
   lines.push('');
-  
-  // Show onboarding message if in onboarding mode
-  if (sessionUsage.onboardingMode && sessionUsage.totalToolCalls < sessionUsage.ONBOARDING_THRESHOLD) {
-    const remaining = sessionUsage.ONBOARDING_THRESHOLD - sessionUsage.totalToolCalls;
-    lines.push(`*Onboarding mode: showing for ${remaining} more tool calls. To keep: \`export DEVCTX_SHOW_USAGE=true\`*`);
-  } else {
-    lines.push('*To disable this message: `export DEVCTX_SHOW_USAGE=false`*');
-  }
+  lines.push('*To disable this message: `export DEVCTX_SHOW_USAGE=false`*');
   
   return lines.join('\n');
 };
@@ -147,7 +125,7 @@ export const resetSessionUsage = () => {
   sessionUsage.tools.clear();
   sessionUsage.totalSavedTokens = 0;
   sessionUsage.totalToolCalls = 0;
-  sessionUsage.onboardingMode = true;
+  sessionUsage.enabled = true; // Reset to default (enabled)
 };
 
 /**

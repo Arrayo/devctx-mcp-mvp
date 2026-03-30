@@ -1142,17 +1142,10 @@ See [Adoption Metrics Design](./docs/adoption-metrics-design.md) for complete an
 
 Get **immediate visibility** into devctx tool usage in every agent response.
 
-**Auto-enabled during onboarding:**
-- Feedback shows automatically for your first 10 tool calls
-- Helps you verify devctx is working
-- Auto-disables after onboarding to reduce noise
+**ENABLED BY DEFAULT** - Shows feedback after every devctx tool call.
 
-**Manual control:**
+**Disable if too verbose:**
 ```bash
-# Keep it enabled permanently
-export DEVCTX_SHOW_USAGE=true
-
-# Disable it immediately
 export DEVCTX_SHOW_USAGE=false
 ```
 
@@ -1166,7 +1159,7 @@ export DEVCTX_SHOW_USAGE=false
 
 **Total saved:** ~57.0K tokens
 
-*Onboarding mode: showing for 3 more tool calls. To keep: `export DEVCTX_SHOW_USAGE=true`*
+*To disable this message: `export DEVCTX_SHOW_USAGE=false`*
 ```
 
 **Benefits:**
@@ -1189,9 +1182,11 @@ See [Usage Feedback Documentation](./docs/usage-feedback.md) for complete guide.
 
 Understand **why** the agent chose devctx tools and what benefits are expected.
 
-**Enable:**
+**ENABLED BY DEFAULT** - Shows decision explanations for every devctx tool call.
+
+**Disable if too verbose:**
 ```bash
-export DEVCTX_EXPLAIN=true
+export DEVCTX_EXPLAIN=false
 ```
 
 **What you'll see:**
@@ -1240,9 +1235,11 @@ See [Decision Explainer Documentation](./docs/decision-explainer.md) for complet
 
 Detect when devctx **should have been used but wasn't**.
 
-**Enable:**
+**ENABLED BY DEFAULT** - Shows warnings when devctx adoption is low.
+
+**Disable if not needed:**
 ```bash
-export DEVCTX_DETECT_MISSED=true
+export DEVCTX_DETECT_MISSED=false
 ```
 
 **What you'll see:**
@@ -1284,11 +1281,11 @@ export DEVCTX_DETECT_MISSED=true
 - May have false positives for simple tasks
 - Session-scoped only (resets on restart)
 
-**Combine all three features:**
+**All features enabled by default.** To disable all:
 ```bash
-export DEVCTX_SHOW_USAGE=true    # See what's used
-export DEVCTX_EXPLAIN=true       # Understand why
-export DEVCTX_DETECT_MISSED=true # Detect gaps
+export DEVCTX_SHOW_USAGE=false
+export DEVCTX_EXPLAIN=false
+export DEVCTX_DETECT_MISSED=false
 ```
 
 See [Missed Opportunities Documentation](./docs/missed-opportunities.md) for complete guide.

@@ -10,12 +10,11 @@ import {
   __testing__,
 } from '../src/missed-opportunities.js';
 
-test('missed opportunities - disabled by default', () => {
+test('missed opportunities - enabled by default', () => {
   delete process.env.DEVCTX_DETECT_MISSED;
   resetSessionActivity();
   
-  assert.equal(isMissedDetectionEnabled(), false);
-  assert.equal(formatMissedOpportunities(), '');
+  assert.equal(isMissedDetectionEnabled(), true);
 });
 
 test('missed opportunities - enabled with DEVCTX_DETECT_MISSED=true', () => {

@@ -10,12 +10,11 @@ import {
   EXPECTED_BENEFITS,
 } from '../src/decision-explainer.js';
 
-test('decision explainer - disabled by default', () => {
+test('decision explainer - enabled by default', () => {
   delete process.env.DEVCTX_EXPLAIN;
   resetSessionDecisions();
   
-  assert.equal(isExplainEnabled(), false);
-  assert.equal(formatDecisionExplanations(), '');
+  assert.equal(isExplainEnabled(), true);
 });
 
 test('decision explainer - enabled with DEVCTX_EXPLAIN=true', () => {

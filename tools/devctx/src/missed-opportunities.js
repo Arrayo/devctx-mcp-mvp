@@ -3,7 +3,7 @@
  * 
  * Analyzes session metrics to detect patterns where devctx would have helped.
  * 
- * Enable with environment variable: DEVCTX_DETECT_MISSED=true
+ * ENABLED BY DEFAULT - disable with: DEVCTX_DETECT_MISSED=false
  * 
  * Detection heuristics (based on session metrics):
  * - Low devctx adoption in complex sessions (many operations, few devctx calls)
@@ -19,7 +19,7 @@ const sessionActivity = {
   totalOperations: 0, // Estimated from devctx calls + time-based heuristic
   lastDevctxCall: 0,
   sessionStart: Date.now(),
-  enabled: false,
+  enabled: true, // Changed: enabled by default
   warnings: [],
 };
 
@@ -36,12 +36,29 @@ const DEVCTX_TOOLS = new Set([
 
 /**
  * Check if missed opportunity detection is enabled
+ * 
+ * Priority:
+ * 1. Explicit env var (DEVCTX_DETECT_MISSED=true/false)
+ * 2. Default: ENABLED (changed from disabled)
  */
 export const isMissedDetectionEnabled = () => {
   const envValue = process.env.DEVCTX_DETECT_MISSED?.toLowerCase();
-  const enabled = envValue === 'true' || envValue === '1' || envValue === 'yes';
-  sessionActivity.enabled = enabled;
-  return enabled;
+  
+  // Explicit enable
+  if (envValue === 'true' || envValue === '1' || envValue === 'yes') {
+    sessionActivity.enabled = true;
+    return true;
+  }
+  
+  // Explicit disable
+  if (envValue === 'false' || envValue === '0' || envValue === 'no') {
+    sessionActivity.enabled = false;
+    return false;
+  }
+  
+  // Default: ENABLED (changed)
+  sessionActivity.enabled = true;
+  return true;
 };
 
 /**
@@ -152,8 +169,18 @@ export const formatMissedOpportunities = () => {
   const analysis = analyzeMissedOpportunities();
   if (!analysis) return '';
   
-  // Don't show if session is too short or no opportunities
-  if (analysis.message || analysis.opportunities.length === 0) {
+  // Show session too short message (but don't show full warning)
+  if (analysis.message) {
+    return '';
+  }
+  
+  // If no opportunities but session is active, show positive feedback
+  if (analysis.opportunities.length === 0 && analysis.devctxOperations > 0) {
+    return `\n\n✅ **devctx adoption: ${analysis.devctxRatio}%** (${analysis.devctxOperations}/${analysis.estimatedTotal} operations)\n`;
+  }
+  
+  // No opportunities and no devctx usage - don't show yet (wait for longer session)
+  if (analysis.opportunities.length === 0) {
     return '';
   }
   
@@ -222,6 +249,7 @@ export const resetSessionActivity = () => {
   sessionActivity.lastDevctxCall = 0;
   sessionActivity.sessionStart = Date.now();
   sessionActivity.warnings = [];
+  sessionActivity.enabled = true; // Reset to default (enabled)
 };
 
 /**

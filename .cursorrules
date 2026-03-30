@@ -1,0 +1,58 @@
+# devctx MCP Usage Policy
+
+## MANDATORY: Use devctx MCP tools when available
+
+When the devctx MCP is installed and active, you MUST use devctx tools instead of native tools for:
+
+- **File reading** → Use `smart_read` instead of `Read`
+- **Code search** → Use `smart_search` instead of `Grep`
+- **Context building** → Use `smart_context` instead of multiple Read + Grep calls
+- **Shell commands** → Use `smart_shell` instead of `Shell` (for diagnostic commands)
+
+## Recommended workflow:
+
+```
+1. smart_turn(start) - Start session and recover context
+2. smart_context(task) - Build complete context
+3. smart_search(query) - Search for specific patterns
+4. smart_read(file) - Read files efficiently
+5. smart_turn(end) - Save checkpoint
+```
+
+## When to use devctx:
+
+- ✅ Reading any file (especially large files)
+- ✅ Searching code across the project
+- ✅ Building context for a task
+- ✅ Running diagnostic shell commands
+- ✅ Multi-step tasks that benefit from session persistence
+
+## When NOT to use devctx:
+
+- ❌ Writing/editing files (use native Write/StrReplace)
+- ❌ Deleting files (use native Delete)
+- ❌ File operations that modify content
+- ❌ Simple single-file edits with no context needed
+
+## Preflight (recommended):
+
+Before starting work:
+```
+build_index(incremental=true)
+smart_turn(start)
+```
+
+This ensures optimal performance and context recovery.
+
+## Visibility features (enabled by default):
+
+The MCP will automatically show:
+- 📊 **Usage feedback** - Which tools were used and tokens saved
+- 🤖 **Decision explanations** - Why each tool was chosen
+- ⚠️ **Missed opportunities** - When devctx should have been used but wasn't
+
+To disable: `export DEVCTX_SHOW_USAGE=false DEVCTX_EXPLAIN=false DEVCTX_DETECT_MISSED=false`
+
+## Compliance:
+
+If you use native tools instead of devctx, you MUST explain why in your response.
