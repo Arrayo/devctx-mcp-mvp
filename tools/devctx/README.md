@@ -211,6 +211,26 @@ export DEVCTX_EXPLAIN=true       # Understand why
 export DEVCTX_DETECT_MISSED=true # Detect gaps
 ```
 
+## MCP Prompts
+
+The MCP server provides **prompts** for automatic forcing:
+
+```
+/prompt use-devctx
+```
+
+**Available prompts:**
+- `use-devctx` - Ultra-short forcing prompt
+- `devctx-workflow` - Complete workflow template
+- `devctx-preflight` - Preflight checklist
+
+**Benefits:**
+- No manual typing
+- Centrally managed
+- No typos
+
+See [MCP Prompts Documentation](../../docs/mcp-prompts.md).
+
 ## Core Tools
 
 ### smart_read

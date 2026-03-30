@@ -1295,6 +1295,32 @@ See [Missed Opportunities Documentation](./docs/missed-opportunities.md) for com
 
 ---
 
+### MCP Prompts (Automatic Forcing)
+
+The MCP server provides **prompts** that automatically inject forcing instructions:
+
+**Quick forcing:**
+```
+/prompt use-devctx
+```
+
+This injects: `Use devctx: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)`
+
+**Available prompts:**
+- `/prompt use-devctx` - Ultra-short forcing prompt
+- `/prompt devctx-workflow` - Complete workflow template
+- `/prompt devctx-preflight` - Preflight checklist (index + session init)
+
+**Benefits:**
+- ✅ No need to remember/type forcing syntax
+- ✅ Centrally managed (updates automatically)
+- ✅ Discoverable in Cursor prompts menu
+- ✅ No typos
+
+See [MCP Prompts Documentation](./docs/mcp-prompts.md) for complete guide.
+
+---
+
 ### Quick verification
 
 ```bash

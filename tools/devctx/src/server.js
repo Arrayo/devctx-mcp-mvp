@@ -49,6 +49,72 @@ export const createDevctxServer = () => {
   // Enable streaming progress notifications
   setServerForStreaming(server);
 
+  // Register prompts
+  server.prompt(
+    'use-devctx',
+    'Force the agent to use devctx tools for the current task. Use this prompt at the start of your message to ensure devctx is used instead of native tools.',
+    {},
+    async () => ({
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: 'Use devctx: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)',
+          },
+        },
+      ],
+    })
+  );
+
+  server.prompt(
+    'devctx-workflow',
+    'Complete devctx workflow template with all recommended steps. Includes session start, context building, file reading, and session end.',
+    {},
+    async () => ({
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Follow this devctx workflow:
+
+1. smart_turn(start) - Start session and recover previous context
+2. smart_context(task) - Build complete context for the task
+3. smart_search(query) - Search for specific patterns if needed
+4. smart_read(file) - Read files with appropriate mode (outline/signatures/symbol)
+5. smart_turn(end) - Save checkpoint for next session
+
+Use devctx tools instead of native Read/Grep/Shell when possible.`,
+          },
+        },
+      ],
+    })
+  );
+
+  server.prompt(
+    'devctx-preflight',
+    'Preflight checklist before starting work. Ensures index is built and session is initialized.',
+    {},
+    async () => ({
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Preflight checklist:
+
+1. build_index(incremental=true) - Build/update symbol index
+2. smart_turn(start) - Initialize session and recover context
+3. Proceed with your task using devctx tools
+
+This ensures optimal performance and context recovery.`,
+          },
+        },
+      ],
+    })
+  );
+
   server.tool(
     'smart_read',
     'Read a file with token-efficient modes. outline/signatures: compact structure (~90% savings). range: specific line range with line numbers. symbol: extract function/class/method by name (string or array for batch). full: file content capped at 12k chars. maxTokens: token budget — auto-selects the most detailed mode that fits (full -> outline -> signatures -> truncated). context=true (symbol mode only): includes callers, tests, and referenced types from the dependency graph; returns graphCoverage (imports/tests: full|partial|none) so the agent knows how reliable the cross-file context is. Responses are cached in memory per session and invalidated by file mtime; cached=true when served from cache. Every response includes a unified confidence block: { parser, truncated, cached, graphCoverage? }. Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',

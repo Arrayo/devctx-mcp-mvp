@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **MCP Prompts (Automatic Forcing):**
+  - New MCP prompts feature allows automatic injection of forcing instructions
+  - 3 prompts available: `use-devctx`, `devctx-workflow`, `devctx-preflight`
+  - Invoke with `/prompt use-devctx` in Cursor chat
+  - `use-devctx`: Ultra-short forcing prompt (injects: `Use devctx: smart_turn(start) → ...`)
+  - `devctx-workflow`: Complete step-by-step workflow template
+  - `devctx-preflight`: Preflight checklist (build index + init session)
+  - Implemented in `src/server.js` using MCP SDK `server.prompt()` API
+  - Benefits: No manual typing, centrally managed, no typos, discoverable
+  - New doc: `docs/mcp-prompts.md` with complete guide
+  - Updated: `README.md` and `tools/devctx/README.md` with prompts section
+  - Goal: Make forcing devctx usage effortless and automatic
+  - Replaces need for manual forcing prompts or `.cursorrules`
+
 - **Missed Opportunities Detector:**
   - New detector identifies when devctx should have been used but wasn't
   - Analyzes session patterns to detect adoption gaps and potential token savings
