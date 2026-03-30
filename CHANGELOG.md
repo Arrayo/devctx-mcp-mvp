@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Real-Time Usage Feedback:**
+  - New usage feedback system provides immediate visibility into devctx tool usage
+  - Shows which tools were used, call counts, and tokens saved at end of agent responses
+  - Enable with `export DEVCTX_SHOW_USAGE=true`
+  - Tracks smart_read, smart_search, smart_context, smart_shell, smart_summary
+  - Automatic aggregation of multiple calls to same tool
+  - Smart formatting of token counts (K/M) and target paths
+  - Session-scoped tracking (resets on MCP server restart)
+  - New module: `src/usage-feedback.js` with tracking and formatting functions
+  - New tests: `tests/usage-feedback.test.js` (12 tests covering all scenarios)
+  - Integrated into all major tools after `persistMetrics()`
+  - New doc: `docs/usage-feedback.md` with complete guide
+  - Updated: `README.md` with usage feedback section and examples
+  - Goal: Provide real-time visibility to verify agent is using devctx, debug adoption issues, measure impact
+  - Benefits: Know immediately if devctx is used, see savings in real-time, validate forcing prompts
+  - Disabled by default to avoid noise
+
 - **Adoption Metrics (Experimental):**
   - New adoption analytics to measure how often devctx is actually used in practice
   - Analyzes sessions with/without devctx tools, adoption rate by inferred complexity

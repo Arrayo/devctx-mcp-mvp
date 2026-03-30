@@ -4,6 +4,7 @@ import { rgPath } from '@vscode/ripgrep';
 import { buildMetrics, persistMetrics } from '../metrics.js';
 import { projectRoot } from '../utils/paths.js';
 import { pickRelevantLines, truncate, uniqueLines } from '../utils/text.js';
+import { recordToolUsage } from '../usage-feedback.js';
 
 const execFile = promisify(execFileCallback);
 const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
@@ -221,6 +222,13 @@ export const smartShell = async ({ command }) => {
   });
 
   await persistMetrics(metrics);
+  
+  // Record usage for feedback
+  recordToolUsage({
+    tool: 'smart_shell',
+    savedTokens: metrics.savedTokens,
+    target: command,
+  });
 
   const result = {
     command,

@@ -8,6 +8,7 @@ import { loadIndex, queryIndex, queryRelated } from '../index.js';
 import { projectRoot } from '../utils/paths.js';
 import { isBinaryBuffer, isDockerfile, resolveSafePath } from '../utils/fs.js';
 import { truncate } from '../utils/text.js';
+import { recordToolUsage } from '../usage-feedback.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -381,6 +382,13 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   });
 
   await persistMetrics(metrics);
+  
+  // Record usage for feedback
+  recordToolUsage({
+    tool: 'smart_search',
+    savedTokens: metrics.savedTokens,
+    target: query,
+  });
 
   let retrievalConfidence = 'high';
   if (provenance) {

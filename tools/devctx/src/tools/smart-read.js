@@ -9,6 +9,7 @@ import { isDockerfile, readTextFile } from '../utils/fs.js';
 import { projectRoot } from '../utils/paths.js';
 import { truncate } from '../utils/text.js';
 import { countTokens } from '../tokenCounter.js';
+import { recordToolUsage } from '../usage-feedback.js';
 
 const execFile = promisify(execFileCb);
 import { summarizeGo, summarizeRust, summarizeJava, summarizeShell, summarizeTerraform, summarizeDockerfile, summarizeSql, extractGoSymbol, extractRustSymbol, extractJavaSymbol, summarizeCsharp, extractCsharpSymbol, summarizeKotlin, extractKotlinSymbol, summarizePhp, extractPhpSymbol, summarizeSwift, extractSwiftSymbol } from './smart-read/additional-languages.js';
@@ -453,6 +454,13 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
   });
 
   await persistMetrics(metrics);
+  
+  // Record usage for feedback
+  recordToolUsage({
+    tool: 'smart_read',
+    savedTokens: metrics.savedTokens,
+    target: path.relative(projectRoot, fullPath),
+  });
 
   const confidence = { parser, truncated, cached: cacheHit && !contextResult };
   if (contextResult) confidence.graphCoverage = contextResult.graphCoverage;

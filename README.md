@@ -1138,6 +1138,44 @@ See [Adoption Metrics Design](./docs/adoption-metrics-design.md) for complete an
 
 ---
 
+### Real-Time Usage Feedback (New!)
+
+Get **immediate visibility** into devctx tool usage in every agent response.
+
+**Enable:**
+```bash
+export DEVCTX_SHOW_USAGE=true
+```
+
+**What you'll see:**
+```markdown
+---
+
+📊 **devctx usage this session:**
+- **smart_read**: 3 calls | ~45.0K tokens saved (file1.js, file2.js, file3.js)
+- **smart_search**: 1 call | ~12.0K tokens saved (query)
+
+**Total saved:** ~57.0K tokens
+
+*To disable: `export DEVCTX_SHOW_USAGE=false`*
+```
+
+**Benefits:**
+- ✅ Know immediately if agent is using devctx
+- ✅ See token savings in real-time
+- ✅ Verify forcing prompts worked
+- ✅ Debug adoption issues instantly
+
+**When to use:**
+- Verifying agent follows rules
+- Debugging why devctx isn't used
+- Measuring real-time impact
+- Validating setup after installation
+
+See [Usage Feedback Documentation](./docs/usage-feedback.md) for complete guide.
+
+---
+
 ### Quick verification
 
 ```bash

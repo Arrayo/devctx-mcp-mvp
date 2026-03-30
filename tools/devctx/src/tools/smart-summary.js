@@ -1,6 +1,7 @@
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
 import { enforceRepoSafety, getRepoSafety } from '../repo-safety.js';
+import { recordToolUsage } from '../usage-feedback.js';
 import {
   ACTIVE_SESSION_SCOPE,
   SQLITE_SCHEMA_VERSION,
@@ -1212,6 +1213,12 @@ export const smartSummary = async ({
           ...summaryMetrics,
           latencyMs: Date.now() - startTime,
         });
+        
+        recordToolUsage({
+          tool: 'smart_summary',
+          savedTokens: summaryMetrics.savedTokens || 0,
+          target: targetSessionId,
+        });
       }
 
       return addRepoSafety({
@@ -1356,13 +1363,20 @@ export const smartSummary = async ({
         const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(currentSession, maxTokens);
         const rawTokens = countTokens(JSON.stringify(currentSession));
 
+        const metrics = buildSummaryMetrics(rawTokens, tokens);
         persistMetrics({
           tool: 'smart_summary',
           action,
           sessionId: targetSessionId,
-          ...buildSummaryMetrics(rawTokens, tokens),
+          ...metrics,
           latencyMs: Date.now() - startTime,
           skipped: true,
+        });
+        
+        recordToolUsage({
+          tool: 'smart_summary',
+          savedTokens: metrics.savedTokens || 0,
+          target: targetSessionId,
         });
 
         return addRepoSafety({
@@ -1386,14 +1400,21 @@ export const smartSummary = async ({
         const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(currentSession, maxTokens);
         const rawTokens = countTokens(JSON.stringify(currentSession));
 
+        const metrics2 = buildSummaryMetrics(rawTokens, tokens);
         persistMetrics({
           tool: 'smart_summary',
           action,
           sessionId: targetSessionId,
-          ...buildSummaryMetrics(rawTokens, tokens),
+          ...metrics2,
           latencyMs: Date.now() - startTime,
           skipped: true,
           checkpointEvent: checkpointDecision.event,
+        });
+        
+        recordToolUsage({
+          tool: 'smart_summary',
+          savedTokens: metrics2.savedTokens || 0,
+          target: targetSessionId,
         });
 
         return addRepoSafety({
@@ -1454,6 +1475,12 @@ export const smartSummary = async ({
         ...summaryMetrics,
         latencyMs: Date.now() - startTime,
         ...(action === 'checkpoint' ? { checkpointEvent: checkpointDecision.event } : {}),
+      });
+      
+      recordToolUsage({
+        tool: 'smart_summary',
+        savedTokens: summaryMetrics.savedTokens || 0,
+        target: targetSessionId,
       });
 
       return addRepoSafety({

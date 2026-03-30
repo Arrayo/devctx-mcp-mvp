@@ -11,6 +11,7 @@ import { resolveSafePath } from '../utils/fs.js';
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
 import { predictContextFiles, recordContextAccess } from '../context-patterns.js';
+import { recordToolUsage } from '../usage-feedback.js';
 import { 
   getDetailedDiff, 
   analyzeChangeImpact, 
@@ -1219,14 +1220,23 @@ export const smartContext = async ({
   const contentItems = context.filter((item) => typeof item.content === 'string' && item.content.length > 0).length;
   const primaryItem = context.find((item) => item.role === 'primary');
 
+  const savedTokens = Math.max(0, totalRawTokens - totalCompressedTokens);
+  
   await persistMetrics({
     tool: 'smart_context',
     target: `${root} :: ${task}`,
     rawTokens: totalRawTokens,
     compressedTokens: totalCompressedTokens,
-    savedTokens: Math.max(0, totalRawTokens - totalCompressedTokens),
+    savedTokens,
     savingsPct,
     timestamp: new Date().toISOString(),
+  });
+  
+  // Record usage for feedback
+  recordToolUsage({
+    tool: 'smart_context',
+    savedTokens,
+    target: task,
   });
 
   if (prefetch && context.length > 0) {
