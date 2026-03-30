@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+- Enhanced command validation with dangerous pattern detection (`rm -rf`, `sudo`, `curl|`, `eval`)
+- Added `DEVCTX_SHELL_DISABLED` environment variable to disable shell execution
+- Improved error messages showing allowed commands and subcommands
+- Added 16 new security tests (435 total, 26 security-focused)
+- Comprehensive security documentation:
+  - `SECURITY.md` - Security policy and threat model
+  - `docs/security/threat-model.md` - Attack surface analysis
+  - `docs/security/configuration.md` - Hardening guide
+  - `docs/security/risk-mitigation-summary.md` - Mitigation summary
+- Graceful error handling in `smart_read` (returns `{ error }` instead of throwing)
+- Error isolation in `smart_read_batch` (partial results on failure)
+- Security sections added to both READMEs
+
+### Changed
+- `smart_read` now returns error objects instead of throwing exceptions
+- `smart_read_batch` continues processing after individual file errors
+- Command length limited to 500 characters
+- `git blame` added to allowed git subcommands
+- `eval` added to allowed npm script patterns
+
 ## [1.1.0] - 2026-03-29
 
 ### Added

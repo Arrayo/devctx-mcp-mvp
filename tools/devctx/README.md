@@ -202,6 +202,29 @@ Add to `.gitignore`:
 - Node.js 18+ (22+ for SQLite features)
 - Git (for diff and blame features)
 
+## Security
+
+This MCP is **secure by default**:
+
+- ✅ **Allowlist-only commands** - Only safe diagnostic commands (`ls`, `git status`, `npm test`, etc.)
+- ✅ **No shell operators** - Blocks `|`, `&`, `;`, `>`, `<`, `` ` ``, `$()`
+- ✅ **Path validation** - Cannot escape project root
+- ✅ **No write access** - Cannot modify your code
+- ✅ **Repository safety** - Prevents accidental commit of local state
+- ✅ **Resource limits** - 15s timeout, 10MB buffer
+
+**Configuration:**
+
+```bash
+# Disable shell execution entirely
+export DEVCTX_SHELL_DISABLED=true
+
+# Disable cache warming
+export DEVCTX_CACHE_WARMING=false
+```
+
+See [SECURITY.md](https://github.com/Arrayo/smart-context-mcp/blob/main/SECURITY.md) for complete security documentation.
+
 ## Documentation
 
 Full documentation in [GitHub repository](https://github.com/Arrayo/smart-context-mcp):

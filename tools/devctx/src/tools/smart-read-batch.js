@@ -18,6 +18,15 @@ export const smartReadBatch = async ({ files, maxTokens }) => {
         maxTokens: item.maxTokens,
       });
 
+      if (readResult.error) {
+        results.push({
+          filePath: item.path,
+          mode: item.mode ?? 'outline',
+          error: readResult.error,
+        });
+        continue;
+      }
+
       const itemTokens = countTokens(readResult.content);
 
       if (maxTokens && totalTokens + itemTokens > maxTokens && results.length > 0) {

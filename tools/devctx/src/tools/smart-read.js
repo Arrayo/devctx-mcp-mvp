@@ -363,7 +363,27 @@ const formatContextSections = (sections) => {
 };
 
 export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine, symbol, maxTokens, context: includeContext }) => {
-  const { fullPath, content } = readTextFile(filePath);
+  let fullPath, content;
+  
+  try {
+    const result = readTextFile(filePath);
+    fullPath = result.fullPath;
+    content = result.content;
+  } catch (error) {
+    const errorMessage = error.message || String(error);
+    return {
+      error: errorMessage,
+      filePath,
+      mode,
+      metrics: buildMetrics({
+        tool: 'smart_read',
+        target: filePath,
+        rawText: '',
+        compressedText: errorMessage,
+      }),
+    };
+  }
+
   const extension = path.extname(fullPath).toLowerCase();
   const mtime = getFileMtime(fullPath);
 

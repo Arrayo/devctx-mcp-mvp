@@ -6,11 +6,21 @@ import { projectRoot } from '../utils/paths.js';
 import { pickRelevantLines, truncate, uniqueLines } from '../utils/text.js';
 
 const execFile = promisify(execFileCallback);
-const blockedPattern = /[|&;<>`\n\r]/;
+const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
+const blockedPattern = /[|&;<>`\n\r$()]/;
 const allowedCommands = new Set(['pwd', 'ls', 'find', 'rg', 'git', 'npm', 'pnpm', 'yarn', 'bun']);
-const allowedGitSubcommands = new Set(['status', 'diff', 'show', 'log', 'branch', 'rev-parse']);
+const allowedGitSubcommands = new Set(['status', 'diff', 'show', 'log', 'branch', 'rev-parse', 'blame']);
 const allowedPackageManagerSubcommands = new Set(['test', 'run', 'lint', 'build', 'typecheck', 'check']);
-const safeRunScriptPattern = /^(test|lint|build|typecheck|check|smoke|verify)(:|$)/;
+const safeRunScriptPattern = /^(test|lint|build|typecheck|check|smoke|verify|eval)(:|$)/;
+const dangerousPatterns = [
+  /rm\s+-rf/i,
+  /sudo/i,
+  /curl.*\|/i,
+  /wget.*\|/i,
+  /eval/i,
+  /exec/i,
+];
+const MAX_COMMAND_LENGTH = 500;
 
 const tokenize = (command) => {
   const tokens = [];
@@ -67,12 +77,26 @@ const tokenize = (command) => {
 };
 
 const validateCommand = (command, tokens) => {
+  if (isShellDisabled()) {
+    return 'Shell execution is disabled (DEVCTX_SHELL_DISABLED=true)';
+  }
+
   if (!command.trim()) {
     return 'Command is empty';
   }
 
-  if (blockedPattern.test(command) || command.includes('$(')) {
-    return 'Shell operators are not allowed';
+  if (command.length > MAX_COMMAND_LENGTH) {
+    return `Command too long (max ${MAX_COMMAND_LENGTH} chars)`;
+  }
+
+  if (blockedPattern.test(command)) {
+    return 'Shell operators are not allowed (|, &, ;, <, >, `, $, (, ))';
+  }
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(command)) {
+      return `Dangerous pattern detected: ${pattern.source}`;
+    }
   }
 
   if (tokens.length === 0) {
@@ -82,11 +106,11 @@ const validateCommand = (command, tokens) => {
   const [baseCommand, subcommand, thirdToken] = tokens;
 
   if (!allowedCommands.has(baseCommand)) {
-    return `Command not allowed: ${baseCommand}`;
+    return `Command not allowed: ${baseCommand}. Allowed: ${[...allowedCommands].join(', ')}`;
   }
 
   if (baseCommand === 'git' && !allowedGitSubcommands.has(subcommand)) {
-    return `Git subcommand not allowed: ${subcommand ?? '(missing)'}`;
+    return `Git subcommand not allowed: ${subcommand ?? '(missing)'}. Allowed: ${[...allowedGitSubcommands].join(', ')}`;
   }
 
   if (baseCommand === 'find') {
@@ -99,11 +123,11 @@ const validateCommand = (command, tokens) => {
 
   if (['npm', 'pnpm', 'yarn', 'bun'].includes(baseCommand)) {
     if (!subcommand || !allowedPackageManagerSubcommands.has(subcommand)) {
-      return `Package manager subcommand not allowed: ${subcommand ?? '(missing)'}`;
+      return `Package manager subcommand not allowed: ${subcommand ?? '(missing)'}. Allowed: ${[...allowedPackageManagerSubcommands].join(', ')}`;
     }
 
     if (subcommand === 'run' && (!thirdToken || !safeRunScriptPattern.test(thirdToken))) {
-      return `Package manager script not allowed: ${thirdToken ?? '(missing)'}`;
+      return `Package manager script not allowed: ${thirdToken ?? '(missing)'}. Allowed pattern: ${safeRunScriptPattern.source}`;
     }
   }
 

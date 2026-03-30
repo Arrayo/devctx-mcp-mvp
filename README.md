@@ -436,6 +436,45 @@ Add to `.gitignore`:
 .devctx/
 ```
 
+## Security
+
+This MCP is **secure by default**:
+
+- ✅ **Allowlist-only commands** - Only safe diagnostic commands (`ls`, `git status`, `npm test`, etc.)
+- ✅ **No shell operators** - Blocks `|`, `&`, `;`, `>`, `<`, `` ` ``, `$()`
+- ✅ **Path validation** - Cannot escape project root
+- ✅ **No write access** - Cannot modify your code
+- ✅ **Repository safety** - Prevents accidental commit of local state
+- ✅ **Resource limits** - 15s timeout, 10MB buffer
+
+**What `smart_shell` can run:**
+
+```bash
+# Allowed
+git status              # ✓ Safe git read operations
+npm test                # ✓ Safe package manager scripts
+find . -name "*.js"     # ✓ File discovery
+rg "pattern"            # ✓ Code search
+
+# Blocked
+git commit              # ✗ Write operations blocked
+npm install pkg         # ✗ Package changes blocked
+ls | grep secret        # ✗ Shell operators blocked
+rm -rf /                # ✗ Dangerous commands blocked
+```
+
+**Configuration:**
+
+```bash
+# Disable shell execution entirely
+export DEVCTX_SHELL_DISABLED=true
+
+# Disable cache warming
+export DEVCTX_CACHE_WARMING=false
+```
+
+**Complete security documentation:** [SECURITY.md](./SECURITY.md)
+
 ## Requirements
 
 - **Node.js:** 18+ (22+ recommended for SQLite features)
@@ -460,6 +499,11 @@ Add to `.gitignore`:
 - [Cache Warming](./docs/features/cache-warming.md) - Cold-start optimization
 - [Git Blame](./docs/features/git-blame.md) - Code attribution
 - [Cross-Project Context](./docs/features/cross-project.md) - Multi-project support
+
+### Security
+- [Security Policy](./SECURITY.md) - Security guarantees and threat model
+- [Threat Model](./docs/security/threat-model.md) - Attack surface analysis
+- [Security Configuration](./docs/security/configuration.md) - Hardening and profiles
 
 ### Verification
 - [Benchmark](./docs/verification/benchmark.md) - Reproducible benchmark
