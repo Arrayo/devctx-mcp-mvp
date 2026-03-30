@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Simplified Installation Experience:**
+  - Direct, copy-paste installation blocks per client (Cursor, Codex, Claude, Qwen)
+  - Clear "How it Works in Practice" section explaining real flow
+  - Honest documentation about what MCP can/cannot do
+  - `docs/how-it-works.md` - Complete step-by-step example with token breakdown
+  - Realistic expectations (best/typical/worst case scenarios)
+  - Troubleshooting guide for common issues
 - **Agent Rules as Core Product Feature:**
   - Task-specific workflow profiles (debugging, code review, refactoring, testing, architecture)
   - Compact core rules auto-generated during installation

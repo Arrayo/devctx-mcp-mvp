@@ -24,33 +24,92 @@ AI agents waste tokens in three ways:
 
 This MCP solves all three by providing tools that return compressed, ranked, and cached context.
 
-## How it works
+## How it Works in Practice
 
-This MCP provides **two key components**:
+### The Reality
 
-### 1. Specialized Tools (12 tools)
+This MCP **does not intercept** your prompts magically. Here's what actually happens:
 
-Efficient alternatives to built-in operations:
-- `smart_read` - Compressed file reading (outline, signatures, symbol modes)
+1. **You write a prompt:** "Fix the login bug"
+2. **Agent reads rules:** Sees debugging workflow suggestion
+3. **Agent decides:** "This is a debugging task, I'll use `smart_search(intent=debug)`"
+4. **Agent calls tool:** `smart_search({ query: 'login error', intent: 'debug' })`
+5. **MCP returns:** Ranked results (errors prioritized)
+6. **Agent continues:** Calls `smart_read(mode=symbol)` for specific function
+7. **Agent fixes bug:** Makes changes
+8. **Agent verifies:** Calls `smart_shell('npm test')`
+9. **Agent checkpoints:** Calls `smart_turn(end)` to persist progress
+
+**Key points:**
+- ✅ Agent **chooses** to use devctx tools (not forced)
+- ✅ Rules **guide** the agent (not enforce)
+- ✅ Agent can use built-in tools when appropriate
+- ✅ You control nothing directly—the agent decides
+
+### What You Get
+
+**Tools (12):** Efficient alternatives to built-in operations
+- `smart_read` - Compressed file reading (outline, signatures, symbol)
 - `smart_search` - Intent-aware code search with ranking
-- `smart_context` - One-call context builder with graph expansion
-- `smart_shell` - Safe diagnostic command execution
-- And 8 more advanced tools
+- `smart_context` - One-call context builder with graph
+- `smart_shell` - Safe diagnostic commands
+- `smart_turn` - Session persistence
+- And 7 more
 
-### 2. Agent Rules (Task-Specific Guidance)
+**Rules (5 profiles):** Task-specific workflows
+- Debugging: Error-first, symbol-focused
+- Code Review: Diff-aware, API-focused
+- Refactoring: Graph-aware, test-verified
+- Testing: Coverage-aware, TDD-friendly
+- Architecture: Index-first, minimal-detail
 
-Installation generates rules that guide agents to:
-- **Prefer compressed reads** - `outline` before `full` (90% savings)
-- **Use intent-aware search** - `smart_search(intent=debug)` for errors
-- **Recover context** - `smart_turn` for session persistence
-- **Follow task workflows** - Debugging, review, refactor, testing, architecture
+**Storage (`.devctx/`):** Local context database
+- `index.json` - Symbol index (functions, classes, imports)
+- `state.sqlite` - Sessions, metrics, patterns (Node 22+)
+- `metrics.jsonl` - Legacy fallback (Node 18-20)
 
-**Files created:**
-- `.cursor/rules/devctx.mdc` (Cursor)
-- `AGENTS.md` (Codex, Qwen)
-- `CLAUDE.md` (Claude Desktop)
+### Context Persistence (When Supported)
 
-**Important:** Rules are **guidance**, not enforcement. The agent decides when to use devctx tools based on your prompts, task complexity, and its own reasoning. Think of it as offering a faster, cheaper path that the agent will usually prefer.
+**What gets persisted:**
+- Session history (tasks, decisions, blockers)
+- File access patterns (for prediction)
+- Token metrics (for optimization)
+- Turn checkpoints (for recovery)
+
+**When it's consulted:**
+- Agent calls `smart_turn(start)` - Recovers previous session
+- Agent calls `smart_context` - Uses patterns for prediction
+- Agent calls `smart_summary` - Gets session summary
+
+**Limitations:**
+- Only works if agent calls `smart_turn` (not automatic)
+- Only persists within project (`.devctx/` is local)
+- Only recovers if session ID matches (manual or auto)
+- Client must support MCP (Cursor, Codex, Claude Desktop, Qwen)
+
+**Honest truth:** Context persistence is **opt-in** via agent behavior, not **automatic** via client interception.
+
+### What This Means for You
+
+**Best case scenario:**
+- Agent follows rules consistently
+- Uses devctx tools for 50-80% of operations
+- Token usage drops 85-90%
+- Responses are faster and more accurate
+
+**Typical scenario:**
+- Agent uses devctx tools for complex tasks
+- Uses built-in tools for simple tasks
+- Token usage drops 60-80%
+- Noticeable improvement in efficiency
+
+**Worst case scenario:**
+- Agent ignores rules (rare but possible)
+- Uses built-in tools exclusively
+- Token usage unchanged
+- No harm done (MCP is passive)
+
+**You can check:** `npm run report:metrics` shows actual tool usage.
 
 ## Core Tools
 
@@ -265,60 +324,83 @@ Requires `.devctx-projects.json` config file.
 
 ## Installation
 
+### Minimal (Any Client)
+
 ```bash
-npm install smart-context-mcp
+npm install -g smart-context-mcp
 npx smart-context-init --target .
 ```
 
-**What this does:**
-1. Installs 12 MCP tools
-2. Generates agent rules (`.cursor/rules/devctx.mdc`, `AGENTS.md`, `CLAUDE.md`)
-3. Installs pre-commit hook (prevents `.devctx/` commits)
-4. Adds `.devctx/` to `.gitignore`
+Restart your AI client. Done.
 
-Restart your AI client. Tools and rules are immediately available.
-
-## Client Setup
+---
 
 ### Cursor
 
 ```bash
+npm install -g smart-context-mcp
 npx smart-context-init --target . --clients cursor
 ```
 
 Restart Cursor. Tools appear in Agent mode.
 
+**Files created:**
+- `.cursor/mcp.json` - MCP server config
+- `.cursor/rules/devctx.mdc` - Agent rules
+- `.git/hooks/pre-commit` - Safety hook
+- `.gitignore` - Adds `.devctx/`
+
+---
+
 ### Codex CLI
 
 ```bash
+npm install -g smart-context-mcp
 npx smart-context-init --target . --clients codex
 ```
 
-Codex reads `.codex/config.toml` on launch.
+Restart Codex.
 
-### Claude Code
+**Files created:**
+- `.codex/config.toml` - MCP server config
+- `AGENTS.md` - Agent rules
+- `.git/hooks/pre-commit` - Safety hook
+- `.gitignore` - Adds `.devctx/`
+
+---
+
+### Claude Desktop
 
 ```bash
+npm install -g smart-context-mcp
 npx smart-context-init --target . --clients claude
 ```
 
-Claude Code reads `.mcp.json` and `.claude/settings.json` for native hooks.
+Restart Claude Desktop.
+
+**Files created:**
+- `.mcp.json` - MCP server config
+- `.claude/settings.json` - Hook config
+- `CLAUDE.md` - Agent rules
+- `.git/hooks/pre-commit` - Safety hook
+- `.gitignore` - Adds `.devctx/`
+
+---
 
 ### Qwen Code
 
 ```bash
+npm install -g smart-context-mcp
 npx smart-context-init --target . --clients qwen
 ```
 
-Qwen Code reads `.qwen/settings.json`.
+Restart Qwen Code.
 
-### All clients
-
-```bash
-npx smart-context-init --target .
-```
-
-Generates configs for all supported clients.
+**Files created:**
+- `.qwen/settings.json` - MCP server config
+- `AGENTS.md` - Agent rules
+- `.git/hooks/pre-commit` - Safety hook
+- `.gitignore` - Adds `.devctx/`
 
 ## Agent Rules: The Secret Sauce
 
@@ -412,13 +494,22 @@ Runs all verification suites:
 
 Takes 2-3 minutes. See [Benchmark Documentation](./docs/verification/benchmark.md) for details.
 
-### View production metrics
+### Check it's working
 
 ```bash
 npm run report:metrics
 ```
 
-Example output:
+**Good signs:**
+- Tool usage > 0 (agent using devctx)
+- Savings 60-90% (compression working)
+- Multiple tools used (workflows followed)
+
+**Bad signs:**
+- Tool usage = 0 (agent not using devctx)
+- Check: Rules installed? MCP running? Task complexity?
+
+**Example output:**
 
 ```
 devctx metrics report
@@ -438,10 +529,91 @@ By tool:
 
 ```bash
 npm run verify  # Feature verification (14 tools)
-npm test        # Unit tests (421 tests)
+npm test        # Unit tests (435 tests)
 npm run eval    # Synthetic corpus
 npm run eval:self  # Real project
 ```
+
+## Troubleshooting
+
+### Agent not using devctx tools
+
+**Check:**
+```bash
+# 1. Rules installed?
+cat .cursor/rules/devctx.mdc
+
+# 2. MCP running?
+# Cursor: Settings → MCP → Check "smart-context" active
+
+# 3. Metrics show usage?
+npm run report:metrics
+```
+
+**Possible causes:**
+- Rules not installed → Run `npx smart-context-init --target .`
+- MCP not running → Restart client
+- Task too simple → Built-in tools sufficient (this is fine)
+- Agent in Ask mode → Read-only, no MCP access
+
+---
+
+### High token usage despite devctx
+
+**Check:**
+```bash
+npm run report:metrics
+```
+
+**Look for:**
+- Low tool usage (< 20% of operations)
+- High `full` mode usage (agent not cascading)
+- Low compression ratios (< 50%)
+
+**Possible causes:**
+- Agent not following workflows
+- Task doesn't benefit from compression
+- Rules unclear for this task type
+
+---
+
+### Context not persisting
+
+**Check:**
+```bash
+# 1. Node version (need 22+ for SQLite)
+node --version
+
+# 2. SQLite exists?
+ls -lh .devctx/state.sqlite
+
+# 3. Agent calling smart_turn?
+sqlite3 .devctx/state.sqlite "SELECT COUNT(*) FROM sessions"
+```
+
+**Possible causes:**
+- Node 18-20 → No SQLite (upgrade to 22+)
+- Agent not calling `smart_turn` → No persistence
+- Session ID mismatch → Can't recover
+
+---
+
+### Rules not applied
+
+**Check:**
+```bash
+cat .cursor/rules/devctx.mdc  # or AGENTS.md, CLAUDE.md
+```
+
+**If missing:**
+```bash
+npx smart-context-init --target .
+```
+
+**If exists but agent ignores:**
+- This is expected (rules are guidance, not enforcement)
+- Agent decides based on task
+- Check metrics to see actual usage
 
 ## Supported Languages
 

@@ -7,12 +7,61 @@ MCP server that reduces AI agent token usage by 90% with intelligent context com
 
 ## Installation
 
+### Cursor
 ```bash
-npm install smart-context-mcp
+npm install -g smart-context-mcp
+npx smart-context-init --target . --clients cursor
+```
+Restart Cursor. Done.
+
+### Codex CLI
+```bash
+npm install -g smart-context-mcp
+npx smart-context-init --target . --clients codex
+```
+Restart Codex. Done.
+
+### Claude Desktop
+```bash
+npm install -g smart-context-mcp
+npx smart-context-init --target . --clients claude
+```
+Restart Claude Desktop. Done.
+
+### Qwen Code
+```bash
+npm install -g smart-context-mcp
+npx smart-context-init --target . --clients qwen
+```
+Restart Qwen Code. Done.
+
+### All Clients
+```bash
+npm install -g smart-context-mcp
 npx smart-context-init --target .
 ```
+Restart your AI client. Done.
 
-Restart your AI client. Tools are immediately available.
+## How it Works in Practice
+
+**The reality:** This MCP does not intercept prompts automatically. Here's the actual flow:
+
+1. **You:** "Fix the login bug"
+2. **Agent reads rules:** Sees debugging workflow
+3. **Agent decides:** Uses `smart_search(intent=debug)`
+4. **MCP returns:** Ranked results (errors prioritized)
+5. **Agent continues:** Calls `smart_read(symbol)` for function
+6. **Agent fixes:** Makes changes
+7. **Agent verifies:** Calls `smart_shell('npm test')`
+8. **Agent checkpoints:** Calls `smart_turn(end)`
+
+**Key points:**
+- ✅ Agent **chooses** to use devctx tools (not forced)
+- ✅ Rules **guide** the agent (not enforce)
+- ✅ Agent can use built-in tools when appropriate
+- ✅ Token savings: 85-90% on complex tasks
+
+Check actual usage: `npm run report:metrics`
 
 ## What it does
 
