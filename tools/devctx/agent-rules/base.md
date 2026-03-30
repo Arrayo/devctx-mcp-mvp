@@ -1,5 +1,31 @@
 # Base Agent Rules (Always Active)
 
+## Preflight (First Time in Project)
+
+**First time in project?** Run `build_index` to enable search/context quality.
+
+Without index:
+- `smart_search` has no ranking data
+- `smart_context` has no symbol graph
+- Quality degraded, agent may prefer native tools
+
+With index:
+- `smart_search` ranks by relevance
+- `smart_context` builds optimal context
+- 90% token savings enabled
+
+**Recommended flow for new projects:**
+```
+1. build_index (one-time setup)
+2. smart_turn(start) (begin work)
+3. smart_context/smart_search (use tools)
+4. smart_turn(end) (checkpoint progress)
+```
+
+---
+
+## Tool Preference
+
 Prefer devctx MCP for non-trivial tasks:
 - `smart_read(outline|signatures|symbol)` instead of Read → 90% savings
 - `smart_search(intent=...)` instead of Grep → ranked results

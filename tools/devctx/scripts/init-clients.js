@@ -375,7 +375,9 @@ const updatePreCommitHook = (targetDir, dryRun) => {
 // Agent rules — instruct agents to prefer devctx tools over built-in ones
 // ---------------------------------------------------------------------------
 
-const agentRuleBody = `Prefer devctx MCP for non-trivial tasks:
+const agentRuleBody = `**First time in project?** Run build_index to enable search/context quality.
+
+Prefer devctx MCP for non-trivial tasks:
 - smart_read(outline|signatures|symbol) instead of Read → 90% savings
 - smart_search(intent=...) instead of Grep → ranked results
 - smart_context instead of multiple reads → one-call builder

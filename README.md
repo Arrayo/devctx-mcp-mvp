@@ -35,11 +35,48 @@ This MCP solves all three by providing tools that return compressed, ranked, and
 
 ## Recommended Workflow
 
+### ⚠️ Preflight: Build Index First
+
+**Before using devctx tools for the first time in a project:**
+
+```bash
+# The agent can call this tool directly, or you can run:
+npm run build-index
+# or tell the agent: "Run build_index tool"
+```
+
+**Why this matters:**
+
+Without index:
+- ❌ `smart_search` has no ranking data → returns unranked results
+- ❌ `smart_context` has no symbol graph → can't build optimal context
+- ❌ Quality degraded → agent may prefer native tools → no token savings
+
+With index:
+- ✅ `smart_search` ranks by relevance → finds errors/tests/config fast
+- ✅ `smart_context` builds optimal context → includes related files
+- ✅ 90% token savings enabled → full value proposition
+
+**When to run:**
+- ✅ First time in project (after install)
+- ✅ After major refactors (file moves, renames)
+- ✅ After adding many new files
+- ❌ Not needed for every session (index persists in `.devctx/`)
+
+**How agents know:**
+- Base rule says: "First time in project? Run build_index"
+- Feedback rule can say: "devctx not used because: index not built"
+
+---
+
 ### The Entry Point: `smart_turn(start)`
 
 For **non-trivial tasks** (debugging, review, refactor, testing, architecture), the optimal flow is:
 
 ```
+0. build_index (if first time in project)
+   ↓ enables search ranking and context quality
+   
 1. smart_turn(start, userPrompt, ensureSession=true)
    ↓ recovers previous context, classifies task, checks repo safety
    
@@ -884,24 +921,31 @@ To use devctx next time: "Use smart-context-mcp: smart_turn(start) → ..."
 
 See [agent-rules/](./tools/devctx/agent-rules/) for complete profiles.
 
-## Recommended Workflow
+## Getting Started
 
-### Day 1: Core tools only
+### Day 1: Install + Build Index (Critical)
 
-1. **Install and build index:**
+1. **Install:**
    ```bash
    npm install smart-context-mcp
    npx smart-context-init --target .
-   npm run build-index
    ```
 
-2. **Use core tools:**
+2. **Build index (REQUIRED for quality):**
+   ```bash
+   npm run build-index
+   # or tell agent: "Run build_index tool"
+   ```
+   
+   **Why critical:** Without index, `smart_search` and `smart_context` are degraded. Agent may prefer native tools. No token savings.
+
+3. **Use core tools:**
    - `smart_read` for file structure
    - `smart_search` for finding code
    - `smart_context` for comprehensive context
    - `smart_metrics` to verify savings
 
-3. **Let the agent decide:** Don't force tool usage. The generated rules will guide the agent naturally.
+4. **Let the agent decide:** Don't force tool usage. The generated rules will guide the agent naturally.
 
 ### After 1 week: Add advanced tools
 

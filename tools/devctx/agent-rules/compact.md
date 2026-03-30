@@ -1,5 +1,7 @@
 # devctx Agent Rules (Compact)
 
+**First time in project?** Run `build_index` to enable search/context quality.
+
 Prefer devctx MCP for non-trivial tasks:
 - `smart_read(outline|signatures|symbol)` instead of Read → 90% savings
 - `smart_search(intent=...)` instead of Grep → ranked results

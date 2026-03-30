@@ -16,6 +16,19 @@ All notable changes to this project will be documented in this file.
   - New doc: `docs/agent-rules/base-rule-reduction.md` with analysis and verification steps
 
 ### Added
+- **Preflight Visibility (build_index Prominence):**
+  - New preflight line in base rule: "First time in project? Run build_index to enable search/context quality."
+  - New README section: "⚠️ Preflight: Build Index First" with clear without/with comparison
+  - Updated workflow: Added Step 0 (build_index) before Step 1 (smart_turn)
+  - Changed "Day 1" to "Getting Started" with emphasis on index being REQUIRED for quality
+  - Without index: smart_search has no ranking, smart_context has no graph, quality degraded, agent prefers native tools
+  - With index: ranked search, optimal context, 90% token savings enabled
+  - Impact: Prevents most common setup failure, ensures quality from first use
+  - Fixed context cost: +1 line (13 → 14 lines, still 66% smaller than original 42 lines)
+  - Goal: Make index build impossible to miss, prevent quality degradation, maximize token savings
+  - Updated: `.cursor/rules/devctx.mdc`, `tools/devctx/agent-rules/base.md`, `tools/devctx/agent-rules/compact.md`, `tools/devctx/scripts/init-clients.js`, `README.md`
+  - New doc: `docs/agent-rules/preflight-visibility.md` with rationale, scenarios, and expected behavior
+
 - **Feedback When devctx Not Used:**
   - New rule: Agent adds note when not using devctx tools in non-trivial programming tasks
   - Feedback format: "Note: devctx not used because: [reason]. To use devctx next time: [prompt]"
@@ -26,7 +39,6 @@ All notable changes to this project will be documented in this file.
   - Goal: Maximize adoption by making ignoring devctx rare, visible, and easy to correct
   - Updated: `.cursor/rules/devctx.mdc`, `tools/devctx/agent-rules/base.md`, `tools/devctx/agent-rules/compact.md`, `tools/devctx/scripts/init-clients.js`
   - New doc: `docs/agent-rules/feedback-when-not-used.md` with rationale, examples, and expected behavior
-
 
 - **Security Rejection Examples:**
   - New test file: `tests/smart-shell-security.test.js` with 60+ security tests
