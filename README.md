@@ -14,6 +14,15 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 - 3,666 operations across development of this project
 - Compression ratios: 3x to 46x depending on tool
 
+**Workflow-level savings:**
+- Debugging: 150K → 15K tokens (90% savings)
+- Code Review: 200K → 25K tokens (87% savings)
+- Refactoring: 180K → 20K tokens (89% savings)
+- Testing: 120K → 12K tokens (90% savings)
+- Architecture: 300K → 30K tokens (90% savings)
+
+See [Workflow Metrics](./docs/workflow-metrics.md) for complete workflows.
+
 ## Why it exists
 
 AI agents waste tokens in three ways:
@@ -886,6 +895,24 @@ npm run report:metrics
 
 ---
 
+### Enable Workflow Tracking
+
+To track complete workflows (debugging, review, refactor, testing, architecture):
+
+```bash
+export DEVCTX_WORKFLOW_TRACKING=true
+```
+
+Then restart your AI client. View workflow metrics:
+
+```bash
+npm run report:workflows -- --summary
+```
+
+See [Workflow Metrics](./docs/workflow-metrics.md) for details.
+
+---
+
 ### High token usage despite devctx
 
 **Check:**
@@ -1076,6 +1103,7 @@ export DEVCTX_CACHE_WARMING=false
 - [Benchmark](./docs/verification/benchmark.md) - Reproducible benchmark
 - [E2E Test Report](./docs/verification/e2e-test-report.md) - Production usage analysis
 - [Verification Report](./docs/verification/verification-report.md) - Feature verification
+- [Workflow Metrics](./docs/workflow-metrics.md) - Complete workflow savings
 
 ### Development
 - [Architecture](./ARCHITECTURE.md) - Repository structure and development guide

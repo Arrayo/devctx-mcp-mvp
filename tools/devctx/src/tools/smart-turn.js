@@ -205,6 +205,7 @@ const startTurn = async ({
       })
     : null;
 
+
   return {
     phase: 'start',
     promptPreview: truncate(prompt, MAX_PROMPT_PREVIEW),

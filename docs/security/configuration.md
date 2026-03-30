@@ -57,6 +57,28 @@ export DEVCTX_METRICS_READONLY=true
 **Impact:**
 - Metrics not persisted to SQLite
 - `smart_metrics` returns empty results
+
+---
+
+### `DEVCTX_WORKFLOW_TRACKING`
+
+Enable workflow-level metrics tracking (opt-in).
+
+```bash
+export DEVCTX_WORKFLOW_TRACKING=true
+```
+
+**When to use:**
+- Production deployments
+- Measuring real-world savings
+- Benchmarking workflows
+
+**Impact:**
+- Tracks complete task workflows (debugging, review, refactor, testing, architecture)
+- Calculates savings vs realistic baselines
+- Enables `npm run report:workflows`
+
+**Overhead:** Minimal (SQLite writes on `smart_turn` start/end)
 - Context prediction disabled
 
 ---

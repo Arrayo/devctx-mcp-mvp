@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Workflow Metrics System:**
+  - Track token savings for complete task workflows (debugging, review, refactor, testing, architecture)
+  - Auto-detect workflow type from session goal and tools used
+  - Calculate savings vs realistic baselines (150K-300K tokens per workflow type)
+  - New `workflow_metrics` table in SQLite (migration v5)
+  - New `npm run report:workflows` command with `--summary`, `--type`, `--session`, `--json` options
+  - Opt-in via `DEVCTX_WORKFLOW_TRACKING=true` environment variable
+  - Auto-tracking when agent uses `smart_turn(start)` and `smart_turn(end)`
+  - Workflow summary by type with avg savings, duration, steps
+  - Comprehensive docs/workflow-metrics.md with baselines, examples, and limitations
+  - Example workflow tracking in docs/examples/workflow-tracking-example.md
+  - Baselines: Debugging (150K), Code Review (200K), Refactoring (180K), Testing (120K), Architecture (300K)
+  - Expected savings: 87-90% per workflow type, 98%+ vs baseline
+  - 16 new tests for workflow detection and baseline calculation
 - **Client Compatibility Matrix & Recommended Modes:**
   - Created comprehensive docs/client-compatibility.md
   - Compatibility matrix comparing all 4 clients

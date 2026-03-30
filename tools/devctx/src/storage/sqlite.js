@@ -5,7 +5,7 @@ import path from 'node:path';
 import { projectRoot } from '../utils/runtime-config.js';
 
 export const STATE_DB_FILENAME = 'state.sqlite';
-export const SQLITE_SCHEMA_VERSION = 4;
+export const SQLITE_SCHEMA_VERSION = 5;
 export const ACTIVE_SESSION_SCOPE = 'project';
 export const EXPECTED_TABLES = [
   'active_session',
@@ -16,6 +16,7 @@ export const EXPECTED_TABLES = [
   'session_events',
   'sessions',
   'summary_cache',
+  'workflow_metrics',
 ];
 
 const MIGRATIONS = [
@@ -143,6 +144,34 @@ const MIGRATIONS = [
         ON context_access(file_path, timestamp DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_context_access_session
         ON context_access(session_id, timestamp DESC)`,
+    ],
+  },
+  {
+    version: 5,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS workflow_metrics (
+        workflow_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_type TEXT NOT NULL,
+        session_id TEXT,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        duration_ms INTEGER,
+        tools_used_json TEXT NOT NULL DEFAULT '[]',
+        steps_count INTEGER NOT NULL DEFAULT 0,
+        raw_tokens INTEGER NOT NULL DEFAULT 0,
+        compressed_tokens INTEGER NOT NULL DEFAULT 0,
+        saved_tokens INTEGER NOT NULL DEFAULT 0,
+        savings_pct REAL NOT NULL DEFAULT 0,
+        baseline_tokens INTEGER NOT NULL DEFAULT 0,
+        vs_baseline_pct REAL NOT NULL DEFAULT 0,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE SET NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_workflow_metrics_type_created
+        ON workflow_metrics(workflow_type, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_workflow_metrics_session
+        ON workflow_metrics(session_id, created_at DESC)`,
     ],
   },
 ];

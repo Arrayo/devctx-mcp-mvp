@@ -61,7 +61,9 @@ Restart your AI client. Done.
 - ✅ Agent can use built-in tools when appropriate
 - ✅ Token savings: 85-90% on complex tasks
 
-Check actual usage: `npm run report:metrics`
+Check actual usage:
+- `npm run report:metrics` - Tool-level savings
+- `npm run report:workflows` - Workflow-level savings (requires `DEVCTX_WORKFLOW_TRACKING=true`)
 
 ## What it does
 

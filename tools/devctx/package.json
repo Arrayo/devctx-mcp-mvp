@@ -30,7 +30,8 @@
     "scripts/devctx-server.js",
     "scripts/headless-wrapper.js",
     "scripts/init-clients.js",
-    "scripts/report-metrics.js"
+    "scripts/report-metrics.js",
+    "scripts/report-workflow-metrics.js"
   ],
   "engines": {
     "node": ">=18"
@@ -58,7 +59,8 @@
     "eval:both": "node ./evals/harness.js --tool=both",
     "eval:self": "node ./evals/harness.js --root=../.. --corpus=./evals/corpus/self-tasks.json",
     "eval:report": "node ./evals/report.js",
-    "report:metrics": "node ./scripts/report-metrics.js"
+    "report:metrics": "node ./scripts/report-metrics.js",
+    "report:workflows": "node ./scripts/report-workflow-metrics.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
