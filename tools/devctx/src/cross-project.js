@@ -1,9 +1,3 @@
-/**
- * Cross-project context for monorepos and related projects.
- * 
- * Enables context sharing across multiple related codebases.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadIndex } from './index.js';
@@ -13,12 +7,6 @@ import { projectRoot } from './utils/paths.js';
 
 const CROSS_PROJECT_CONFIG_FILE = '.devctx-projects.json';
 
-/**
- * Load cross-project configuration.
- * 
- * @param {string} root - Project root
- * @returns {object|null} Configuration or null if not found
- */
 export const loadCrossProjectConfig = (root = projectRoot) => {
   const configPath = path.join(root, CROSS_PROJECT_CONFIG_FILE);
   
@@ -34,12 +22,6 @@ export const loadCrossProjectConfig = (root = projectRoot) => {
   }
 };
 
-/**
- * Discover related projects from config.
- * 
- * @param {string} root - Project root
- * @returns {Array<object>} Array of { name, path, type, description }
- */
 export const discoverRelatedProjects = (root = projectRoot) => {
   const config = loadCrossProjectConfig(root);
   if (!config?.projects) return [];
@@ -68,13 +50,6 @@ export const discoverRelatedProjects = (root = projectRoot) => {
   return projects;
 };
 
-/**
- * Search across multiple related projects.
- * 
- * @param {string} query - Search query
- * @param {object} options - Search options
- * @returns {Promise<Array>} Results from all projects
- */
 export const searchAcrossProjects = async (query, options = {}) => {
   const {
     root = projectRoot,
@@ -125,13 +100,6 @@ export const searchAcrossProjects = async (query, options = {}) => {
   return results;
 };
 
-/**
- * Read files from multiple projects.
- * 
- * @param {Array<object>} fileRefs - Array of { project, file, mode }
- * @param {string} root - Project root
- * @returns {Promise<Array>} Read results
- */
 export const readAcrossProjects = async (fileRefs, root = projectRoot) => {
   const relatedProjects = discoverRelatedProjects(root);
   const projectMap = new Map(relatedProjects.map(p => [p.name, p]));
@@ -176,13 +144,6 @@ export const readAcrossProjects = async (fileRefs, root = projectRoot) => {
   return results;
 };
 
-/**
- * Find symbol definitions across projects.
- * 
- * @param {string} symbolName - Symbol to find
- * @param {string} root - Project root
- * @returns {Promise<Array>} Symbol locations across projects
- */
 export const findSymbolAcrossProjects = async (symbolName, root = projectRoot) => {
   const relatedProjects = discoverRelatedProjects(root).filter(p => p.hasIndex);
   const results = [];
@@ -220,12 +181,6 @@ export const findSymbolAcrossProjects = async (symbolName, root = projectRoot) =
   return results;
 };
 
-/**
- * Get dependency graph across projects.
- * 
- * @param {string} root - Project root
- * @returns {object} Cross-project dependency graph
- */
 export const getCrossProjectDependencies = (root = projectRoot) => {
   const relatedProjects = discoverRelatedProjects(root).filter(p => p.hasIndex);
   const dependencies = {
@@ -273,12 +228,6 @@ export const getCrossProjectDependencies = (root = projectRoot) => {
   return dependencies;
 };
 
-/**
- * Get statistics about cross-project usage.
- * 
- * @param {string} root - Project root
- * @returns {object} Usage statistics
- */
 export const getCrossProjectStats = (root = projectRoot) => {
   const relatedProjects = discoverRelatedProjects(root);
   const deps = getCrossProjectDependencies(root);
@@ -303,12 +252,6 @@ export const getCrossProjectStats = (root = projectRoot) => {
   return stats;
 };
 
-/**
- * Create a sample cross-project configuration.
- * 
- * @param {string} root - Project root
- * @returns {object} Sample configuration
- */
 export const createSampleConfig = (root = projectRoot) => {
   return {
     version: '1.0',

@@ -1918,7 +1918,8 @@ describe('indexFreshness detects stale files', () => {
 // smart_context
 // ---------------------------------------------------------------------------
 
-import { smartContext, inferIntent, extractSearchQueries, extractSymbolCandidates, getChangedFiles, allocateReads } from '../src/tools/smart-context.js';
+import { smartContext, getChangedFiles, allocateReads } from '../src/tools/smart-context.js';
+import { inferIntent, extractSearchQueries, extractSymbolCandidates } from '../src/utils/query-extraction.js';
 
 describe('smart_context response contract', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');

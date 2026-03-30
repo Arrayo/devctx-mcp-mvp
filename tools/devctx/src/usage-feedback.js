@@ -1,52 +1,28 @@
-/**
- * Usage feedback system - tracks devctx tool usage in current session
- * and provides visible feedback to users about what tools were used and tokens saved.
- * 
- * ENABLED BY DEFAULT - disable with: DEVCTX_SHOW_USAGE=false
- * 
- * Shows feedback after every devctx tool call to ensure visibility.
- * User can explicitly disable if they find it too verbose.
- */
-
 const sessionUsage = {
-  tools: new Map(), // toolName -> { count, savedTokens }
+  tools: new Map(),
   totalSavedTokens: 0,
-  enabled: true, // Changed: enabled by default
+  enabled: true,
   totalToolCalls: 0,
 };
 
-/**
- * Check if usage feedback is enabled
- * 
- * Priority:
- * 1. Explicit env var (DEVCTX_SHOW_USAGE=true/false)
- * 2. Default: ENABLED (changed from disabled)
- */
 export const isFeedbackEnabled = () => {
   const envValue = process.env.DEVCTX_SHOW_USAGE?.toLowerCase();
   
-  // Explicit enable
   if (envValue === 'true' || envValue === '1' || envValue === 'yes') {
     sessionUsage.enabled = true;
     return true;
   }
   
-  // Explicit disable
   if (envValue === 'false' || envValue === '0' || envValue === 'no') {
     sessionUsage.enabled = false;
     return false;
   }
   
-  // Default: ENABLED (changed)
   sessionUsage.enabled = true;
   return true;
 };
 
-/**
- * Record tool usage for feedback
- */
 export const recordToolUsage = ({ tool, savedTokens = 0, target = null }) => {
-  // Increment total tool calls (for onboarding mode)
   sessionUsage.totalToolCalls += 1;
   
   if (!isFeedbackEnabled()) return;
@@ -60,24 +36,18 @@ export const recordToolUsage = ({ tool, savedTokens = 0, target = null }) => {
   sessionUsage.totalSavedTokens += savedTokens;
 };
 
-/**
- * Get current session usage stats
- */
 export const getSessionUsage = () => {
   return {
     tools: Array.from(sessionUsage.tools.entries()).map(([tool, stats]) => ({
       tool,
       count: stats.count,
       savedTokens: stats.savedTokens,
-      targets: stats.targets.slice(-3), // Last 3 targets only
+      targets: stats.targets.slice(-3),
     })),
     totalSavedTokens: sessionUsage.totalSavedTokens,
   };
 };
 
-/**
- * Format usage feedback as markdown
- */
 export const formatUsageFeedback = () => {
   if (!isFeedbackEnabled()) return '';
   
@@ -118,19 +88,13 @@ export const formatUsageFeedback = () => {
   return lines.join('\n');
 };
 
-/**
- * Reset session usage (for testing or manual reset)
- */
 export const resetSessionUsage = () => {
   sessionUsage.tools.clear();
   sessionUsage.totalSavedTokens = 0;
   sessionUsage.totalToolCalls = 0;
-  sessionUsage.enabled = true; // Reset to default (enabled)
+  sessionUsage.enabled = true;
 };
 
-/**
- * Format token count for display
- */
 const formatTokens = (tokens) => {
   if (tokens >= 1000000) {
     return `${(tokens / 1000000).toFixed(1)}M tokens`;
@@ -141,9 +105,6 @@ const formatTokens = (tokens) => {
   return `${tokens} tokens`;
 };
 
-/**
- * Truncate target path for display
- */
 const truncateTarget = (target) => {
   if (!target) return '';
   if (target.length <= 40) return target;
