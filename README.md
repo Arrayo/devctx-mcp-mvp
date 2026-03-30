@@ -188,7 +188,7 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - Agent follows rules consistently
 - Uses devctx tools for 50-80% of operations
 - Token usage drops 85-90%
-- Responses are faster and more focused on relevant context
+- Responses are often faster and more context-efficient
 
 **Typical scenario:**
 - Agent uses devctx tools for complex tasks
@@ -216,8 +216,11 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - ❌ Agent will always be correct
 - ❌ Responses will be perfect
 - ❌ Tasks will always succeed
+- ❌ Responses will be "more accurate" (accuracy depends on agent, not just context)
 
 **The benefit:** Agents work with better input, but output quality still depends on agent capability and task complexity.
+
+**Honest claim:** We provide **better context**, which **can** improve response quality in complex tasks when the agent follows the workflow. Token savings are well-documented (90%); quality improvement is inferred but not explicitly measured.
 
 ---
 

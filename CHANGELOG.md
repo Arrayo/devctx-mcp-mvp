@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **Quality Claim Final Matization:**
+  - Changed "Responses are faster and more focused on relevant context" to "Responses are often faster and more context-efficient"
+  - Added qualifier "often" to acknowledge variability (not always)
+  - Changed "focused" to "context-efficient" (more precise, describes mechanism)
+  - Added explicit disclaimer: "Responses will NOT be 'more accurate' (accuracy depends on agent, not just context)"
+  - Added honest claim: "We provide better context, which CAN improve response quality in complex tasks when the agent follows the workflow"
+  - Separated proven (token savings 90%) from inferred (quality improvement)
+  - Goal: Manage expectations, reduce risk of disappointment, align marketing with evidence
+  - Updated: `README.md` (best case scenario wording, "What 'Better Context' Means" section)
+  - New doc: `docs/agent-rules/quality-claim-final-matization.md` with evolution analysis and rationale
+
 - **Base Rule Reduction (76% smaller):**
   - Reduced base rule from 42 lines to 10 lines (76% reduction in fixed context cost)
   - Moved all task-specific workflows to conditional profiles in `.cursor/rules/profiles-compact/`
