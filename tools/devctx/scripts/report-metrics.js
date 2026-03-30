@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { smartMetrics } from '../src/tools/smart-metrics.js';
+import { formatAdoptionReport } from '../src/analytics/adoption.js';
 
 const requireValue = (argv, index, flag) => {
   const value = argv[index + 1];
@@ -87,6 +88,10 @@ const printHuman = (report) => {
     console.log(
       `  ${tool.tool.padEnd(14)} count=${formatNumber(tool.count)} raw=${formatNumber(tool.rawTokens)} final=${formatNumber(tool.compressedTokens)} saved=${formatNumber(tool.savedTokens)} (${tool.savingsPct}%)`
     );
+  }
+  
+  if (report.adoption) {
+    console.log(formatAdoptionReport(report.adoption));
   }
 };
 

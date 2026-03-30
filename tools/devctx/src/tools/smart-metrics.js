@@ -14,6 +14,7 @@ import {
   readMetricsEntries,
   resolveMetricsInput,
 } from '../metrics.js';
+import { analyzeAdoption } from '../analytics/adoption.js';
 
 const WINDOW_MS = {
   '24h': 24 * 60 * 60 * 1000,
@@ -197,6 +198,8 @@ export const smartMetrics = async ({
       .filter((entry) => (tool ? entry.tool === tool : true))
       .filter((entry) => (resolvedSessionId ? entry.sessionId === resolvedSessionId : true));
 
+    const adoption = analyzeAdoption(filteredEntries);
+    
     return {
       filePath: resolved.storagePath,
       storagePath: resolved.storagePath,
@@ -212,6 +215,7 @@ export const smartMetrics = async ({
       },
       invalidLines,
       summary: aggregateMetrics(filteredEntries),
+      adoption,
       latestEntries: buildLatestEntries(filteredEntries, latest),
     };
   }
@@ -229,6 +233,8 @@ export const smartMetrics = async ({
     window,
   });
 
+  const adoption = analyzeAdoption(entries);
+  
   return {
     filePath: resolved.storagePath,
     storagePath: resolved.storagePath,
@@ -244,6 +250,7 @@ export const smartMetrics = async ({
     },
     invalidLines,
     summary: aggregateMetrics(entries),
+    adoption,
     latestEntries: buildLatestEntries(entries, latest),
   };
 };

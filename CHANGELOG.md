@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Adoption Metrics (Experimental):**
+  - New adoption analytics to measure how often devctx is actually used in practice
+  - Analyzes sessions with/without devctx tools, adoption rate by inferred complexity
+  - Tracks tool usage count, average tools per session, token savings when used
+  - Integrated into `npm run report:metrics` output
+  - Honest limitations: complexity inferred (not actual), can't measure feedback or forcing prompts
+  - New module: `src/analytics/adoption.js` with `analyzeAdoption()` and `formatAdoptionReport()`
+  - New tests: `tests/adoption-analytics.test.js` (9 tests covering all scenarios)
+  - Updated: `src/tools/smart-metrics.js` to include adoption analysis
+  - Updated: `scripts/report-metrics.js` to display adoption report
+  - Updated: `README.md` with adoption metrics section and example output
+  - New doc: `docs/adoption-metrics-design.md` with complete design rationale
+  - Goal: Complement compression metrics with usage metrics, verify rules are working
+  - Limitations: Can only measure when devctx IS used (tool calls visible), not when ignored
+
 - **Adoption Improvements Phase 2:**
   - Added "Quick Start: Which Client Should I Use?" table in README with automaticity levels and recommendations
   - Added "How to Force devctx Usage" section with official prompts (complete + ultra-short)

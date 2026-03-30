@@ -1073,7 +1073,70 @@ By tool:
   smart_search   count=692  saved=5,817,485 (95.45%)
   smart_read     count=2108 saved=2,355,809 (70.52%)
   smart_summary  count=449  saved=1,897,628 (97.89%)
+
+Adoption Analysis (Inferred from Tool Usage)
+
+Total sessions:        156
+Sessions with devctx:  89 (57%)
+Sessions without:      67 (43%)
+
+Non-Trivial Tasks Only:
+Total:                 112
+With devctx:           78 (70%)
+Without devctx:        34 (30%)
+
+By Inferred Complexity:
+- complex      56/68 (82%)
+- moderate     25/52 (48%)
+- simple       8/36 (22%)
+
+When devctx IS used:
+Avg tools/session:     2.8
+Avg token savings:     146,337 tokens
+
+Top Tools Used:
+- smart_read            89 sessions
+- smart_search          67 sessions
+- smart_context         45 sessions
+
+Limitations:
+- Complexity inferred from operation count (not actual task complexity)
+- Can only measure when devctx IS used (tool calls visible)
+- Cannot measure feedback shown or forcing prompts (requires agent cooperation)
+- Sessions without devctx may be simple tasks (not adoption failures)
 ```
+
+### Adoption Metrics (Experimental)
+
+The metrics report now includes **adoption analysis** to measure how often devctx is actually used.
+
+**What we measure:**
+- ✅ Sessions with devctx tool usage (automatic, from tool calls)
+- ✅ Adoption rate overall and by inferred complexity
+- ✅ Top tools used per session
+- ✅ Average token savings when devctx is used
+
+**What we DON'T measure:**
+- ❌ Feedback frequency (requires agent to report it)
+- ❌ Feedback reasons (requires agent cooperation)
+- ❌ Forcing prompt usage (can't detect from metrics)
+- ❌ Actual task complexity (only inferred from operation count)
+
+**Limitations:**
+- Complexity is inferred (operation count), not actual
+- Can only measure when devctx IS used (tool calls visible)
+- Can't detect non-usage unless agent reports it
+- Sessions without devctx may be simple tasks (not failures)
+
+**Why this is useful:**
+- See if devctx is being adopted in practice
+- Identify patterns (complex tasks → higher adoption)
+- Verify rules and onboarding are working
+- Complement compression metrics with usage metrics
+
+See [Adoption Metrics Design](./docs/adoption-metrics-design.md) for complete analysis.
+
+---
 
 ### Quick verification
 
