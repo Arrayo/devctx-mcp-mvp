@@ -453,14 +453,23 @@ Add to `.gitignore`:
 
 ## Documentation
 
+### Features
 - [Streaming Progress](./docs/features/streaming.md) - Real-time progress notifications
 - [Context Prediction](./docs/features/context-prediction.md) - Intelligent file prediction
 - [Diff-Aware Context](./docs/features/diff-aware.md) - Smart change analysis
 - [Cache Warming](./docs/features/cache-warming.md) - Cold-start optimization
 - [Git Blame](./docs/features/git-blame.md) - Code attribution
 - [Cross-Project Context](./docs/features/cross-project.md) - Multi-project support
-- [E2E Test Report](./docs/verification/e2e-test-report.md) - End-to-end test results
+
+### Verification
+- [Benchmark](./docs/verification/benchmark.md) - Reproducible benchmark
+- [E2E Test Report](./docs/verification/e2e-test-report.md) - Production usage analysis
 - [Verification Report](./docs/verification/verification-report.md) - Feature verification
+
+### Development
+- [Architecture](./ARCHITECTURE.md) - Repository structure and development guide
+- [Contributing](./CONTRIBUTING.md) - How to contribute
+- [Changelog](./CHANGELOG.md) - Version history
 
 ## API Reference
 
@@ -612,12 +621,36 @@ Add to `.gitignore`:
 
 See individual CHANGELOG files for detailed changes.
 
+## Repository Structure
+
+This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
+
+```
+/
+├── tools/devctx/          ← Publishable package
+│   ├── src/               ← Source code
+│   ├── tests/             ← 421 unit tests
+│   ├── scripts/           ← CLI binaries
+│   └── package.json       ← Package metadata
+├── docs/                  ← Documentation (GitHub only)
+├── .github/workflows/     ← CI/CD
+└── README.md              ← This file
+```
+
+**What gets published to npm:** Only `tools/devctx/` contents (src + scripts)
+
+**Development:** All work happens in `tools/devctx/`
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup.
+
 ## Contributing
 
 Pull requests welcome for:
 - Additional language parsers
 - Performance optimizations
 - Bug fixes
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
 
 ## Author
 
