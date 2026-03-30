@@ -443,13 +443,14 @@ Add to `.gitignore`:
 
 ## Documentation
 
-- [STREAMING.md](./STREAMING.md) - Real-time progress notifications
-- [CONTEXT-PREDICTION.md](./CONTEXT-PREDICTION.md) - Intelligent file prediction
-- [DIFF-AWARE.md](./DIFF-AWARE.md) - Smart change analysis
-- [CACHE-WARMING.md](./CACHE-WARMING.md) - Cold-start optimization
-- [GIT-BLAME.md](./GIT-BLAME.md) - Code attribution
-- [CROSS-PROJECT.md](./CROSS-PROJECT.md) - Multi-project support
-- [E2E-TEST-REPORT.md](./E2E-TEST-REPORT.md) - End-to-end test results
+- [Streaming Progress](./docs/features/streaming.md) - Real-time progress notifications
+- [Context Prediction](./docs/features/context-prediction.md) - Intelligent file prediction
+- [Diff-Aware Context](./docs/features/diff-aware.md) - Smart change analysis
+- [Cache Warming](./docs/features/cache-warming.md) - Cold-start optimization
+- [Git Blame](./docs/features/git-blame.md) - Code attribution
+- [Cross-Project Context](./docs/features/cross-project.md) - Multi-project support
+- [E2E Test Report](./docs/verification/e2e-test-report.md) - End-to-end test results
+- [Verification Report](./docs/verification/verification-report.md) - Feature verification
 
 ## API Reference
 

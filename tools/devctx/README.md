@@ -206,12 +206,12 @@ Add to `.gitignore`:
 
 Full documentation in [GitHub repository](https://github.com/Arrayo/smart-context-mcp):
 
-- [STREAMING.md](https://github.com/Arrayo/smart-context-mcp/blob/main/STREAMING.md) - Progress notifications
-- [CONTEXT-PREDICTION.md](https://github.com/Arrayo/smart-context-mcp/blob/main/CONTEXT-PREDICTION.md) - File prediction
-- [DIFF-AWARE.md](https://github.com/Arrayo/smart-context-mcp/blob/main/DIFF-AWARE.md) - Change analysis
-- [CACHE-WARMING.md](https://github.com/Arrayo/smart-context-mcp/blob/main/CACHE-WARMING.md) - Cold-start optimization
-- [GIT-BLAME.md](https://github.com/Arrayo/smart-context-mcp/blob/main/GIT-BLAME.md) - Code attribution
-- [CROSS-PROJECT.md](https://github.com/Arrayo/smart-context-mcp/blob/main/CROSS-PROJECT.md) - Multi-project support
+- [Streaming Progress](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/features/streaming.md) - Progress notifications
+- [Context Prediction](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/features/context-prediction.md) - File prediction
+- [Diff-Aware Context](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/features/diff-aware.md) - Change analysis
+- [Cache Warming](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/features/cache-warming.md) - Cold-start optimization
+- [Git Blame](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/features/git-blame.md) - Code attribution
+- [Cross-Project Context](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/features/cross-project.md) - Multi-project support
 
 ## Links
 

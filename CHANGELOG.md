@@ -1,0 +1,122 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [1.1.0] - 2026-03-29
+
+### Added
+
+- **Cache Warming**: Preload frequently accessed files into OS cache for 5x faster cold start
+  - `warm_cache` tool with automatic frequency analysis
+  - SQLite-based access tracking
+  - Configurable via `DEVCTX_CACHE_WARMING` and `DEVCTX_WARM_FILES`
+  - See [docs/features/cache-warming.md](./docs/features/cache-warming.md)
+
+- **Symbol-Level Git Blame**: Function-level code attribution
+  - `git_blame` tool with multiple modes (symbol, file, author, recent)
+  - Primary author detection with contribution percentages
+  - Multi-contributor tracking
+  - See [docs/features/git-blame.md](./docs/features/git-blame.md)
+
+- **Cross-Project Context**: Share context across monorepos and microservices
+  - `cross_project` tool with search, read, symbol, and dependency modes
+  - `.devctx-projects.json` configuration support
+  - Cross-project dependency graph
+  - See [docs/features/cross-project.md](./docs/features/cross-project.md)
+
+- **Repository Metadata**: Updated all URLs to point to `Arrayo/smart-context-mcp`
+
+- **Documentation**: Refactored README for clarity with Core vs Advanced tool separation
+
+### Changed
+
+- Incremented package version to 1.1.0
+- Reorganized documentation into `/docs` structure
+
+### Fixed
+
+- All tests passing (421 tests)
+- End-to-end feature verification working
+
+## [1.0.4] - 2026-03-28
+
+### Added
+
+- **Streaming Progress Notifications**: Real-time updates for long-running operations
+  - Progress reporting for indexing, cache warming, and batch operations
+  - See [docs/features/streaming.md](./docs/features/streaming.md)
+
+- **Diff-Aware Context**: Intelligent git change analysis
+  - Analyze diffs vs HEAD, branches, or tags
+  - Prioritize changes by impact (high/medium/low)
+  - Expand context with related files (tests, importers, dependencies)
+  - Symbol-level change detection
+  - See [docs/features/diff-aware.md](./docs/features/diff-aware.md)
+
+- **Context Prediction**: Learn from usage patterns and predict needed files
+  - Jaccard similarity-based pattern matching
+  - Automatic file prediction after 3+ similar tasks
+  - 40-60% fewer round-trips, 15-20% additional token savings
+  - See [docs/features/context-prediction.md](./docs/features/context-prediction.md)
+
+### Changed
+
+- SQLite schema version updated to 4 (added `context_access` table)
+- Improved test coverage and CI pipeline compatibility
+
+## [1.0.3] - 2026-03-27
+
+### Added
+
+- Session management with `smart_summary`
+- Turn orchestration with `smart_turn`
+- Batch file reading with `smart_read_batch`
+
+### Changed
+
+- Migrated from JSONL to SQLite for state management (Node 22+)
+- Improved metrics tracking and reporting
+
+## [1.0.2] - 2026-03-26
+
+### Added
+
+- Symbol index with `build_index`
+- Graph-based context expansion
+- Intent-aware search ranking
+
+### Changed
+
+- Enhanced `smart_context` with graph relationships
+- Improved parser support for multiple languages
+
+## [1.0.1] - 2026-03-25
+
+### Added
+
+- `smart_shell` for safe command execution
+- `smart_metrics` for usage inspection
+
+### Fixed
+
+- Various bug fixes and performance improvements
+
+## [1.0.0] - 2026-03-24
+
+### Added
+
+- Initial release with core tools:
+  - `smart_read`: Compressed file reading
+  - `smart_search`: Intent-aware code search
+  - `smart_context`: One-call context builder
+- Multi-client support (Cursor, Codex, Claude Code, Qwen)
+- Automatic client configuration generation
+- Real-time metrics tracking
+
+---
+
+For detailed changes per feature, see:
+- [Diff-Aware Context](./docs/changelog/diff-aware.md)
+- [Cache Warming](./docs/changelog/cache-warming.md)
+- [Git Blame](./docs/changelog/git-blame.md)
+- [Cross-Project Context](./docs/changelog/cross-project.md)
