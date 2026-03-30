@@ -12,6 +12,7 @@ import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
 import { predictContextFiles, recordContextAccess } from '../context-patterns.js';
 import { recordToolUsage } from '../usage-feedback.js';
+import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { 
   getDetailedDiff, 
   analyzeChangeImpact, 
@@ -1237,6 +1238,23 @@ export const smartContext = async ({
     tool: 'smart_context',
     savedTokens,
     target: task,
+  });
+  
+  // Record decision explanation
+  let reason = DECISION_REASONS.TASK_CONTEXT;
+  if (diff) {
+    reason = DECISION_REASONS.DIFF_ANALYSIS;
+  } else if (context.some(c => c.role === 'caller' || c.role === 'test')) {
+    reason = DECISION_REASONS.RELATED_FILES;
+  }
+  
+  recordDecision({
+    tool: 'smart_context',
+    action: `build context for "${task}"`,
+    reason,
+    alternative: 'Multiple smart_read + smart_search calls',
+    expectedBenefit: `${EXPECTED_BENEFITS.TOKEN_SAVINGS(savedTokens)}, ${EXPECTED_BENEFITS.COMPLETE_CONTEXT}`,
+    context: `${context.length} files, ${totalCompressedTokens} tokens (${savingsPct}% compression)`,
   });
 
   if (prefetch && context.length > 0) {

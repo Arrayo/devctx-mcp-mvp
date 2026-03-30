@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Decision Explainer System:**
+  - New decision explainer provides transparency into agent decision-making
+  - Explains why devctx tools were used, what alternatives were considered, and expected benefits
+  - Enable with `export DEVCTX_EXPLAIN=true`
+  - Tracks smart_read, smart_search, smart_context, smart_shell, smart_summary
+  - Shows reasoning: "Why was smart_read used instead of Read?"
+  - Shows expected benefits: "~45.0K tokens saved"
+  - Shows context: "2500 lines, 50000 tokens → 5000 tokens"
+  - Predefined reasons for consistency (LARGE_FILE, INTENT_AWARE, TASK_CONTEXT, etc.)
+  - Predefined benefits for consistency (TOKEN_SAVINGS, BETTER_RANKING, COMPLETE_CONTEXT, etc.)
+  - Session-scoped tracking (resets on MCP server restart)
+  - New module: `src/decision-explainer.js` with tracking and formatting functions
+  - New tests: `tests/decision-explainer.test.js` (11 tests covering all scenarios)
+  - Integrated into all major tools after `persistMetrics()`
+  - New doc: `docs/decision-explainer.md` with complete guide
+  - Updated: `README.md` and `tools/devctx/README.md` with decision explainer section and examples
+  - Goal: Provide transparency to understand agent decisions, learn best practices, debug tool selection
+  - Benefits: Understand why tools were chosen, learn when to use which tool, validate agent behavior
+  - Disabled by default to avoid verbose output
+  - Can combine with usage feedback for maximum visibility
+
 - **Real-Time Usage Feedback:**
   - New usage feedback system provides immediate visibility into devctx tool usage
   - Shows which tools were used, call counts, and tokens saved at end of agent responses

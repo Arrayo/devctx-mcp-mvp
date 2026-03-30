@@ -5,6 +5,7 @@ import { buildMetrics, persistMetrics } from '../metrics.js';
 import { projectRoot } from '../utils/paths.js';
 import { pickRelevantLines, truncate, uniqueLines } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
+import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 
 const execFile = promisify(execFileCallback);
 const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
@@ -228,6 +229,22 @@ export const smartShell = async ({ command }) => {
     tool: 'smart_shell',
     savedTokens: metrics.savedTokens,
     target: command,
+  });
+  
+  // Record decision explanation
+  const outputLines = rawText.split('\n').length;
+  let reason = DECISION_REASONS.COMMAND_OUTPUT;
+  if (shouldPrioritizeRelevant && relevant) {
+    reason = DECISION_REASONS.RELEVANT_LINES;
+  }
+  
+  recordDecision({
+    tool: 'smart_shell',
+    action: `execute "${command}"`,
+    reason,
+    alternative: 'Shell (uncompressed output)',
+    expectedBenefit: EXPECTED_BENEFITS.TOKEN_SAVINGS(metrics.savedTokens),
+    context: `${outputLines} lines → ${compressedText.split('\n').length} lines (relevant only)`,
   });
 
   const result = {

@@ -147,6 +147,34 @@ npm run report:metrics
 
 Shows adoption analysis + token savings over time.
 
+### Decision Explanations (Optional)
+
+Understand **why** the agent chose devctx tools:
+
+```bash
+export DEVCTX_EXPLAIN=true
+```
+
+You'll see explanations like:
+
+```markdown
+🤖 **Decision explanations:**
+
+**smart_read** (read server.js (outline mode))
+- **Why:** File is large (2500 lines), outline mode extracts structure only
+- **Instead of:** Read (full file)
+- **Expected benefit:** ~45.0K tokens saved
+
+**smart_search** (search "bug" (intent: debug))
+- **Why:** Intent-aware search prioritizes relevant results
+- **Expected benefit:** Better result ranking
+```
+
+**When to use:**
+- Learning how devctx works
+- Debugging tool selection
+- Understanding best practices
+
 ## Core Tools
 
 ### smart_read

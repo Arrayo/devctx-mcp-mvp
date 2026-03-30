@@ -2,6 +2,7 @@ import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
 import { enforceRepoSafety, getRepoSafety } from '../repo-safety.js';
 import { recordToolUsage } from '../usage-feedback.js';
+import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import {
   ACTIVE_SESSION_SCOPE,
   SQLITE_SCHEMA_VERSION,
@@ -1218,6 +1219,15 @@ export const smartSummary = async ({
           tool: 'smart_summary',
           savedTokens: summaryMetrics.savedTokens || 0,
           target: targetSessionId,
+        });
+        
+        recordDecision({
+          tool: 'smart_summary',
+          action: `get checkpoint "${targetSessionId}"`,
+          reason: DECISION_REASONS.RESUME,
+          alternative: 'Start from scratch (lose context)',
+          expectedBenefit: EXPECTED_BENEFITS.SESSION_RECOVERY,
+          context: `Recovered ${compressed.goal ? 'goal' : 'state'}, ${compressed.status || 'unknown'} status`,
         });
       }
 

@@ -10,6 +10,7 @@ import { projectRoot } from '../utils/paths.js';
 import { truncate } from '../utils/text.js';
 import { countTokens } from '../tokenCounter.js';
 import { recordToolUsage } from '../usage-feedback.js';
+import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 
 const execFile = promisify(execFileCb);
 import { summarizeGo, summarizeRust, summarizeJava, summarizeShell, summarizeTerraform, summarizeDockerfile, summarizeSql, extractGoSymbol, extractRustSymbol, extractJavaSymbol, summarizeCsharp, extractCsharpSymbol, summarizeKotlin, extractKotlinSymbol, summarizePhp, extractPhpSymbol, summarizeSwift, extractSwiftSymbol } from './smart-read/additional-languages.js';
@@ -460,6 +461,28 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     tool: 'smart_read',
     savedTokens: metrics.savedTokens,
     target: path.relative(projectRoot, fullPath),
+  });
+  
+  // Record decision explanation
+  const lineCount = content.split('\n').length;
+  let reason = DECISION_REASONS.LARGE_FILE;
+  let expectedBenefit = EXPECTED_BENEFITS.TOKEN_SAVINGS(metrics.savedTokens);
+  
+  if (mode === 'symbol') {
+    reason = DECISION_REASONS.SYMBOL_EXTRACTION;
+  } else if (validBudget && effectiveMode !== mode) {
+    reason = DECISION_REASONS.TOKEN_BUDGET;
+  } else if (lineCount < 100) {
+    reason = `File is small (${lineCount} lines), but using ${effectiveMode} mode for consistency`;
+  }
+  
+  recordDecision({
+    tool: 'smart_read',
+    action: `read ${path.relative(projectRoot, fullPath)} (${effectiveMode} mode)`,
+    reason,
+    alternative: 'Read (full file)',
+    expectedBenefit,
+    context: `${lineCount} lines, ${metrics.rawTokens} tokens → ${metrics.compressedTokens} tokens`,
   });
 
   const confidence = { parser, truncated, cached: cacheHit && !contextResult };

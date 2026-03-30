@@ -1185,6 +1185,57 @@ See [Usage Feedback Documentation](./docs/usage-feedback.md) for complete guide.
 
 ---
 
+### Decision Explanations (New!)
+
+Understand **why** the agent chose devctx tools and what benefits are expected.
+
+**Enable:**
+```bash
+export DEVCTX_EXPLAIN=true
+```
+
+**What you'll see:**
+```markdown
+---
+
+🤖 **Decision explanations:**
+
+**smart_read** (read src/server.js (outline mode))
+- **Why:** File is large (2500 lines), outline mode extracts structure only
+- **Instead of:** Read (full file)
+- **Expected benefit:** ~45.0K tokens saved
+- **Context:** 2500 lines, 50000 tokens → 5000 tokens
+
+**smart_search** (search "authentication" (intent: debug))
+- **Why:** Intent-aware search prioritizes relevant results
+- **Instead of:** Grep (unranked results)
+- **Expected benefit:** ~12.0K tokens saved, Better result ranking
+
+*To disable: `export DEVCTX_EXPLAIN=false`*
+```
+
+**Benefits:**
+- ✅ Understand agent decision-making
+- ✅ Learn when to use which tool
+- ✅ Debug tool selection issues
+- ✅ Validate agent is making good choices
+
+**When to use:**
+- Learning how devctx works
+- Debugging why certain tools were chosen
+- Validating agent behavior
+- Understanding best practices
+
+**Combine with usage feedback** for maximum visibility:
+```bash
+export DEVCTX_SHOW_USAGE=true
+export DEVCTX_EXPLAIN=true
+```
+
+See [Decision Explainer Documentation](./docs/decision-explainer.md) for complete guide.
+
+---
+
 ### Quick verification
 
 ```bash

@@ -9,6 +9,7 @@ import { projectRoot } from '../utils/paths.js';
 import { isBinaryBuffer, isDockerfile, resolveSafePath } from '../utils/fs.js';
 import { truncate } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
+import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -388,6 +389,24 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     tool: 'smart_search',
     savedTokens: metrics.savedTokens,
     target: query,
+  });
+  
+  // Record decision explanation
+  let reason = DECISION_REASONS.MULTIPLE_FILES;
+  if (validIntent) {
+    reason = DECISION_REASONS.INTENT_AWARE;
+  }
+  if (indexHits && indexHits.size > 0) {
+    reason = DECISION_REASONS.INDEX_BOOST;
+  }
+  
+  recordDecision({
+    tool: 'smart_search',
+    action: `search "${query}"${validIntent ? ` (intent: ${validIntent})` : ''}`,
+    reason,
+    alternative: 'Grep (unranked results)',
+    expectedBenefit: `${EXPECTED_BENEFITS.TOKEN_SAVINGS(metrics.savedTokens)}, ${EXPECTED_BENEFITS.BETTER_RANKING}`,
+    context: `${dedupedMatches.length} matches in ${groups.length} files, ranked by relevance`,
   });
 
   let retrievalConfidence = 'high';
