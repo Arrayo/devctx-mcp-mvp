@@ -1142,9 +1142,18 @@ See [Adoption Metrics Design](./docs/adoption-metrics-design.md) for complete an
 
 Get **immediate visibility** into devctx tool usage in every agent response.
 
-**Enable:**
+**Auto-enabled during onboarding:**
+- Feedback shows automatically for your first 10 tool calls
+- Helps you verify devctx is working
+- Auto-disables after onboarding to reduce noise
+
+**Manual control:**
 ```bash
+# Keep it enabled permanently
 export DEVCTX_SHOW_USAGE=true
+
+# Disable it immediately
+export DEVCTX_SHOW_USAGE=false
 ```
 
 **What you'll see:**
@@ -1157,7 +1166,7 @@ export DEVCTX_SHOW_USAGE=true
 
 **Total saved:** ~57.0K tokens
 
-*To disable: `export DEVCTX_SHOW_USAGE=false`*
+*Onboarding mode: showing for 3 more tool calls. To keep: `export DEVCTX_SHOW_USAGE=true`*
 ```
 
 **Benefits:**

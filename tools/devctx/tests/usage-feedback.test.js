@@ -8,12 +8,25 @@ import {
   resetSessionUsage,
 } from '../src/usage-feedback.js';
 
-test('usage feedback - disabled by default', () => {
+test('usage feedback - enabled by default in onboarding mode', () => {
   delete process.env.DEVCTX_SHOW_USAGE;
   resetSessionUsage();
   
+  // First call: onboarding mode active
+  assert.equal(isFeedbackEnabled(), true);
+  
+  // Record 9 tool calls (still under threshold of 10)
+  for (let i = 0; i < 9; i++) {
+    recordToolUsage({ tool: 'smart_read', savedTokens: 1000 });
+  }
+  
+  assert.equal(isFeedbackEnabled(), true);
+  
+  // 10th call: reaches threshold
+  recordToolUsage({ tool: 'smart_read', savedTokens: 1000 });
+  
+  // After threshold: auto-disabled
   assert.equal(isFeedbackEnabled(), false);
-  assert.equal(formatUsageFeedback(), '');
 });
 
 test('usage feedback - enabled with DEVCTX_SHOW_USAGE=true', () => {
@@ -140,14 +153,34 @@ test('usage feedback - resets session usage', () => {
   assert.equal(usage.totalSavedTokens, 0);
 });
 
-test('usage feedback - does not record when disabled', () => {
+test('usage feedback - explicit disable overrides onboarding', () => {
   process.env.DEVCTX_SHOW_USAGE = 'false';
   resetSessionUsage();
+  
+  // Even in onboarding mode, explicit disable wins
+  assert.equal(isFeedbackEnabled(), false);
   
   recordToolUsage({ tool: 'smart_read', savedTokens: 1000, target: 'file.js' });
   
   const usage = getSessionUsage();
   assert.equal(usage.tools.length, 0);
+});
+
+test('usage feedback - explicit enable overrides onboarding threshold', () => {
+  process.env.DEVCTX_SHOW_USAGE = 'true';
+  resetSessionUsage();
+  
+  // Record 20 tool calls (over threshold)
+  for (let i = 0; i < 20; i++) {
+    recordToolUsage({ tool: 'smart_read', savedTokens: 1000 });
+  }
+  
+  // Still enabled because explicit
+  assert.equal(isFeedbackEnabled(), true);
+  
+  const usage = getSessionUsage();
+  assert.equal(usage.tools.length, 1);
+  assert.equal(usage.tools[0].count, 20);
 });
 
 test('usage feedback - sorts tools by count descending', () => {

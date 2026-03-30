@@ -62,7 +62,8 @@ Restart your AI client. Done.
 - ✅ Token savings: 85-90% on complex tasks
 
 Check actual usage:
-- `npm run report:metrics` - Tool-level savings
+- **Real-time feedback** - See usage immediately (enable with `export DEVCTX_SHOW_USAGE=true`)
+- `npm run report:metrics` - Tool-level savings + adoption analysis
 - `npm run report:workflows` - Workflow-level savings (requires `DEVCTX_WORKFLOW_TRACKING=true`)
 
 ## What it does
@@ -101,6 +102,50 @@ Installation generates rules that teach agents optimal workflows:
 ## Real Metrics
 
 Production usage: **14.5M tokens → 1.6M tokens** (89.87% reduction)
+
+## Verify It's Working
+
+### Real-Time Feedback (Auto-enabled for First 10 Calls)
+
+Feedback is **automatically enabled** for your first 10 tool calls (onboarding mode), then auto-disables.
+
+**To keep it enabled permanently:**
+```bash
+export DEVCTX_SHOW_USAGE=true
+```
+
+**To disable immediately:**
+```bash
+export DEVCTX_SHOW_USAGE=false
+```
+
+You'll see at the end of agent responses:
+
+```markdown
+---
+
+📊 **devctx usage this session:**
+- **smart_read**: 3 calls | ~45.0K tokens saved (file1.js, file2.js, file3.js)
+- **smart_search**: 1 call | ~12.0K tokens saved (query)
+
+**Total saved:** ~57.0K tokens
+
+*Onboarding mode: showing for 3 more tool calls. To keep: `export DEVCTX_SHOW_USAGE=true`*
+```
+
+**Why this is useful:**
+- ✅ Verify agent is following rules
+- ✅ See token savings in real-time
+- ✅ Debug adoption issues instantly
+- ✅ Validate forcing prompts worked
+
+### Historical Metrics
+
+```bash
+npm run report:metrics
+```
+
+Shows adoption analysis + token savings over time.
 
 ## Core Tools
 

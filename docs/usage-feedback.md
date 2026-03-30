@@ -12,26 +12,41 @@ The usage feedback system provides **real-time visibility** into devctx tool usa
 
 ## How It Works
 
-### 1. Enable Feedback
+### 1. Automatic Onboarding Mode
 
-Set the environment variable:
+Feedback is **automatically enabled** for your first 10 tool calls.
+
+**Why:** Helps new users verify devctx is working without manual configuration.
+
+**What happens:**
+- First 10 tool calls → feedback shown
+- After 10 calls → auto-disables to reduce noise
+- Message shows: `*Onboarding mode: showing for N more tool calls*`
+
+### 2. Manual Control (Optional)
+
+Override onboarding behavior:
 
 ```bash
+# Keep feedback enabled permanently
 export DEVCTX_SHOW_USAGE=true
+
+# Disable immediately (skip onboarding)
+export DEVCTX_SHOW_USAGE=false
 ```
 
 Or in your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```bash
-# Enable devctx usage feedback
+# Enable devctx usage feedback permanently
 export DEVCTX_SHOW_USAGE=true
 ```
 
-### 2. Use devctx Tools
+### 3. Use devctx Tools
 
 When the agent uses devctx tools (`smart_read`, `smart_search`, `smart_context`, etc.), usage is automatically tracked.
 
-### 3. See Feedback
+### 4. See Feedback
 
 At the end of the agent's response, you'll see:
 
@@ -84,7 +99,16 @@ Tools are sorted by call count (most used first).
 
 ## Configuration
 
-### Enable
+### Onboarding Mode (Default)
+
+**Automatically enabled** for first 10 tool calls, then auto-disables.
+
+**Why:**
+- New users see feedback immediately (verify it works)
+- Experienced users don't see noise after onboarding
+- Best of both worlds: helpful initially, quiet later
+
+### Manual Enable
 
 ```bash
 export DEVCTX_SHOW_USAGE=true
@@ -94,17 +118,27 @@ export DEVCTX_SHOW_USAGE=1
 export DEVCTX_SHOW_USAGE=yes
 ```
 
-### Disable
+**Effect:** Feedback always shown, even after 10+ tool calls.
+
+### Manual Disable
 
 ```bash
 export DEVCTX_SHOW_USAGE=false
 # or
+export DEVCTX_SHOW_USAGE=0
+# or
+export DEVCTX_SHOW_USAGE=no
+# or
 unset DEVCTX_SHOW_USAGE
 ```
 
-### Default
+**Effect:** Feedback never shown, even during onboarding.
 
-**Disabled by default** to avoid noise for users who don't need it.
+### Priority
+
+1. **Explicit env var** (`DEVCTX_SHOW_USAGE=true/false`) → overrides everything
+2. **Onboarding mode** (first 10 calls) → auto-enable
+3. **Default** → disabled after onboarding
 
 ## Use Cases
 
