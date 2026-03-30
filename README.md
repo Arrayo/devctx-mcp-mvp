@@ -662,19 +662,84 @@ Requires `.devctx-projects.json` config file.
 
 ## Client Compatibility
 
-| Feature | Cursor | Claude Desktop | Codex CLI | Qwen Code |
-|---------|--------|----------------|-----------|-----------|
-| **MCP Support** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **Conditional Rules** | ✅ Yes | ❌ No | ❌ No | ❌ No |
-| **Native Hooks** | ❌ No | ✅ Yes | ❌ No | ❌ No |
-| **Task Checkpoints** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
-| **Automaticity** | Medium | High | Low-Medium | Low-Medium |
-| **Fixed Context Cost** | Low (150t) | Medium (200t) | Medium (200t) | Medium (200t) |
+| Client | MCP | Rules | Hooks | `smart_turn` | Persistence | Near-Automatic | Key Limitations |
+|--------|-----|-------|-------|--------------|-------------|----------------|-----------------|
+| **Cursor** | ✅ Full | ✅ Conditional<br>(`.cursor/rules/*.mdc`) | ❌ No | ✅ Manual call | ✅ SQLite<br>(Node 22+) | 🟡 **Medium**<br>Agent decides when | • No auto `smart_turn`<br>• Agent must follow rules<br>• Requires Agent mode |
+| **Claude Desktop** | ✅ Full | ✅ Embedded<br>(`CLAUDE.md`) | ✅ SessionStart<br>PostToolUse<br>Stop | ✅ Can auto-trigger<br>via hooks | ✅ SQLite<br>(Node 22+) | 🟢 **High**<br>Hooks auto-trigger | • Hooks are opt-in<br>• No conditional rules<br>• Fixed context: 200t |
+| **Codex CLI** | ✅ Full | ✅ Embedded<br>(`AGENTS.md`) | ❌ No | ✅ Manual call | ✅ SQLite<br>(Node 22+) | 🟡 **Low-Medium**<br>Agent decides when | • No auto `smart_turn`<br>• No conditional rules<br>• No hooks |
+| **Qwen Code** | ✅ Full | ✅ Embedded<br>(`AGENTS.md`) | ❌ No | ✅ Manual call | ✅ SQLite<br>(Node 22+) | 🟡 **Low-Medium**<br>Agent decides when | • No auto `smart_turn`<br>• No conditional rules<br>• No hooks |
 
-**Recommended mode by client:**
-- **Cursor:** Best for complex tasks with conditional workflows (low context cost)
-- **Claude Desktop:** Best for session-aware workflows with hooks (closest to automatic)
-- **Codex/Qwen:** Best for lightweight, medium-sized tasks
+**Legend:**
+- 🟢 High: Hooks can auto-trigger tools at specific moments
+- 🟡 Medium/Low: Agent reads rules and decides when to use tools
+- ✅ Supported | ⚠️ Partial | ❌ Not supported
+
+---
+
+### What "Near-Automatic" Means
+
+**🟢 High (Claude Desktop with hooks):**
+- Hooks can auto-trigger `smart_turn(start)` when you start a session
+- Hooks can auto-checkpoint after significant tool use
+- Agent still decides which devctx tools to use for each task
+- **This is the closest to "automatic" behavior available**
+
+**🟡 Medium (Cursor):**
+- Agent reads base rules automatically (always active, 150 tokens)
+- Conditional profiles activate based on file globs (debugging, review, etc.)
+- Agent decides when to use devctx tools based on task
+- Agent must manually call `smart_turn` (not auto-triggered)
+
+**🟡 Low-Medium (Codex, Qwen):**
+- Agent reads embedded rules automatically (always active, 200 tokens)
+- Agent decides when to use devctx tools based on task
+- Agent must manually call `smart_turn` (not auto-triggered)
+- No conditional activation or hooks
+
+---
+
+### What "Near-Automatic" Does NOT Mean
+
+❌ **Not automatic prompt interception** - MCP cannot intercept or modify your prompts before the agent sees them  
+❌ **Not forced tool usage** - Agent always has autonomy to decide which tools to use  
+❌ **Not guaranteed workflow** - Agent may skip devctx tools for simple tasks (this is fine)  
+❌ **Not client-level magic** - Behavior depends on agent following rules and making good decisions
+
+---
+
+### The Reality
+
+**All clients work the same way:**
+1. Agent reads rules (guidance about when devctx tools are useful)
+2. Agent decides tool usage (autonomy to choose best approach)
+3. MCP provides tools (passive, only responds when called)
+4. You verify with metrics (`npm run report:metrics`)
+
+**The differences:**
+- **Hooks** (Claude Desktop) can auto-trigger specific tools at specific moments (e.g., `smart_turn(start)` on session start)
+- **Conditional rules** (Cursor) reduce fixed context cost and activate task-specific profiles when relevant
+- **Embedded rules** (Codex, Qwen) are simple, always active, and work everywhere
+
+---
+
+### Which Client Should I Use?
+
+**Choose Cursor if:**
+- ✅ You want lowest fixed context cost (150 tokens base + 120 tokens profile when active)
+- ✅ You work on complex, multi-file tasks (debugging, refactoring, architecture)
+- ✅ You want conditional rules that activate based on file patterns
+
+**Choose Claude Desktop if:**
+- ✅ You want closest to "automatic" behavior (hooks can auto-trigger `smart_turn`)
+- ✅ You want session-aware workflows with automatic checkpointing
+- ✅ You're okay with opt-in hook configuration
+
+**Choose Codex or Qwen if:**
+- ✅ You want simple, embedded rules (no separate config files)
+- ✅ You prefer lightweight setup (single `AGENTS.md` file)
+- ✅ You're okay with manual `smart_turn` calls and no conditional activation
+
+**Bottom line:** All clients work well. The choice depends on your preference for automation level vs simplicity.
 
 See [Client Compatibility Guide](./docs/client-compatibility.md) for detailed comparison.
 

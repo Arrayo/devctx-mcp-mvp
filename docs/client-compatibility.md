@@ -1,13 +1,19 @@
 # Client Compatibility & Recommended Modes
 
-## Compatibility Matrix
+> **Quick Overview:** See the [Compatibility Matrix](../README.md#client-compatibility) in the main README for a comprehensive comparison table with limitations and decision guidance.
+
+This document provides detailed information about each client's capabilities, installation, and recommended workflows.
+
+---
+
+## Compatibility Matrix (Detailed)
 
 | Feature | Cursor | Claude Desktop | Codex CLI | Qwen Code |
 |---------|--------|----------------|-----------|-----------|
 | **MCP Support** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
 | **Agent Rules** | ✅ `.cursor/rules/*.mdc` | ✅ `CLAUDE.md` | ✅ `AGENTS.md` | ✅ `AGENTS.md` |
 | **Conditional Rules** | ✅ Globs + context | ❌ No | ❌ No | ❌ No |
-| **Native Hooks** | ❌ No | ✅ SessionStart, PostToolUse | ❌ No | ❌ No |
+| **Native Hooks** | ❌ No | ✅ SessionStart, PostToolUse, Stop | ❌ No | ❌ No |
 | **Task Checkpoints** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
 | **Auto smart_turn** | ❌ Agent decides | ⚠️ Via hooks (opt-in) | ❌ Agent decides | ❌ Agent decides |
 | **Node 22+ (SQLite)** | ✅ Recommended | ✅ Recommended | ✅ Recommended | ✅ Recommended |
@@ -17,6 +23,8 @@
 - ✅ Full support
 - ⚠️ Partial support or fallback
 - ❌ Not supported
+
+**For a more comprehensive matrix with "Near-Automatic" levels and key limitations, see the [main README](../README.md#client-compatibility).**
 
 ---
 

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Enhanced Compatibility Matrix:**
+  - Added comprehensive 8-column matrix to README with "Near-Automatic" levels and key limitations
+  - New columns: MCP, Rules, Hooks, `smart_turn`, Persistence, Near-Automatic, Key Limitations
+  - Added "What Near-Automatic Means" explanation section
+  - Added "What It Does NOT Mean" clarification (no prompt interception, no forced usage)
+  - Added "Which Client Should I Use?" decision guide
+  - Updated docs/client-compatibility.md to reference main README matrix
+  - New doc: docs/compatibility-matrix-design.md with design rationale
+  - Goal: Make client differences explicit, avoid ambiguity, facilitate adoption decisions
+
 ### Changed
 - **Quality Claim Matization:**
   - Replaced "Responses are faster and more accurate" with "Responses are faster and more focused on relevant context"
