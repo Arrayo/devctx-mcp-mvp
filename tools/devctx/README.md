@@ -16,7 +16,9 @@ Restart your AI client. Tools are immediately available.
 
 ## What it does
 
-Replaces inefficient file reading and searching with 12 specialized tools:
+Provides **two key components**:
+
+### 1. Specialized Tools (12 tools)
 
 | Tool | Purpose | Savings |
 |------|---------|---------|
@@ -32,6 +34,18 @@ Replaces inefficient file reading and searching with 12 specialized tools:
 | `warm_cache` | File preloading (5x faster cold start) | - |
 | `git_blame` | Function-level code attribution | - |
 | `cross_project` | Multi-project context | - |
+
+### 2. Agent Rules (Task-Specific Guidance)
+
+Installation generates rules that teach agents optimal workflows:
+
+**Debugging:** `smart_search(intent=debug)` → `smart_read(symbol)` → fix (90% savings)  
+**Code Review:** `smart_context(diff=true)` → `smart_read(signatures)` → review (87% savings)  
+**Refactoring:** `smart_context(entryFile)` → `smart_read(signatures)` → refactor (89% savings)  
+**Testing:** `smart_search(intent=tests)` → `smart_read(symbol)` → write test (90% savings)  
+**Architecture:** `smart_context(detail=minimal)` → `smart_read(signatures)` → analyze (90% savings)
+
+**Key insight:** The value isn't just in the tools—it's in teaching agents **when** and **how** to use them.
 
 ## Real Metrics
 

@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Agent Rules as Core Product Feature:**
+  - Task-specific workflow profiles (debugging, code review, refactoring, testing, architecture)
+  - Compact core rules auto-generated during installation
+  - Detailed profile documentation in `tools/devctx/agent-rules/`
+  - Design rationale document explaining rule philosophy
+  - README for agent rules explaining structure and usage
+- Agent rules now highlight **when** and **how** to use tools, not just what they do
+- Token savings quantified per profile (87-90% reduction)
+
 ### Security
 - Enhanced command validation with dangerous pattern detection (`rm -rf`, `sudo`, `curl|`, `eval`)
 - Added `DEVCTX_SHELL_DISABLED` environment variable to disable shell execution
@@ -19,11 +29,14 @@ All notable changes to this project will be documented in this file.
 - Security sections added to both READMEs
 
 ### Changed
+- Agent rules refactored from verbose to compact, workflow-oriented format
+- Rules now organized by task type (debugging, review, refactor, test, architecture)
 - `smart_read` now returns error objects instead of throwing exceptions
 - `smart_read_batch` continues processing after individual file errors
 - Command length limited to 500 characters
 - `git blame` added to allowed git subcommands
 - `eval` added to allowed npm script patterns
+- Both READMEs updated to highlight agent rules as key differentiator
 
 ## [1.1.0] - 2026-03-29
 

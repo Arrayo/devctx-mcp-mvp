@@ -26,13 +26,31 @@ This MCP solves all three by providing tools that return compressed, ranked, and
 
 ## How it works
 
-This MCP exposes tools that AI agents can call. The agent decides when to use them based on:
+This MCP provides **two key components**:
 
-- Your prompts and questions
-- Agent rules generated during installation (`.cursor/rules`, `AGENTS.md`, etc.)
-- The agent's own reasoning about what information it needs
+### 1. Specialized Tools (12 tools)
 
-**Important:** The MCP cannot force the agent to always use these tools. It provides better options, and the generated rules encourage their use, but the agent makes the final decision. Think of it as offering a faster, cheaper path that the agent will usually prefer.
+Efficient alternatives to built-in operations:
+- `smart_read` - Compressed file reading (outline, signatures, symbol modes)
+- `smart_search` - Intent-aware code search with ranking
+- `smart_context` - One-call context builder with graph expansion
+- `smart_shell` - Safe diagnostic command execution
+- And 8 more advanced tools
+
+### 2. Agent Rules (Task-Specific Guidance)
+
+Installation generates rules that guide agents to:
+- **Prefer compressed reads** - `outline` before `full` (90% savings)
+- **Use intent-aware search** - `smart_search(intent=debug)` for errors
+- **Recover context** - `smart_turn` for session persistence
+- **Follow task workflows** - Debugging, review, refactor, testing, architecture
+
+**Files created:**
+- `.cursor/rules/devctx.mdc` (Cursor)
+- `AGENTS.md` (Codex, Qwen)
+- `CLAUDE.md` (Claude Desktop)
+
+**Important:** Rules are **guidance**, not enforcement. The agent decides when to use devctx tools based on your prompts, task complexity, and its own reasoning. Think of it as offering a faster, cheaper path that the agent will usually prefer.
 
 ## Core Tools
 
@@ -252,7 +270,13 @@ npm install smart-context-mcp
 npx smart-context-init --target .
 ```
 
-Restart your AI client. Tools are immediately available.
+**What this does:**
+1. Installs 12 MCP tools
+2. Generates agent rules (`.cursor/rules/devctx.mdc`, `AGENTS.md`, `CLAUDE.md`)
+3. Installs pre-commit hook (prevents `.devctx/` commits)
+4. Adds `.devctx/` to `.gitignore`
+
+Restart your AI client. Tools and rules are immediately available.
 
 ## Client Setup
 
@@ -295,6 +319,49 @@ npx smart-context-init --target .
 ```
 
 Generates configs for all supported clients.
+
+## Agent Rules: The Secret Sauce
+
+What makes this MCP different is **task-specific agent guidance**. Installation generates rules that teach agents optimal workflows:
+
+### Debugging Profile
+```
+smart_turn(start) → smart_search(intent=debug) → smart_read(symbol) → 
+smart_shell('npm test') → fix → smart_turn(end)
+```
+**Savings:** 90% (150K → 15K tokens)
+
+### Code Review Profile
+```
+smart_turn(start) → smart_context(diff=true) → smart_read(signatures) → 
+review → smart_turn(end)
+```
+**Savings:** 87% (200K → 25K tokens)
+
+### Refactoring Profile
+```
+smart_turn(start) → smart_context(entryFile) → smart_read(signatures) → 
+refactor → smart_shell('npm test') → smart_turn(end)
+```
+**Savings:** 89% (180K → 20K tokens)
+
+### Testing Profile
+```
+smart_turn(start) → smart_search(intent=tests) → smart_read(symbol) → 
+write test → smart_shell('npm test') → smart_turn(end)
+```
+**Savings:** 90% (120K → 12K tokens)
+
+### Architecture Profile
+```
+smart_turn(start) → smart_context(detail=minimal) → smart_read(signatures) → 
+analyze → smart_turn(end)
+```
+**Savings:** 90% (300K → 30K tokens)
+
+**Key insight:** The value isn't just in the tools—it's in teaching agents **when** and **how** to use them.
+
+See [agent-rules/](./tools/devctx/agent-rules/) for complete profiles.
 
 ## Recommended Workflow
 

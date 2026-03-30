@@ -559,14 +559,14 @@ describe('devctx-init agent rules', () => {
     assert.match(cursorRule, /alwaysApply: true/);
     assert.match(cursorRule, /smart_read/);
     assert.match(cursorRule, /smart_turn/);
-    assert.match(cursorRule, /phase=end/);
+    assert.match(cursorRule, /smart_turn\(end/);
     assert.match(cursorRule, /repoSafety/);
 
     const agentsMd = await fsp.readFile(path.join(tmpDir, 'AGENTS.md'), 'utf8');
     assert.match(agentsMd, /devctx:start/);
     assert.match(agentsMd, /smart_read/);
     assert.match(agentsMd, /smart_turn/);
-    assert.match(agentsMd, /phase=end/);
+    assert.match(agentsMd, /smart_turn\(end/);
 
     const claudeMd = await fsp.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
     assert.match(claudeMd, /devctx:start/);
