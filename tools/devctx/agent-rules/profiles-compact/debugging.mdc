@@ -9,7 +9,7 @@ globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**"]
 
 ```
 1. smart_turn(start, userPrompt, ensureSession=true)
-   → Recovers: "Last worked on auth, checked validateToken()"
+   → Recovers checkpoint: "Last worked on auth, checked validateToken()"
    
 2. smart_search(intent=debug, query=<error message>)
    → Prioritizes: errors, exceptions, logs, recent changes

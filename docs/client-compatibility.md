@@ -8,7 +8,7 @@
 | **Agent Rules** | ✅ `.cursor/rules/*.mdc` | ✅ `CLAUDE.md` | ✅ `AGENTS.md` | ✅ `AGENTS.md` |
 | **Conditional Rules** | ✅ Globs + context | ❌ No | ❌ No | ❌ No |
 | **Native Hooks** | ❌ No | ✅ SessionStart, PostToolUse | ❌ No | ❌ No |
-| **Session Persistence** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
+| **Task Checkpoints** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
 | **Auto smart_turn** | ❌ Agent decides | ⚠️ Via hooks (opt-in) | ❌ Agent decides | ❌ Agent decides |
 | **Node 22+ (SQLite)** | ✅ Recommended | ✅ Recommended | ✅ Recommended | ✅ Recommended |
 | **Node 18-20 Fallback** | ⚠️ Metrics only | ⚠️ Metrics only | ⚠️ Metrics only | ⚠️ Metrics only |
@@ -286,14 +286,24 @@ npx smart-context-init --target . --clients qwen
 
 ---
 
-### Session Persistence
+### Task Checkpoint Persistence
 
-| Client | `smart_turn` Support | Auto-trigger | Session Recovery | Hooks |
-|--------|---------------------|--------------|------------------|-------|
+| Client | `smart_turn` Support | Auto-trigger | Checkpoint Recovery | Hooks |
+|--------|---------------------|--------------|---------------------|-------|
 | Cursor | ✅ Full | ❌ Agent decides | ✅ Manual | ❌ No |
 | Claude Desktop | ✅ Full | ⚠️ Via hooks (opt-in) | ✅ Manual + hooks | ✅ Yes |
 | Codex CLI | ✅ Full | ❌ Agent decides | ✅ Manual | ❌ No |
 | Qwen Code | ✅ Full | ❌ Agent decides | ✅ Manual | ❌ No |
+
+**What gets persisted:**
+- Task goal, status, decisions, blockers, next step (~100 tokens compressed)
+- File access patterns for prediction
+- Token metrics per tool call
+
+**What does NOT get persisted:**
+- Full conversation transcript
+- Complete message history
+- User prompts verbatim
 
 **Key insight:** Claude Desktop can auto-trigger `smart_turn` via hooks (closest to automatic).
 

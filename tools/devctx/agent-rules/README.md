@@ -9,7 +9,7 @@ Agent rules are **task-specific guidance** that help AI agents use the MCP effec
 The MCP provides 12 tools, but without guidance, agents often:
 - Read full files when signatures would suffice
 - Use Grep instead of `smart_search`
-- Skip context recovery
+- Skip task checkpoint recovery
 - Waste tokens on irrelevant content
 
 **Agent rules solve this** by providing clear, actionable workflows per task type.
@@ -45,7 +45,7 @@ Creates:
 ### 2. Agent Reads Rules
 
 When the agent starts, it reads:
-- Core rules (tool preference, context recovery)
+- Core rules (tool preference, task checkpoint recovery)
 - Profile rules (task-specific workflows)
 
 ### 3. Agent Applies Rules
@@ -172,7 +172,7 @@ smart_search({ query: 'authentication', intent: 'implementation' })
 smart_read({ filePath: 'src/auth.js', mode: 'signatures' })
 ```
 
-### 3. Context Recovery
+### 3. Task Checkpoint Recovery
 
 ```javascript
 // Start every non-trivial task

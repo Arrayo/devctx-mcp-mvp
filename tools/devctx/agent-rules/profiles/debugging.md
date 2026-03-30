@@ -153,7 +153,7 @@ Grep({ pattern: 'error', path: 'src/' })
 smart_search({ query: 'error', intent: 'debug' })
 ```
 
-❌ **Skipping context recovery**
+❌ **Skipping checkpoint recovery**
 ```javascript
 // Bad
 [start debugging immediately]

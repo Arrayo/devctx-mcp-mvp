@@ -378,13 +378,13 @@ const updatePreCommitHook = (targetDir, dryRun) => {
 const agentRuleBody = `Recommended entry point for non-trivial tasks (debugging, review, refactor, testing, architecture):
 
   smart_turn(start, userPrompt, ensureSession=true)
-  → recovers context, classifies task, checks repo safety
+  → recovers task checkpoint, classifies task, checks repo safety
   → work with devctx tools
   → smart_turn(end, event=milestone|blocker|task_complete)
 
 Why start with smart_turn?
-- Recovers previous session context (if exists)
-- Enables session recovery if interrupted
+- Recovers previous task checkpoint (goal, status, decisions)
+- Enables task recovery if interrupted
 - Tracks metrics for optimization
 
 When to skip: Trivial tasks (read single file, simple search, one-off questions)

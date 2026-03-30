@@ -8,10 +8,12 @@ Prefer devctx MCP over built-ins:
 - `smart_shell` instead of Shell → safe diagnostics
 - `smart_context` instead of multiple reads → one-call builder
 
-## Context Recovery
+## Task Checkpoint Recovery
 
-**Start:** `smart_turn(start, userPrompt, ensureSession=true)` - recovers previous context  
-**End:** `smart_turn(end, event=milestone|blocker|task_complete)` - checkpoints progress
+**Start:** `smart_turn(start, userPrompt, ensureSession=true)` - recovers task checkpoint  
+**End:** `smart_turn(end, event=milestone|blocker|task_complete)` - saves checkpoint
+
+Checkpoint = compressed task state (goal, status, decisions, next step), not full conversation.
 
 If `ambiguous_resume`: `smart_summary(sessionId='auto')`
 

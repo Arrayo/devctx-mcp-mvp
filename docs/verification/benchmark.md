@@ -31,7 +31,7 @@ Savings % = (Raw Tokens - Compressed Tokens) / Raw Tokens × 100
 **What counts as "raw tokens":**
 - Full file content (for `smart_read`)
 - All grep/ripgrep results (for `smart_search`)
-- Full conversation context (for `smart_summary`)
+- Task checkpoint state (for `smart_summary`)
 - Complete command output (for `smart_shell`)
 
 **What counts as "compressed tokens":**
@@ -240,7 +240,7 @@ When calculating "raw tokens," we assume:
 
 3. **Without `smart_summary`:** Agent would repeat full context each turn
    - Reality: Agent might use shorter summaries
-   - Conservative estimate: We count full conversation state
+   - Conservative estimate: We count compressed checkpoint state (~100 tokens)
 
 4. **Without `smart_context`:** Agent would make multiple separate calls
    - Reality: Hard to predict exact behavior

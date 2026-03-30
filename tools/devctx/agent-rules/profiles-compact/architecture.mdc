@@ -9,7 +9,7 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ```
 1. smart_turn(start, userPrompt='Understand auth flow', ensureSession=true)
-   → Recovers: Previous exploration context (if exists)
+   → Recovers checkpoint: Previous exploration state (if exists)
    
 2. smart_context(detail=minimal)
    → Returns: High-level project structure

@@ -9,7 +9,7 @@ Prefer devctx MCP tools over built-in alternatives:
 - `smart_shell` instead of Shell → safe, compressed diagnostics
 - `smart_context` instead of multiple Read calls → one-call context builder
 
-## Context Recovery (Session Persistence)
+## Task Checkpoint Recovery
 
 **Start every non-trivial task:**
 

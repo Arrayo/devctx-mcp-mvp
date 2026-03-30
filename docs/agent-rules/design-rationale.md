@@ -120,7 +120,7 @@ smart_read(outline) → 90% savings (150K → 15K tokens)
 Applied to **every task**:
 
 1. **Tool preference** - Prefer devctx over built-ins
-2. **Context recovery** - `smart_turn` for session persistence
+2. **Checkpoint recovery** - `smart_turn` for task state persistence
 3. **Reading cascade** - `outline` → `signatures` → `symbol` → `full`
 4. **Search strategy** - Always pass `intent`
 5. **Repository safety** - Check `repoSafety` before mutations

@@ -19,13 +19,13 @@ This is **not automatic**—it's the **recommended routine** that agents should 
 
 ## Why Start with `smart_turn(start)`?
 
-### 1. Context Recovery
+### 1. Task Checkpoint Recovery
 
 **Without `smart_turn(start)`:**
 ```
 You: "Continue fixing the auth bug"
 Agent: "What auth bug? Let me search everything..."
-→ Wastes time re-discovering context
+→ Wastes time re-discovering task state
 → Wastes tokens reading files again
 ```
 
@@ -34,17 +34,32 @@ Agent: "What auth bug? Let me search everything..."
 You: "Continue fixing the auth bug"
 Agent calls: smart_turn(start, userPrompt='Continue fixing auth bug', ensureSession=true)
 MCP returns: {
-  session: {
+  summary: {
     objective: "Debug authentication system",
-    filesAccessed: ["src/auth.js", "src/routes/login.js"],
+    currentFocus: "src/auth.js:validateToken",
     decisions: ["Using JWT for auth", "Token expires in 1h"],
     nextStep: "Check token validation logic"
   }
 }
 Agent: "Ah, I was checking validateToken() in src/auth.js. Let me continue there."
-→ Instant context recovery
+→ Instant checkpoint recovery
 → Zero wasted tokens
 ```
+
+**What gets recovered:**
+- ✅ Task goal and objective
+- ✅ Current focus (file/function being worked on)
+- ✅ Key decisions made
+- ✅ Next step to take
+- ✅ Blockers and unresolved questions
+
+**What does NOT get recovered:**
+- ❌ Full conversation transcript
+- ❌ All previous messages
+- ❌ Agent's reasoning process
+- ❌ User prompts verbatim
+
+**Key insight:** This is a **task checkpoint**, not a conversation replay.
 
 ---
 
@@ -85,12 +100,12 @@ smart_turn({ phase: 'start', userPrompt: '...', ensureSession: true })
 
 ---
 
-### 4. Session Recovery After Interruption
+### 4. Task Recovery After Interruption
 
 **Scenario:** Agent crashes mid-task
 
 **Without `smart_turn`:**
-- Context lost
+- Task state lost
 - Must restart from scratch
 - Wastes tokens re-reading everything
 
@@ -98,12 +113,22 @@ smart_turn({ phase: 'start', userPrompt: '...', ensureSession: true })
 ```javascript
 // Before crash
 smart_turn({ phase: 'end', event: 'milestone', summary: 'Fixed validateToken bug' })
+// → Saves checkpoint: goal, status, decisions, next step
 
 // After restart
 smart_turn({ phase: 'start', userPrompt: 'Continue', ensureSession: true })
-// → Returns: "Last milestone: Fixed validateToken bug. Next: Add integration tests"
+// → Returns checkpoint: "Last milestone: Fixed validateToken bug. Next: Add integration tests"
 // Agent: "I'll continue with integration tests"
 ```
+
+**What's preserved:**
+- ✅ Task checkpoint (goal, status, next step)
+- ✅ Key decisions and blockers
+- ✅ Files touched
+
+**What's NOT preserved:**
+- ❌ Full conversation history
+- ❌ All previous messages
 
 ---
 
@@ -255,7 +280,7 @@ smart_turn({
 
 ---
 
-### Session Recovery
+### Task Checkpoint Recovery
 
 ```javascript
 smart_turn({ 
@@ -267,8 +292,8 @@ smart_turn({
 
 **MCP process:**
 1. Find most recent session
-2. Load context (objective, files, decisions, next step)
-3. Return full context
+2. Load checkpoint (objective, status, decisions, next step)
+3. Return compressed summary (~100 tokens)
 
 **Returns:**
 ```json
@@ -432,11 +457,11 @@ When to skip: Trivial tasks (read single file, simple search)
 
 | Aspect | Without `smart_turn` | With `smart_turn` |
 |--------|---------------------|-------------------|
-| **Context recovery** | Manual, error-prone | Automatic, reliable |
-| **Interruption handling** | Context lost | Context preserved |
+| **Checkpoint recovery** | Manual, error-prone | Automatic, reliable |
+| **Interruption handling** | Task state lost | Checkpoint preserved |
 | **Multi-day tasks** | Re-read everything | Instant recovery |
 | **Token waste** | High (re-reading) | Low (recovery) |
-| **Session tracking** | None | Full history |
+| **Task tracking** | None | Checkpoints + metrics |
 | **Metrics** | Limited | Comprehensive |
 | **Repo safety** | Manual check | Automatic check |
 | **Task classification** | Agent guesses | MCP determines |

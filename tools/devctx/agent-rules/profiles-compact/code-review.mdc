@@ -9,7 +9,7 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ```
 1. smart_turn(start, userPrompt='Review PR #123', ensureSession=true)
-   → Recovers: Previous review context (if exists)
+   → Recovers checkpoint: Previous review state (if exists)
    
 2. smart_context(diff=true, detail=moderate)
    → Returns: Changed files with graph, prioritizes API

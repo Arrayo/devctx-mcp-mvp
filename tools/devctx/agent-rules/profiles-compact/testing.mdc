@@ -9,7 +9,7 @@ globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**"]
 
 ```
 1. smart_turn(start, userPrompt='Write tests for validateToken', ensureSession=true)
-   → Recovers: Previous test context (if exists)
+   → Recovers checkpoint: Previous test state (if exists)
    
 2. smart_search(intent=tests, query=<feature>)
    → Finds: Existing test patterns

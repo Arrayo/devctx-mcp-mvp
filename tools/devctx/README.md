@@ -77,8 +77,8 @@ Provides **two key components**:
 | `smart_read_batch` | Read multiple files in one call | 90% |
 | `smart_search` | Intent-aware code search with ranking | 95% |
 | `smart_context` | One-call context builder | 85% |
-| `smart_summary` | Session state management | 98% |
-| `smart_turn` | Turn orchestration | - |
+| `smart_summary` | Task checkpoint management | 98% |
+| `smart_turn` | Task recovery orchestration | - |
 | `smart_metrics` | Token usage inspection | - |
 | `smart_shell` | Safe command execution | 94% |
 | `build_index` | Symbol index builder | - |
@@ -145,15 +145,17 @@ Returns: relevant files + compressed content + symbol details + graph relationsh
 
 ### smart_summary
 
-Maintain session state:
+Maintain task checkpoint:
 
 ```javascript
-// Start
-{ action: 'update', update: { goal: 'Implement OAuth', status: 'in_progress' }}
+// Save checkpoint
+{ action: 'update', update: { goal: 'Implement OAuth', status: 'in_progress', nextStep: '...' }}
 
-// Resume
+// Resume task
 { action: 'get' }
 ```
+
+Stores compressed task state (~100 tokens: goal, status, decisions, blockers), not full conversation.
 
 ## New Features
 
@@ -254,8 +256,8 @@ npm run verify
 
 Data stored in `.devctx/`:
 - `index.json` - Symbol index
-- `state.sqlite` - Sessions, metrics, patterns
-- `metrics.jsonl` - Legacy fallback
+- `state.sqlite` - Task checkpoints, metrics, patterns (Node 22+)
+- `metrics.jsonl` - Legacy fallback (Node 18-20)
 
 Add to `.gitignore`:
 ```

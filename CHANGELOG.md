@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Naming Clarity: "Persistent Task Context" vs "Total Conversation Context":**
+  - Replaced "context persistence" with "persistent task context" throughout docs
+  - Replaced "session context" with "task checkpoint" for precision
+  - Replaced "context recovery" with "checkpoint recovery" or "task recovery"
+  - Added explicit "What is NOT persisted" sections in all key docs
+  - Clarified that checkpoints are ~100 tokens (goal, status, decisions, next step), not full transcripts
+  - Updated package.json description to mention "task checkpoint persistence"
+  - Updated README, tools/devctx/README, docs/how-it-works.md, docs/smart-turn-entry-point.md
+  - Updated docs/client-compatibility.md table headers
+  - Updated all agent rules (base.md, compact.md, core.md, profiles/*.md)
+  - New doc: docs/persistent-task-context.md explaining conceptual distinction
+  - Goal: Maximum conceptual clarity, avoid over-promising, honest about what gets stored
+
 ### Added
 - **Workflow Metrics System:**
   - Track token savings for complete task workflows (debugging, review, refactor, testing, architecture)
@@ -37,7 +51,7 @@ All notable changes to this project will be documented in this file.
   - Updated base rules to highlight `smart_turn` benefits
   - Updated all task profiles to start with `smart_turn(start)`
   - Created comprehensive docs/smart-turn-entry-point.md
-  - Benefits: Context recovery, session persistence, metrics tracking, repo safety
+  - Benefits: Task checkpoint recovery, state persistence, metrics tracking, repo safety
   - When to use: Debugging, review, refactor, testing, architecture
   - When to skip: Trivial tasks, one-off questions, simple reads
 - **Two-Layer Agent Rules Architecture:**

@@ -6,7 +6,7 @@
 
 ```
 Base preferences (4 tools)          ~80 tokens
-Context recovery (3 patterns)       ~60 tokens
+Checkpoint recovery (3 patterns)    ~60 tokens
 Reading strategy (5 modes)          ~80 tokens
 Search strategy (3 intents)         ~60 tokens
 5 complete workflows                ~300 tokens

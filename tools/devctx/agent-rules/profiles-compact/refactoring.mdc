@@ -9,7 +9,7 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ```
 1. smart_turn(start, userPrompt='Extract auth logic', ensureSession=true)
-   → Recovers: Previous refactor context (if exists)
+   → Recovers checkpoint: Previous refactor state (if exists)
    
 2. smart_context(entryFile=<target>, detail=moderate)
    → Builds: Dependency graph
@@ -33,7 +33,7 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 ```
 
 **Why this flow?**
-- `smart_turn(start)` recovers refactor context
+- `smart_turn(start)` recovers refactor checkpoint
 - `smart_context` reveals impact
 - `mode=signatures` preserves API
 - `smart_turn(end)` tracks multi-step refactors

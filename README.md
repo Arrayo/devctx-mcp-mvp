@@ -59,10 +59,10 @@ For **non-trivial tasks** (debugging, review, refactor, testing, architecture), 
 ```
 
 **Why start with `smart_turn`?**
-- ✅ Recovers previous session context (if exists)
+- ✅ Recovers previous task checkpoint (goal, status, decisions)
 - ✅ Classifies task continuation vs new task
 - ✅ Provides repo safety check
-- ✅ Enables session recovery if interrupted
+- ✅ Enables task recovery if interrupted
 - ✅ Tracks metrics for optimization
 
 **When to skip `smart_turn`:**
@@ -82,7 +82,7 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 2. **Agent reads rules:** Sees debugging workflow suggestion
 3. **Agent decides:** "This is a debugging task, I'll start with `smart_turn(start)`"
 4. **Agent calls:** `smart_turn({ phase: 'start', userPrompt: '...', ensureSession: true })`
-5. **MCP returns:** Previous context (if exists) + repo safety check
+5. **MCP returns:** Previous task checkpoint (if exists) + repo safety check
 6. **Agent continues:** Calls `smart_search(intent=debug)` for error location
 7. **Agent reads:** Calls `smart_read(mode=symbol)` for specific function
 8. **Agent fixes bug:** Makes changes
@@ -118,18 +118,24 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - `state.sqlite` - Sessions, metrics, patterns (Node 22+)
 - `metrics.jsonl` - Legacy fallback (Node 18-20)
 
-### Context Persistence (When Supported)
+### Persistent Task Context (When Supported)
 
 **What gets persisted:**
-- Session history (tasks, decisions, blockers)
+- Task checkpoints (goal, status, decisions, blockers)
 - File access patterns (for prediction)
 - Token metrics (for optimization)
-- Turn checkpoints (for recovery)
+- Session summaries (~100 tokens compressed)
 
 **When it's consulted:**
-- Agent calls `smart_turn(start)` - Recovers previous session
+- Agent calls `smart_turn(start)` - Recovers task checkpoint
 - Agent calls `smart_context` - Uses patterns for prediction
-- Agent calls `smart_summary` - Gets session summary
+- Agent calls `smart_summary` - Gets task summary
+
+**What is NOT persisted:**
+- ❌ Full conversation transcript
+- ❌ Complete message history
+- ❌ Agent reasoning or thoughts
+- ❌ User prompts verbatim
 
 **Limitations:**
 - Only works if agent calls `smart_turn` (not automatic)
@@ -137,7 +143,7 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - Only recovers if session ID matches (manual or auto)
 - Client must support MCP (Cursor, Codex, Claude Desktop, Qwen)
 
-**Honest truth:** Context persistence is **opt-in** via agent behavior, not **automatic** via client interception.
+**Honest truth:** Task context persistence is **opt-in** via agent behavior, not **automatic** via client interception.
 
 ### What This Means for You
 
@@ -516,30 +522,30 @@ These tools provide specialized capabilities for specific workflows:
 
 ### smart_summary
 
-Maintain compressed session state across conversation turns.
+Maintain compressed task state across sessions.
 
 ```javascript
-// Save state
+// Save checkpoint
 { action: 'update', update: { goal: '...', status: 'in_progress', nextStep: '...' }}
 
 // Resume later
 { action: 'get' }
 ```
 
-Compresses conversation context to ~100 tokens. Critical for long sessions.
+Compresses task context to ~100 tokens (goal, status, decisions, blockers). Critical for long tasks.
 
 ---
 
 ### smart_turn
 
-Orchestrate turn start/end with automatic context recovery.
+Orchestrate turn start/end with automatic task checkpoint recovery.
 
 ```javascript
-{ phase: 'start', prompt: '...' }  // Rehydrates context
+{ phase: 'start', prompt: '...' }  // Recovers task checkpoint
 { phase: 'end', event: 'milestone', update: {...} }  // Saves checkpoint
 ```
 
-Designed for CLI clients with native hooks (Claude Code).
+Recovers task state (goal, status, decisions, next step), not full conversation history.
 
 ---
 
@@ -646,7 +652,7 @@ Requires `.devctx-projects.json` config file.
 | **MCP Support** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
 | **Conditional Rules** | ✅ Yes | ❌ No | ❌ No | ❌ No |
 | **Native Hooks** | ❌ No | ✅ Yes | ❌ No | ❌ No |
-| **Session Persistence** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
+| **Task Checkpoints** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
 | **Automaticity** | Medium | High | Low-Medium | Low-Medium |
 | **Fixed Context Cost** | Low (150t) | Medium (200t) | Medium (200t) | Medium (200t) |
 
@@ -948,8 +954,8 @@ sqlite3 .devctx/state.sqlite "SELECT COUNT(*) FROM sessions"
 
 **Possible causes:**
 - Node 18-20 → No SQLite (upgrade to 22+)
-- Agent not calling `smart_turn` → No persistence
-- Session ID mismatch → Can't recover
+- Agent not calling `smart_turn` → No task checkpoints
+- Session ID mismatch → Can't recover checkpoint
 
 ---
 

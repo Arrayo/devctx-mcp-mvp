@@ -9,10 +9,10 @@ smart_turn(start, userPrompt, ensureSession=true)
 ```
 
 **Why?**
-- Recovers previous session context (if exists)
+- Recovers previous task checkpoint (goal, status, decisions)
 - Classifies task continuation vs new task
 - Provides repo safety check
-- Enables session recovery if interrupted
+- Enables task recovery if interrupted
 - Tracks metrics for optimization
 
 **When to skip:** Trivial tasks (read single file, simple search, one-off questions)

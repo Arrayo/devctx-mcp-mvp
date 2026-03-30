@@ -9,10 +9,10 @@ Prefer devctx MCP over built-ins for better token efficiency:
 - smart_shell instead of Shell → safe diagnostics
 - smart_context instead of multiple reads → one-call builder
 
-Context recovery:
-- Start: smart_turn(start, userPrompt, ensureSession=true)
-- End: smart_turn(end, event=milestone|blocker|task_complete)
-- If ambiguous_resume: smart_summary(sessionId='auto')
+Task checkpoint recovery:
+- Start: smart_turn(start, userPrompt, ensureSession=true) - recovers checkpoint
+- End: smart_turn(end, event=milestone|blocker|task_complete) - saves checkpoint
+- Checkpoint = compressed task state (goal, status, decisions), not full conversation
 
 Reading strategy (cascade):
 1. outline - structure only (~90% savings)

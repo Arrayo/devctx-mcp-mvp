@@ -382,57 +382,63 @@ smart_turn({
 
 ### `.devctx/state.sqlite` (Node 22+)
 
-**Schema:**
+**Schema (simplified):**
 
 ```sql
--- Sessions
+-- Task checkpoints
 CREATE TABLE sessions (
-  id TEXT PRIMARY KEY,
-  objective TEXT,
-  status TEXT,
-  created_at INTEGER,
-  updated_at INTEGER
+  session_id TEXT PRIMARY KEY,
+  goal TEXT,                    -- Task objective
+  status TEXT,                  -- in_progress, blocked, completed
+  current_focus TEXT,           -- File/function being worked on
+  next_step TEXT,               -- What to do next
+  -- ... metadata
 );
 
--- Session events
+-- Checkpoint events
 CREATE TABLE session_events (
-  id INTEGER PRIMARY KEY,
+  event_id INTEGER PRIMARY KEY,
   session_id TEXT,
-  event_type TEXT,
-  summary TEXT,
-  next_step TEXT,
-  created_at INTEGER
+  event_type TEXT,              -- milestone, blocker, task_complete
+  payload_json TEXT,            -- Compressed summary (~100 tokens)
+  token_cost INTEGER,
+  created_at TEXT
 );
 
--- Metrics
+-- Tool metrics
 CREATE TABLE metrics_events (
-  id INTEGER PRIMARY KEY,
+  metric_id INTEGER PRIMARY KEY,
+  tool TEXT,                    -- smart_read, smart_search, etc.
   session_id TEXT,
-  tool_name TEXT,
-  target TEXT,
   raw_tokens INTEGER,
   compressed_tokens INTEGER,
-  created_at INTEGER
+  saved_tokens INTEGER,
+  created_at TEXT
 );
 
--- Context patterns
-CREATE TABLE context_patterns (
-  id INTEGER PRIMARY KEY,
-  task_hash TEXT,
-  intent TEXT,
-  files_accessed TEXT,
-  access_count INTEGER,
-  last_accessed INTEGER
-);
-
--- Context access
+-- File access patterns (for prediction)
 CREATE TABLE context_access (
   id INTEGER PRIMARY KEY,
+  session_id TEXT,
+  task TEXT,
   file_path TEXT,
-  access_count INTEGER,
-  last_accessed INTEGER
+  relevance REAL,
+  timestamp TEXT
+);
+
+-- Workflow metrics (opt-in)
+CREATE TABLE workflow_metrics (
+  workflow_id INTEGER PRIMARY KEY,
+  workflow_type TEXT,           -- debugging, code-review, etc.
+  session_id TEXT,
+  raw_tokens INTEGER,
+  compressed_tokens INTEGER,
+  baseline_tokens INTEGER,
+  -- ... metrics
 );
 ```
+
+**Key point:** Stores compressed checkpoints, not full conversation transcripts.
 
 **What gets stored:**
 - Session history (objectives, decisions, blockers)
@@ -472,22 +478,38 @@ CREATE TABLE context_access (
 
 ---
 
-## Context Persistence: The Reality
+## Persistent Task Context: The Reality
 
-### What It Is
+### What Gets Persisted
 
 A **local database** (`.devctx/state.sqlite`) that stores:
-- Session history
-- File access patterns
-- Token metrics
-- Turn checkpoints
+- **Task checkpoints** - Goal, status, decisions, blockers, next step (~100 tokens compressed)
+- **File access patterns** - Which files accessed for which tasks (for prediction)
+- **Token metrics** - Raw/compressed/saved per tool call
+- **Session metadata** - Created/updated timestamps, completion count
 
-### What It's NOT
+### What Does NOT Get Persisted
 
-❌ **Not automatic prompt interception** - Agent must call `smart_turn`  
-❌ **Not cross-session memory** - Only within project  
-❌ **Not guaranteed recovery** - Depends on agent behavior  
-❌ **Not client-level persistence** - MCP-level only
+❌ **Full conversation transcript** - Only compressed checkpoints  
+❌ **Complete message history** - Only task summaries  
+❌ **Agent reasoning** - Only decisions and outcomes  
+❌ **User prompts verbatim** - Only task goals  
+❌ **Cross-project state** - Only within project  
+❌ **Client-level context** - MCP-level only
+
+### When It Works
+
+✅ Agent calls `smart_turn(start)` at task start  
+✅ Agent calls `smart_turn(end)` at milestones  
+✅ Session ID matches (manual or auto)  
+✅ Node 22+ (SQLite support)
+
+### When It Doesn't Work
+
+❌ Agent skips `smart_turn` (no checkpoints)  
+❌ Node 18-20 (no SQLite, metrics only)  
+❌ Session ID mismatch (can't recover)  
+❌ Agent doesn't follow rules (no workflow)
 
 ### When It Works
 
@@ -792,7 +814,7 @@ npm run report:metrics
 
 ---
 
-### Context not persisting
+### Task checkpoints not persisting
 
 **Check:**
 1. Node version: `node --version` (need 22+ for SQLite)
@@ -800,7 +822,7 @@ npm run report:metrics
 3. Agent calling `smart_turn`: Check metrics
 
 **If Node 18-20:**
-- Context persistence disabled (no SQLite)
+- Task checkpoint persistence disabled (no SQLite)
 - Metrics still work (fallback to JSONL)
 - Upgrade to Node 22+ for full features
 
@@ -812,7 +834,7 @@ npm run report:metrics
 
 ✅ Provide efficient tools for reading, searching, diagnostics  
 ✅ Compress output 85-90% while preserving signal  
-✅ Persist context locally (`.devctx/state.sqlite`)  
+✅ Persist task checkpoints locally (`.devctx/state.sqlite`)  
 ✅ Guide agents with task-specific workflows  
 ✅ Track metrics and token savings
 
@@ -820,7 +842,8 @@ npm run report:metrics
 
 ❌ Force agents to use tools (agent decides)  
 ❌ Intercept prompts automatically (not how MCP works)  
-❌ Persist context across projects (local only)  
+❌ Persist full conversation history (only task checkpoints)  
+❌ Persist across projects (local only)  
 ❌ Guarantee 90% savings (depends on task and agent behavior)  
 ❌ Replace built-in tools entirely (nor should it)
 
