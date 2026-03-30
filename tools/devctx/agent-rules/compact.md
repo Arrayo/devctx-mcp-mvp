@@ -1,75 +1,17 @@
 # devctx Agent Rules (Compact)
 
-## Tool Preference
-
-Prefer devctx MCP over built-ins:
+Prefer devctx MCP for non-trivial tasks:
 - `smart_read(outline|signatures|symbol)` instead of Read → 90% savings
 - `smart_search(intent=...)` instead of Grep → ranked results
-- `smart_shell` instead of Shell → safe diagnostics
 - `smart_context` instead of multiple reads → one-call builder
+- `smart_shell` instead of Shell → safe diagnostics
 
-## Task Checkpoint Recovery
+For non-trivial tasks: `smart_turn(start)` → [work with devctx tools] → `smart_turn(end)`
 
-**Start:** `smart_turn(start, userPrompt, ensureSession=true)` - recovers task checkpoint  
-**End:** `smart_turn(end, event=milestone|blocker|task_complete)` - saves checkpoint
+Reading cascade: `outline` → `signatures` → `symbol` → `full` (last resort)
 
-Checkpoint = compressed task state (goal, status, decisions, next step), not full conversation.
+**Detailed workflows:** See `profiles/` or `profiles-compact/` for task-specific guidance (debugging, code-review, refactoring, testing, architecture)
 
-If `ambiguous_resume`: `smart_summary(sessionId='auto')`
+---
 
-## Reading Strategy
-
-1. `outline` - structure only (~90% savings)
-2. `signatures` - exported API
-3. `symbol` - specific function
-4. `range` - specific lines
-5. `full` - last resort
-
-## Search Strategy
-
-Always pass `intent` for task-aware ranking:
-- `debug` → errors, logs, exceptions
-- `implementation` → source files, changed files
-- `tests` → test files
-- `config` → config files, env vars
-- `explore` → balanced
-
-## By Task
-
-**Debugging:**
-```
-smart_turn(start) → smart_search(intent=debug) → smart_read(symbol) → 
-smart_shell('npm test') → fix → smart_turn(end)
-```
-
-**Code Review:**
-```
-smart_turn(start) → smart_context(diff=true) → smart_read(signatures) → 
-review → smart_turn(end)
-```
-
-**Refactoring:**
-```
-smart_turn(start) → smart_context(entryFile) → smart_read(signatures) → 
-refactor → smart_shell('npm test') → smart_turn(end)
-```
-
-**Testing:**
-```
-smart_turn(start) → smart_search(intent=tests) → smart_read(symbol) → 
-write test → smart_shell('npm test') → smart_turn(end)
-```
-
-**Architecture:**
-```
-smart_turn(start) → smart_context(detail=minimal) → smart_read(signatures) → 
-analyze → smart_turn(end)
-```
-
-## Repository Safety
-
-Check `repoSafety` in responses. If `.devctx/state.sqlite` is tracked/staged, fix git hygiene first.
-
-## Important
-
-These are **suggestions**, not guarantees. You decide when to use devctx tools based on the task.
+**These are suggestions, not guarantees.** You decide when devctx tools add value based on the task.

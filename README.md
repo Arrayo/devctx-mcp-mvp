@@ -769,7 +769,8 @@ Restart Cursor. Tools appear in Agent mode.
 
 **Files created:**
 - `.cursor/mcp.json` - MCP server config
-- `.cursor/rules/devctx.mdc` - Agent rules
+- `.cursor/rules/devctx.mdc` - Base agent rules (10 lines, always active)
+- `.cursor/rules/profiles-compact/*.mdc` - Task profiles (conditional)
 - `.git/hooks/pre-commit` - Safety hook
 - `.gitignore` - Adds `.devctx/`
 

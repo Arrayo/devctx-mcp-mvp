@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Base Rule Reduction (76% smaller):**
+  - Reduced base rule from 42 lines to 10 lines (76% reduction in fixed context cost)
+  - Moved all task-specific workflows to conditional profiles in `.cursor/rules/profiles-compact/`
+  - Base rule now only shows: tool preference, smart_turn flow, reading cascade, pointer to profiles
+  - Profiles (debugging, code-review, refactoring, testing, architecture) are conditionally applied based on file globs
+  - Impact: Simple tasks see 10 lines instead of 42 lines; complex tasks see 50 lines (base + 1 profile) instead of 42 lines
+  - Goal: Minimize fixed context cost, maximize coherence with token savings, improve agent learning
+  - Updated: `.cursor/rules/devctx.mdc`, `AGENTS.md`, `CLAUDE.md`, `tools/devctx/agent-rules/base.md`, `tools/devctx/agent-rules/compact.md`, `tools/devctx/scripts/init-clients.js`
+  - New doc: `docs/agent-rules/base-rule-reduction.md` with analysis and verification steps
+
 ### Added
 - **Security Rejection Examples:**
   - New test file: `tests/smart-shell-security.test.js` with 60+ security tests

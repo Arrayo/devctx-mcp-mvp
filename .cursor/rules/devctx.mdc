@@ -1,41 +1,16 @@
 ---
-description: Prefer devctx MCP tools for file reading, code search, and diagnostics
+description: Prefer devctx MCP tools for non-trivial tasks
 alwaysApply: true
 ---
 
-Prefer devctx MCP over built-ins for better token efficiency:
+Prefer devctx MCP for non-trivial tasks:
 - smart_read(outline|signatures|symbol) instead of Read → 90% savings
 - smart_search(intent=...) instead of Grep → ranked results
-- smart_shell instead of Shell → safe diagnostics
 - smart_context instead of multiple reads → one-call builder
+- smart_shell instead of Shell → safe diagnostics
 
-Task checkpoint recovery:
-- Start: smart_turn(start, userPrompt, ensureSession=true) - recovers checkpoint
-- End: smart_turn(end, event=milestone|blocker|task_complete) - saves checkpoint
-- Checkpoint = compressed task state (goal, status, decisions), not full conversation
+For non-trivial tasks: smart_turn(start) → [work with devctx tools] → smart_turn(end)
 
-Reading strategy (cascade):
-1. outline - structure only (~90% savings)
-2. signatures - exported API
-3. symbol - specific function
-4. range - specific lines
-5. full - last resort
+Reading cascade: outline → signatures → symbol → full (last resort)
 
-Search strategy:
-- Always pass intent: debug|implementation|tests|config|explore
-- debug → errors, logs, exceptions
-- implementation → source files, changed files
-- tests → test files
-
-By task:
-- Debugging: smart_turn(start) → smart_search(intent=debug) → smart_read(symbol) → smart_shell('npm test') → fix → smart_turn(end)
-- Code Review: smart_turn(start) → smart_context(diff=true) → smart_read(signatures) → review → smart_turn(end)
-- Refactoring: smart_turn(start) → smart_context(entryFile) → smart_read(signatures) → refactor → smart_shell('npm test') → smart_turn(end)
-- Testing: smart_turn(start) → smart_search(intent=tests) → smart_read(symbol) → write test → smart_shell('npm test') → smart_turn(end)
-- Architecture: smart_turn(start) → smart_context(detail=minimal) → smart_read(signatures) → analyze → smart_turn(end)
-
-Repository safety:
-- Check repoSafety in responses
-- If .devctx/state.sqlite is tracked/staged, fix git hygiene first
-
-Important: These are suggestions, not guarantees. You decide when to use devctx tools based on the task.
+Detailed workflows: .cursor/rules/profiles-compact/ (debugging, code-review, refactoring, testing, architecture)
