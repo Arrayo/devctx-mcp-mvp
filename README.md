@@ -630,6 +630,26 @@ Share context across monorepos and microservices.
 
 Requires `.devctx-projects.json` config file.
 
+## Client Compatibility
+
+| Feature | Cursor | Claude Desktop | Codex CLI | Qwen Code |
+|---------|--------|----------------|-----------|-----------|
+| **MCP Support** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **Conditional Rules** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **Native Hooks** | ❌ No | ✅ Yes | ❌ No | ❌ No |
+| **Session Persistence** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
+| **Automaticity** | Medium | High | Low-Medium | Low-Medium |
+| **Fixed Context Cost** | Low (150t) | Medium (200t) | Medium (200t) | Medium (200t) |
+
+**Recommended mode by client:**
+- **Cursor:** Best for complex tasks with conditional workflows (low context cost)
+- **Claude Desktop:** Best for session-aware workflows with hooks (closest to automatic)
+- **Codex/Qwen:** Best for lightweight, medium-sized tasks
+
+See [Client Compatibility Guide](./docs/client-compatibility.md) for detailed comparison.
+
+---
+
 ## Installation
 
 ### Minimal (Any Client)

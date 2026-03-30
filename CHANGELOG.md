@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Client Compatibility Matrix & Recommended Modes:**
+  - Created comprehensive docs/client-compatibility.md
+  - Compatibility matrix comparing all 4 clients
+  - Recommended mode per client (Cursor, Claude Desktop, Codex, Qwen)
+  - Feature comparison (rules, hooks, persistence, automaticity)
+  - Quick start guides per client
+  - Honest limitations per client
+  - Troubleshooting per client
+  - Migration guides between clients
+  - Added summary table to README
+
 ### Changed
 - **`smart_turn(start)` as Recommended Entry Point:**
   - Emphasized as optimal flow for non-trivial tasks
