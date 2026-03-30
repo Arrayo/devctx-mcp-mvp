@@ -76,12 +76,55 @@ Only these commands are permitted:
 
 **Example blocked commands:**
 ```bash
-rm -rf /                    # Not in allowlist
-git commit -m "test"        # Subcommand not allowed
-npm install malicious       # Subcommand not allowed
-ls | grep secret            # Shell operator blocked
+rm -rf /                    # Dangerous pattern
+git commit -m "test"        # Git write operation
+npm install malicious       # Package install
+ls | grep secret            # Shell operator
 cat /etc/passwd             # Not in allowlist
 ```
+
+### Real Rejection Examples
+
+See [Security Rejection Examples](./docs/security/rejection-examples.md) for comprehensive list of 50+ blocked inputs with exact system responses.
+
+**Quick examples with responses:**
+
+```javascript
+// Shell operator blocked
+smartShell({ command: "ls | grep secret" })
+→ { exitCode: 126, blocked: true, output: "Shell operators are not allowed (|, &, ;, <, >, `, $, (, ))" }
+
+// Dangerous command blocked
+smartShell({ command: "rm -rf /" })
+→ { exitCode: 126, blocked: true, output: "Dangerous pattern detected: /rm\\s+-rf/i" }
+
+// Git write blocked
+smartShell({ command: "git commit -m 'test'" })
+→ { exitCode: 126, blocked: true, output: "Git subcommand not allowed: commit. Allowed: status, diff, show, log, branch, rev-parse, blame" }
+
+// Package install blocked
+smartShell({ command: "npm install malicious" })
+→ { exitCode: 126, blocked: true, output: "Package manager subcommand not allowed: install. Allowed: test, run, lint, build, typecheck, check" }
+
+// Command not in allowlist
+smartShell({ command: "cat /etc/passwd" })
+→ { exitCode: 126, blocked: true, output: "Command not allowed: cat. Allowed: pwd, ls, find, rg, git, npm, pnpm, yarn, bun" }
+```
+
+**All blocked commands:**
+- Return `exitCode: 126` (command not executable)
+- Set `blocked: true`
+- Log to metrics for audit trail
+- Provide human-readable rejection reason
+
+**Verification:**
+```bash
+# Run security tests to verify behavior
+cd tools/devctx
+npm test -- tests/smart-shell-security.test.js
+```
+
+60+ security tests prove that documented behavior matches actual implementation.
 
 ### 2. Path Validation (`resolveSafePath`)
 

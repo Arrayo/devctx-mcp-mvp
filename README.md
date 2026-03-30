@@ -1143,6 +1143,33 @@ ls | grep secret        # ✗ Shell operators blocked
 rm -rf /                # ✗ Dangerous commands blocked
 ```
 
+**Real rejection examples:**
+
+```javascript
+// Shell operator blocked
+smartShell({ command: "ls | grep secret" })
+→ { exitCode: 126, blocked: true, output: "Shell operators are not allowed..." }
+
+// Dangerous command blocked
+smartShell({ command: "rm -rf /" })
+→ { exitCode: 126, blocked: true, output: "Dangerous pattern detected..." }
+
+// Git write blocked
+smartShell({ command: "git commit -m 'test'" })
+→ { exitCode: 126, blocked: true, output: "Git subcommand not allowed: commit..." }
+
+// Package install blocked
+smartShell({ command: "npm install malicious" })
+→ { exitCode: 126, blocked: true, output: "Package manager subcommand not allowed: install..." }
+```
+
+**Verification:**
+
+```bash
+# Run 60+ security tests to verify behavior
+cd tools/devctx && npm test -- tests/smart-shell-security.test.js
+```
+
 **Configuration:**
 
 ```bash
@@ -1153,7 +1180,9 @@ export DEVCTX_SHELL_DISABLED=true
 export DEVCTX_CACHE_WARMING=false
 ```
 
-**Complete security documentation:** [SECURITY.md](./SECURITY.md)
+**Complete security documentation:**
+- [SECURITY.md](./SECURITY.md) - Full security policy
+- [Security Rejection Examples](./docs/security/rejection-examples.md) - 50+ concrete examples
 
 ## Requirements
 

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Security Rejection Examples:**
+  - New test file: `tests/smart-shell-security.test.js` with 60+ security tests
+  - New doc: `docs/security/rejection-examples.md` with 50+ concrete rejection examples
+  - Added "Real Rejection Examples" section to SECURITY.md
+  - Enhanced README security section with actual rejection responses
+  - Test categories: shell operators, dangerous commands, git writes, package installs, find args, malformed commands
+  - All blocked commands return exitCode 126, blocked: true, and human-readable rejection reason
+  - Verification: `npm test -- tests/smart-shell-security.test.js` proves documented behavior
+  - New doc: `docs/security-examples-analysis.md` with design rationale
+  - Goal: Build trust through concrete examples, verifiable behavior, and transparency
+
 - **Enhanced Compatibility Matrix:**
   - Added comprehensive 8-column matrix to README with "Near-Automatic" levels and key limitations
   - New columns: MCP, Rules, Hooks, `smart_turn`, Persistence, Near-Automatic, Key Limitations
