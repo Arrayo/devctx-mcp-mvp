@@ -330,7 +330,22 @@ Generates configs for all supported clients.
 
 ## Metrics & Verification
 
-### View savings
+### Run full benchmark
+
+```bash
+npm run benchmark
+```
+
+Runs all verification suites:
+- 421 unit tests
+- 14 feature verifications
+- Synthetic corpus evaluation
+- Real project evaluation
+- Production metrics report
+
+Takes 2-3 minutes. See [Benchmark Documentation](./docs/verification/benchmark.md) for details.
+
+### View production metrics
 
 ```bash
 npm run report:metrics
@@ -352,18 +367,13 @@ By tool:
   smart_summary  count=449  saved=1,897,628 (97.89%)
 ```
 
-### Verify features
+### Quick verification
 
 ```bash
-npm run verify
-```
-
-Tests all 12 tools end-to-end.
-
-### Run tests
-
-```bash
-npm test  # 421 unit tests
+npm run verify  # Feature verification (14 tools)
+npm test        # Unit tests (421 tests)
+npm run eval    # Synthetic corpus
+npm run eval:self  # Real project
 ```
 
 ## Supported Languages
