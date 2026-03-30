@@ -42,6 +42,62 @@ npx smart-context-init --target .
 ```
 Restart your AI client. Done.
 
+---
+
+## 🚀 How to Invoke the MCP
+
+The MCP doesn't intercept prompts automatically. **You need to tell the agent to use it.**
+
+### Option 1: Use MCP Prompts (Easiest)
+
+In Cursor, type in the chat:
+
+```
+/prompt use-devctx
+
+[Your task here]
+```
+
+**Available prompts:**
+- `/prompt use-devctx` - Force devctx tools for current task
+- `/prompt devctx-workflow` - Full workflow (start → context → work → end)
+- `/prompt devctx-preflight` - Preflight only (build_index + smart_turn start)
+
+### Option 2: Explicit Instruction
+
+Just tell the agent directly:
+
+```
+Use smart_turn(start) to recover context, then [your task]
+```
+
+Or:
+
+```
+Use the MCP to review this code
+```
+
+### Option 3: Automatic (via Rules)
+
+The agent *should* use devctx automatically for complex tasks because:
+- ✅ `.cursorrules` is active in Cursor
+- ✅ `CLAUDE.md` is active in Claude Desktop (if you created it)
+- ✅ `AGENTS.md` is active in other clients (if you created it)
+
+**But it's not guaranteed** - the agent decides based on task complexity.
+
+### ⚡ Quick Reference
+
+| Scenario | Command |
+|----------|---------|
+| Start new task | `/prompt devctx-workflow` |
+| Continue previous task | `smart_turn(start) and continue` |
+| Force MCP usage | `/prompt use-devctx` |
+| First time in project | `/prompt devctx-preflight` |
+| Trust automatic rules | Just describe your task normally |
+
+---
+
 ## How it Works in Practice
 
 **The reality:** This MCP does not intercept prompts automatically. Here's the actual flow:
