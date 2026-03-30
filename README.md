@@ -1292,6 +1292,24 @@ See [Missed Opportunities Documentation](./docs/missed-opportunities.md) for com
 
 ---
 
+### Agent Rules (Multi-Client Support)
+
+The project includes **agent rules** that enforce devctx usage across different clients:
+
+- **Cursor:** `.cursorrules` (committed to git)
+- **Claude Desktop:** `CLAUDE.md` (create from template in `docs/agent-rules-template.md`)
+- **Other agents:** `AGENTS.md` (create from template in `docs/agent-rules-template.md`)
+
+**All rules enforce the same policy:**
+- Use `smart_read` instead of `Read`
+- Use `smart_search` instead of `Grep`
+- Use `smart_context` instead of multiple reads
+- Explain if native tools are used
+
+See [Agent Rules Template](./docs/agent-rules-template.md) for setup instructions.
+
+---
+
 ### MCP Prompts (Automatic Forcing)
 
 The MCP server provides **prompts** that automatically inject forcing instructions:
