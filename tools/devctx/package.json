@@ -6,11 +6,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Arrayo/devctx-mcp-mvp.git"
+    "url": "git+https://github.com/Arrayo/smart-context-mcp.git"
   },
-  "homepage": "https://github.com/Arrayo/devctx-mcp-mvp#readme",
+  "homepage": "https://github.com/Arrayo/smart-context-mcp#readme",
   "bugs": {
-    "url": "https://github.com/Arrayo/devctx-mcp-mvp/issues"
+    "url": "https://github.com/Arrayo/smart-context-mcp/issues"
   },
   "bin": {
     "smart-context-headless": "scripts/headless-wrapper.js",

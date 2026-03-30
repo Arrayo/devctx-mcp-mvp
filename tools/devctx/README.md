@@ -204,20 +204,20 @@ Add to `.gitignore`:
 
 ## Documentation
 
-Full documentation in [GitHub repository](https://github.com/Arrayo/devctx-mcp-mvp):
+Full documentation in [GitHub repository](https://github.com/Arrayo/smart-context-mcp):
 
-- [STREAMING.md](https://github.com/Arrayo/devctx-mcp-mvp/blob/main/STREAMING.md) - Progress notifications
-- [CONTEXT-PREDICTION.md](https://github.com/Arrayo/devctx-mcp-mvp/blob/main/CONTEXT-PREDICTION.md) - File prediction
-- [DIFF-AWARE.md](https://github.com/Arrayo/devctx-mcp-mvp/blob/main/DIFF-AWARE.md) - Change analysis
-- [CACHE-WARMING.md](https://github.com/Arrayo/devctx-mcp-mvp/blob/main/CACHE-WARMING.md) - Cold-start optimization
-- [GIT-BLAME.md](https://github.com/Arrayo/devctx-mcp-mvp/blob/main/GIT-BLAME.md) - Code attribution
-- [CROSS-PROJECT.md](https://github.com/Arrayo/devctx-mcp-mvp/blob/main/CROSS-PROJECT.md) - Multi-project support
+- [STREAMING.md](https://github.com/Arrayo/smart-context-mcp/blob/main/STREAMING.md) - Progress notifications
+- [CONTEXT-PREDICTION.md](https://github.com/Arrayo/smart-context-mcp/blob/main/CONTEXT-PREDICTION.md) - File prediction
+- [DIFF-AWARE.md](https://github.com/Arrayo/smart-context-mcp/blob/main/DIFF-AWARE.md) - Change analysis
+- [CACHE-WARMING.md](https://github.com/Arrayo/smart-context-mcp/blob/main/CACHE-WARMING.md) - Cold-start optimization
+- [GIT-BLAME.md](https://github.com/Arrayo/smart-context-mcp/blob/main/GIT-BLAME.md) - Code attribution
+- [CROSS-PROJECT.md](https://github.com/Arrayo/smart-context-mcp/blob/main/CROSS-PROJECT.md) - Multi-project support
 
 ## Links
 
-- [GitHub](https://github.com/Arrayo/devctx-mcp-mvp)
+- [GitHub](https://github.com/Arrayo/smart-context-mcp)
 - [npm](https://www.npmjs.com/package/smart-context-mcp)
-- [Issues](https://github.com/Arrayo/devctx-mcp-mvp/issues)
+- [Issues](https://github.com/Arrayo/smart-context-mcp/issues)
 
 ## Author
 

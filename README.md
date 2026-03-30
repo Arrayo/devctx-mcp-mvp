@@ -532,6 +532,6 @@ MIT License - see [LICENSE](./LICENSE) file for details.
 
 ## Links
 
-- [GitHub Repository](https://github.com/Arrayo/devctx-mcp-mvp)
+- [GitHub Repository](https://github.com/Arrayo/smart-context-mcp)
 - [npm Package](https://www.npmjs.com/package/smart-context-mcp)
-- [Issue Tracker](https://github.com/Arrayo/devctx-mcp-mvp/issues)
+- [Issue Tracker](https://github.com/Arrayo/smart-context-mcp/issues)
