@@ -33,6 +33,32 @@ AI agents waste tokens in three ways:
 
 This MCP solves all three by providing tools that return compressed, ranked, and cached context.
 
+## Quick Start: Which Client Should I Use?
+
+| Client | Best For | Automaticity | Key Feature |
+|--------|----------|--------------|-------------|
+| **Cursor** | Complex tasks, conditional workflows | Medium | Conditional rules per task type |
+| **Claude Desktop** | Session continuity, hooks | High (with hooks) | Native hooks for auto-recovery |
+| **Codex CLI** | Terminal workflows, scripting | Low-Medium | Embedded rules in prompts |
+| **Qwen Code** | Alternative to Cursor | Low-Medium | Similar to Codex |
+
+**What "Automaticity" means:**
+- **High**: Agent can auto-trigger `smart_turn` via hooks (Claude Desktop only)
+- **Medium**: Agent reads rules automatically, decides when to use tools (Cursor)
+- **Low-Medium**: Rules embedded in prompts, agent decides (Codex, Qwen)
+
+**What it does NOT mean:**
+- ❌ Automatic prompt interception (none of these clients do this)
+- ❌ Forced tool usage (agent always decides)
+- ❌ Guaranteed adoption (agent may ignore rules)
+
+**Recommendation:**
+- **Start with Cursor** if you use it (best balance of guidance and flexibility)
+- **Use Claude Desktop** if you want highest session continuity
+- **Use Codex/Qwen** if you prefer terminal-based workflows
+
+See [Client Compatibility](./docs/client-compatibility.md) for detailed comparison and installation per client.
+
 ## Recommended Workflow
 
 ### ⚠️ Preflight: Build Index First
@@ -187,8 +213,8 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 **Best case scenario:**
 - Agent follows rules consistently
 - Uses devctx tools for 50-80% of operations
-- Token usage drops 85-90%
-- Responses are often faster and more context-efficient
+- Token usage drops 85-90% (proven, measured)
+- Responses often faster due to less data to process (inferred from token savings)
 
 **Typical scenario:**
 - Agent uses devctx tools for complex tasks
@@ -220,7 +246,11 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 
 **The benefit:** Agents work with better input, but output quality still depends on agent capability and task complexity.
 
-**Honest claim:** We provide **better context**, which **can** improve response quality in complex tasks when the agent follows the workflow. Token savings are well-documented (90%); quality improvement is inferred but not explicitly measured.
+**Honest claim:** We provide **better context** (more relevant, less noise), which **can help** agents respond more efficiently in complex tasks when the workflow is followed. 
+
+**What's proven:** 90% token savings (measured across 3,666 operations).  
+**What's inferred:** Quality improvement (better input → potentially better output, but not explicitly measured).  
+**What we don't control:** Agent correctness, task success, response accuracy.
 
 ---
 
@@ -922,6 +952,40 @@ To use devctx next time: "Use smart-context-mcp: smart_turn(start) → ..."
 - Provides forcing prompt for next turn
 - Identifies setup issues (MCP unavailable, index not built)
 
+---
+
+### How to Force devctx Usage
+
+**When to use these prompts:**
+- Agent didn't use devctx in a non-trivial task
+- You want to recover persisted task context
+- Task is complex (debugging, review, refactor, testing, architecture)
+
+**Official prompt (complete workflow):**
+```
+Use smart-context-mcp for this task:
+1. Start with smart_turn(start, userPrompt, ensureSession=true) to recover context
+2. Use smart_context or smart_search before reading files
+3. Use smart_read(outline|signatures|symbol) instead of full reads
+4. Close with smart_turn(end) when you reach a milestone
+```
+
+**Ultra-short prompt (copy-paste ready):**
+```
+Use devctx: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)
+```
+
+**Example usage:**
+```
+User: "Debug the authentication error"
+Agent: [uses native tools]
+Agent: "Note: devctx not used because: already had sufficient context..."
+
+User: "Use devctx: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)"
+Agent: [uses smart_turn, smart_search, smart_read]
+Agent: "Found the issue in validateToken()..."
+```
+
 See [agent-rules/](./tools/devctx/agent-rules/) for complete profiles.
 
 ## Getting Started
@@ -1032,15 +1096,26 @@ cat .cursor/rules/devctx.mdc
 # 2. MCP running?
 # Cursor: Settings → MCP → Check "smart-context" active
 
-# 3. Metrics show usage?
+# 3. Index built?
+ls .devctx/index.json
+
+# 4. Metrics show usage?
 npm run report:metrics
 ```
 
 **Possible causes:**
 - Rules not installed → Run `npx smart-context-init --target .`
 - MCP not running → Restart client
+- Index not built → Run `npm run build-index` or tell agent "Run build_index tool"
 - Task too simple → Built-in tools sufficient (this is fine)
 - Agent in Ask mode → Read-only, no MCP access
+
+**Force devctx usage (copy-paste ready):**
+```
+Use devctx: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)
+```
+
+See [How to Force devctx Usage](#how-to-force-devctx-usage) for complete workflow.
 
 ---
 

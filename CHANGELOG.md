@@ -4,7 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Adoption Improvements Phase 2:**
+  - Added "Quick Start: Which Client Should I Use?" table in README with automaticity levels and recommendations
+  - Added "How to Force devctx Usage" section with official prompts (complete + ultra-short)
+  - Added 3 concrete feedback examples to docs/agent-rules/feedback-when-not-used.md
+  - Enhanced Troubleshooting section with forcing prompt and index check
+  - Goal: Make adoption easier, provide standardized forcing prompts, show concrete examples
+  - New doc: docs/adoption-improvements-phase2.md with complete analysis
+
 ### Changed
+- **Quality Claim Further Matization (Phase 2):**
+  - Changed "Responses are often faster and more context-efficient" to "Token usage drops 85-90% (proven, measured) + Responses often faster due to less data to process (inferred)"
+  - Expanded "Honest claim" to explicitly separate: What's proven (90% tokens) | What's inferred (quality) | What we don't control (accuracy)
+  - Added "can help" instead of "can improve" (more conservative)
+  - Goal: Maximum honesty, clear separation of proven vs inferred, manage expectations
+  - Updated: README.md (best case scenario, honest claim section)
+
 - **Quality Claim Final Matization:**
   - Changed "Responses are faster and more focused on relevant context" to "Responses are often faster and more context-efficient"
   - Added qualifier "often" to acknowledge variability (not always)

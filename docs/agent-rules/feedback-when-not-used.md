@@ -169,6 +169,63 @@ Agent: "Note: devctx not used because: MCP unavailable.
 
 Feedback reveals setup issue - user can check MCP configuration.
 
+---
+
+## 3 Concrete Examples of Expected Final Output
+
+### Example 1: Task Too Simple
+
+**User:** "Show me the imports in auth.js"
+
+**Agent Response:**
+```javascript
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import { User } from './models/User.js';
+```
+
+**No feedback** - Single file read, trivial task, devctx wouldn't add value.
+
+---
+
+### Example 2: Index Not Built
+
+**User:** "Find all the places where we validate user permissions"
+
+**Agent Response:**
+```
+I found 3 locations where user permissions are validated:
+
+1. src/middleware/auth.js - validatePermissions()
+2. src/controllers/admin.js - checkAdminRole()
+3. src/utils/rbac.js - hasPermission()
+
+**Note:** devctx not used because: index not built. To use devctx next time: "Use smart-context-mcp: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)"
+```
+
+**Feedback added** - Complex search task, but index missing so agent used Grep instead.
+
+---
+
+### Example 3: Already Had Context
+
+**User:** "Now fix the bug in validatePermissions"
+
+**Agent Response:**
+```javascript
+// Fixed validatePermissions in src/middleware/auth.js
+export function validatePermissions(user, requiredPermissions) {
+  if (!user || !user.permissions) {
+    return false; // Fixed: was throwing error instead of returning false
+  }
+  return requiredPermissions.every(perm => user.permissions.includes(perm));
+}
+```
+
+**Note:** devctx not used because: already had sufficient context. To use devctx next time: "Use smart-context-mcp: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)"
+
+**Feedback added** - Agent already had the function in context from previous turn, so using devctx would be redundant.
+
 ## User Experience
 
 ### Before (No Feedback)
