@@ -255,6 +255,45 @@ export const grepSymbolInFile = async (absPath, symbol) => {
   }
 };
 
+export const grepMultipleSymbolsInFile = async (absPath, symbols) => {
+  if (symbols.length === 0) return {};
+  if (symbols.length === 1) {
+    const matches = await grepSymbolInFile(absPath, symbols[0]);
+    return { [symbols[0]]: matches };
+  }
+
+  try {
+    const args = ['--line-number', '--no-heading', '--fixed-strings', '--max-count', '5'];
+    for (const sym of symbols) {
+      args.push('-e', sym);
+    }
+    args.push(absPath);
+
+    const { stdout } = await execFile(rgPath, args, { timeout: 3000 });
+    const result = {};
+    for (const sym of symbols) result[sym] = [];
+
+    for (const line of stdout.split('\n').filter(Boolean)) {
+      const sep = line.indexOf(':');
+      if (sep === -1) continue;
+      const formatted = `${line.substring(0, sep)}|${line.substring(sep + 1)}`;
+      const content = line.substring(sep + 1);
+      
+      for (const sym of symbols) {
+        if (content.includes(sym)) {
+          result[sym].push(formatted);
+        }
+      }
+    }
+
+    return result;
+  } catch {
+    const result = {};
+    for (const sym of symbols) result[sym] = [];
+    return result;
+  }
+};
+
 const TYPE_REF_RE = /:\s*([A-Z][A-Za-z0-9_]+)|<([A-Z][A-Za-z0-9_]+)>|(?:extends|implements)\s+([A-Z][A-Za-z0-9_]+)/g;
 
 export const extractTypeReferences = (definitionText, index, relPath) => {
@@ -292,8 +331,10 @@ export const buildSymbolContext = async (fullPath, symbolNames, root) => {
   for (const caller of related.importedBy.slice(0, 5)) {
     const callerAbs = path.join(root, caller);
     if (!fs.existsSync(callerAbs)) continue;
+    
+    const matchesBySymbol = await grepMultipleSymbolsInFile(callerAbs, symbolNames);
     for (const sym of symbolNames) {
-      const matches = await grepSymbolInFile(callerAbs, sym);
+      const matches = matchesBySymbol[sym] || [];
       if (matches.length > 0) {
         sections.callers.push({ file: caller, symbol: sym, lines: matches.slice(0, 3) });
       }
@@ -303,8 +344,10 @@ export const buildSymbolContext = async (fullPath, symbolNames, root) => {
   for (const testFile of related.tests.slice(0, 3)) {
     const testAbs = path.join(root, testFile);
     if (!fs.existsSync(testAbs)) continue;
+    
+    const matchesBySymbol = await grepMultipleSymbolsInFile(testAbs, symbolNames);
     for (const sym of symbolNames) {
-      const matches = await grepSymbolInFile(testAbs, sym);
+      const matches = matchesBySymbol[sym] || [];
       if (matches.length > 0) {
         sections.tests.push({ file: testFile, symbol: sym, lines: matches.slice(0, 3) });
       }
