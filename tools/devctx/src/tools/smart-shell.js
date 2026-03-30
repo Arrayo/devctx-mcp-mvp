@@ -6,6 +6,7 @@ import { projectRoot } from '../utils/paths.js';
 import { pickRelevantLines, truncate, uniqueLines } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
+import { recordDevctxOperation } from '../missed-opportunities.js';
 
 const execFile = promisify(execFileCallback);
 const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
@@ -230,6 +231,9 @@ export const smartShell = async ({ command }) => {
     savedTokens: metrics.savedTokens,
     target: command,
   });
+  
+  // Record devctx operation for missed opportunity detection
+  recordDevctxOperation();
   
   // Record decision explanation
   const outputLines = rawText.split('\n').length;

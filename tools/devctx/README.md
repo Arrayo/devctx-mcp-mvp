@@ -175,6 +175,42 @@ You'll see explanations like:
 - Debugging tool selection
 - Understanding best practices
 
+### Missed Opportunities Detection (Optional)
+
+Detect when devctx **should have been used but wasn't**:
+
+```bash
+export DEVCTX_DETECT_MISSED=true
+```
+
+You'll see warnings like:
+
+```markdown
+⚠️ **Missed devctx opportunities detected:**
+
+**Session stats:**
+- devctx operations: 2
+- Estimated total: 25
+- Adoption: 8%
+
+🟡 **low devctx adoption**
+- **Issue:** Low adoption (8%). Target: >50%
+- **Potential savings:** ~184.0K tokens
+```
+
+**Detects:**
+- No devctx usage in long sessions
+- Low adoption (<30%)
+- Usage dropped mid-session
+
+**Combine all features:**
+
+```bash
+export DEVCTX_SHOW_USAGE=true    # See what's used
+export DEVCTX_EXPLAIN=true       # Understand why
+export DEVCTX_DETECT_MISSED=true # Detect gaps
+```
+
 ## Core Tools
 
 ### smart_read

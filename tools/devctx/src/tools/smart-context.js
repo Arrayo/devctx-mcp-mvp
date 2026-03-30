@@ -13,6 +13,7 @@ import { persistMetrics } from '../metrics.js';
 import { predictContextFiles, recordContextAccess } from '../context-patterns.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
+import { recordDevctxOperation } from '../missed-opportunities.js';
 import { 
   getDetailedDiff, 
   analyzeChangeImpact, 
@@ -1239,6 +1240,9 @@ export const smartContext = async ({
     savedTokens,
     target: task,
   });
+  
+  // Record devctx operation for missed opportunity detection
+  recordDevctxOperation();
   
   // Record decision explanation
   let reason = DECISION_REASONS.TASK_CONTEXT;

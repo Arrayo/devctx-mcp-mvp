@@ -11,6 +11,7 @@ import { truncate } from '../utils/text.js';
 import { countTokens } from '../tokenCounter.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
+import { recordDevctxOperation } from '../missed-opportunities.js';
 
 const execFile = promisify(execFileCb);
 import { summarizeGo, summarizeRust, summarizeJava, summarizeShell, summarizeTerraform, summarizeDockerfile, summarizeSql, extractGoSymbol, extractRustSymbol, extractJavaSymbol, summarizeCsharp, extractCsharpSymbol, summarizeKotlin, extractKotlinSymbol, summarizePhp, extractPhpSymbol, summarizeSwift, extractSwiftSymbol } from './smart-read/additional-languages.js';
@@ -462,6 +463,9 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     savedTokens: metrics.savedTokens,
     target: path.relative(projectRoot, fullPath),
   });
+  
+  // Record devctx operation for missed opportunity detection
+  recordDevctxOperation();
   
   // Record decision explanation
   const lineCount = content.split('\n').length;

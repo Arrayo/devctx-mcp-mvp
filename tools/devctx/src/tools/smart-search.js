@@ -10,6 +10,7 @@ import { isBinaryBuffer, isDockerfile, resolveSafePath } from '../utils/fs.js';
 import { truncate } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
+import { recordDevctxOperation } from '../missed-opportunities.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -390,6 +391,9 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     savedTokens: metrics.savedTokens,
     target: query,
   });
+  
+  // Record devctx operation for missed opportunity detection
+  recordDevctxOperation();
   
   // Record decision explanation
   let reason = DECISION_REASONS.MULTIPLE_FILES;

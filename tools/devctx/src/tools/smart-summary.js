@@ -3,6 +3,7 @@ import { persistMetrics } from '../metrics.js';
 import { enforceRepoSafety, getRepoSafety } from '../repo-safety.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
+import { recordDevctxOperation } from '../missed-opportunities.js';
 import {
   ACTIVE_SESSION_SCOPE,
   SQLITE_SCHEMA_VERSION,
@@ -1221,6 +1222,8 @@ export const smartSummary = async ({
           target: targetSessionId,
         });
         
+        recordDevctxOperation();
+        
         recordDecision({
           tool: 'smart_summary',
           action: `get checkpoint "${targetSessionId}"`,
@@ -1426,6 +1429,8 @@ export const smartSummary = async ({
           savedTokens: metrics2.savedTokens || 0,
           target: targetSessionId,
         });
+        
+        recordDevctxOperation();
 
         return addRepoSafety({
           action,
@@ -1492,6 +1497,8 @@ export const smartSummary = async ({
         savedTokens: summaryMetrics.savedTokens || 0,
         target: targetSessionId,
       });
+      
+      recordDevctxOperation();
 
       return addRepoSafety({
         action,

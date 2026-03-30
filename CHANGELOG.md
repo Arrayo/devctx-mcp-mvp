@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Missed Opportunities Detector:**
+  - New detector identifies when devctx should have been used but wasn't
+  - Analyzes session patterns to detect adoption gaps and potential token savings
+  - Enable with `export DEVCTX_DETECT_MISSED=true`
+  - Detects: No devctx usage in long sessions (>5 min), Low adoption (<30%), Usage dropped (>3 min gap)
+  - Shows session stats: duration, devctx operations, estimated total, adoption rate
+  - Estimates potential token savings per opportunity
+  - Provides actionable suggestions: forcing prompt, check index, verify MCP
+  - Severity levels: 🔴 High (no usage), 🟡 Medium (low adoption, dropped)
+  - Session-scoped tracking (resets on MCP server restart)
+  - Heuristic-based: estimates total operations from time gaps (can't intercept native tools)
+  - New module: `src/missed-opportunities.js` with detection and formatting functions
+  - New tests: `tests/missed-opportunities.test.js` (11 tests covering all scenarios)
+  - Integrated into all major tools after `persistMetrics()`
+  - New doc: `docs/missed-opportunities.md` with complete guide
+  - Updated: `README.md` and `tools/devctx/README.md` with missed opportunities section
+  - Goal: Identify adoption gaps, quantify potential savings, validate forcing prompts
+  - Benefits: Detect when agent switches to native tools, see missed savings, verify rules working
+  - Disabled by default to avoid false positives
+  - Can combine with usage feedback and decision explainer for maximum visibility
+  - Limitations: Total operations estimated (not measured), may have false positives, session-scoped only
+
 - **Decision Explainer System:**
   - New decision explainer provides transparency into agent decision-making
   - Explains why devctx tools were used, what alternatives were considered, and expected benefits

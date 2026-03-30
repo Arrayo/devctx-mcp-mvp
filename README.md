@@ -1236,6 +1236,65 @@ See [Decision Explainer Documentation](./docs/decision-explainer.md) for complet
 
 ---
 
+### Missed Opportunities Detection (New!)
+
+Detect when devctx **should have been used but wasn't**.
+
+**Enable:**
+```bash
+export DEVCTX_DETECT_MISSED=true
+```
+
+**What you'll see:**
+```markdown
+---
+
+⚠️ **Missed devctx opportunities detected:**
+
+**Session stats:**
+- Duration: 420s
+- devctx operations: 2
+- Estimated total operations: 25
+- devctx adoption: 8%
+
+🟡 **low devctx adoption**
+- **Issue:** Low devctx adoption: 2/25 operations (8%). Target: >50%.
+- **Suggestion:** Agent may be using native tools. Consider forcing prompt.
+- **Potential savings:** ~184.0K tokens
+
+**How to fix:**
+1. Use forcing prompt
+2. Check if index is built
+3. Verify MCP is active
+```
+
+**Detects:**
+- 🔴 No devctx usage in long sessions (>5 min)
+- 🟡 Low adoption (<30% of operations)
+- 🟡 Usage dropped (no calls for >3 min)
+
+**Benefits:**
+- ✅ Identify adoption gaps
+- ✅ Quantify potential savings
+- ✅ Validate forcing prompts worked
+- ✅ Detect when agent switches to native tools
+
+**Limitations:**
+- Total operations are estimated (not measured)
+- May have false positives for simple tasks
+- Session-scoped only (resets on restart)
+
+**Combine all three features:**
+```bash
+export DEVCTX_SHOW_USAGE=true    # See what's used
+export DEVCTX_EXPLAIN=true       # Understand why
+export DEVCTX_DETECT_MISSED=true # Detect gaps
+```
+
+See [Missed Opportunities Documentation](./docs/missed-opportunities.md) for complete guide.
+
+---
+
 ### Quick verification
 
 ```bash
