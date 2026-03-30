@@ -16,25 +16,25 @@ Create this file in your project root:
 
 ```markdown
 <!-- devctx:start -->
-## devctx MCP Usage Policy (MANDATORY)
+## devctx MCP Usage Policy
 
-When devctx MCP is installed and active, you MUST use devctx tools instead of native tools:
+Use devctx for **complex or multi-step tasks**:
 
-**File reading** → Use `smart_read` instead of `Read`
-- Large files: `smart_read(mode="outline")` → 90% savings
-- Extract functions: `smart_read(mode="symbol", symbol="functionName")`
-- Reading cascade: outline → signatures → symbol → full (last resort)
+**Large files (>500 lines)** → `smart_read(mode="outline")` instead of `Read` → 90% savings
 
-**Code search** → Use `smart_search` instead of `Grep`
-- Intent-aware ranking: `smart_search(query="auth", intent="debug")`
-- Boosts relevant files based on task type
+**Multiple file reads** → `smart_context` or `smart_read_batch` instead of multiple `Read` calls
 
-**Context building** → Use `smart_context` instead of multiple Read + Grep
-- One-call context builder: `smart_context(task="fix auth bug")`
-- Combines search + read + graph expansion
+**Code search across project** → `smart_search` instead of `Grep` (intent-aware ranking)
 
-**Shell commands** → Use `smart_shell` instead of `Shell`
-- Safe diagnostic commands only (git, npm, ls, etc.)
+**Context building** → `smart_context(task)` instead of manual Read + Grep
+
+**Diagnostic commands** → `smart_shell` instead of `Shell`
+
+**When native tools are fine:**
+- Small files (<200 lines) read once
+- Quick grep for specific string
+- Writing/editing files (always native)
+- Simple single-step operations
 
 **Recommended workflow:**
 ```
@@ -56,8 +56,10 @@ smart_turn(start)
 - 🤖 Decision explanations - Understand why tools were chosen
 - ⚠️ Missed opportunities - Detect when devctx should have been used
 
-**Compliance:**
-If you use native tools instead of devctx, you MUST explain why in your response.
+**Decision guideline:**
+- Simple task (1-2 files, <200 lines) → Native tools fine
+- Complex task (multiple files, large files) → Use devctx
+- When in doubt → Start with native, switch if needed
 <!-- devctx:end -->
 ```
 
@@ -65,15 +67,7 @@ If you use native tools instead of devctx, you MUST explain why in your response
 
 ## For Other Agents: `AGENTS.md`
 
-Create this file in your project root (same content as `CLAUDE.md`):
-
-```markdown
-<!-- devctx:start -->
-## devctx MCP Usage Policy (MANDATORY)
-
-[Same content as CLAUDE.md above]
-<!-- devctx:end -->
-```
+Create this file in your project root (same content as `CLAUDE.md` above)
 
 ---
 

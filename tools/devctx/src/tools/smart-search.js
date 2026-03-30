@@ -11,6 +11,7 @@ import { truncate } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
+import { IGNORED_DIRS, IGNORED_FILE_NAMES } from '../config/ignored-paths.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -19,8 +20,8 @@ const supportedGlobs = [
   '*.go', '*.rs', '*.java', '*.sh', '*.bash', '*.zsh', '*.tf', '*.tfvars', '*.hcl',
   'Dockerfile', 'Dockerfile.*',
 ];
-const ignoredDirs = ['node_modules', '.git', '.next', 'dist', 'build', 'coverage', '.venv', 'venv', '__pycache__', '.terraform'];
-const ignoredFileNames = new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lockb', 'npm-shrinkwrap.json']);
+const ignoredDirs = IGNORED_DIRS;
+const ignoredFileNames = new Set(IGNORED_FILE_NAMES);
 const fallbackExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.json', '.mjs', '.cjs', '.py', '.toml', '.yaml', '.yml', '.md', '.graphql', '.gql', '.sql', '.go', '.rs', '.java', '.sh', '.bash', '.zsh', '.tf', '.tfvars', '.hcl']);
 const likelySourceExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.py', '.graphql', '.gql', '.sql', '.go', '.rs', '.java', '.sh', '.bash', '.zsh']);
 const likelyConfigExtensions = new Set(['.json', '.toml', '.yaml', '.yml', '.tf', '.tfvars', '.hcl']);
@@ -127,6 +128,7 @@ const searchWithRipgrep = async (root, query) => {
       .filter((match) => !shouldIgnoreFile(match.file));
   } catch (error) {
     if (error.code === 1) return [];
+    console.error('[smart-search] ripgrep failed:', error.message, { code: error.code, signal: error.signal });
     return null;
   }
 };

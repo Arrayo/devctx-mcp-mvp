@@ -1,15 +1,25 @@
 # devctx MCP Usage Policy
 
-## MANDATORY: Use devctx MCP tools when available
+## When to Use devctx
 
-When the devctx MCP is installed and active, you MUST use devctx tools instead of native tools for:
+Use devctx tools for **complex or multi-step tasks**:
 
-- **File reading** → Use `smart_read` instead of `Read`
-- **Code search** → Use `smart_search` instead of `Grep`
-- **Context building** → Use `smart_context` instead of multiple Read + Grep calls
-- **Shell commands** → Use `smart_shell` instead of `Shell` (for diagnostic commands)
+- **Large files (>500 lines)** → Use `smart_read(mode="outline")` instead of `Read`
+- **Multiple file reads** → Use `smart_context` or `smart_read_batch` instead of multiple `Read` calls
+- **Code search across project** → Use `smart_search` instead of `Grep`
+- **Building context for a task** → Use `smart_context` instead of manual Read + Grep
+- **Diagnostic commands** → Use `smart_shell` instead of `Shell`
 
-## Recommended workflow:
+## When Native Tools Are Fine
+
+Use native tools for **simple, single-step operations**:
+
+- ✅ Reading a small file (<200 lines) once
+- ✅ Quick grep for a specific string
+- ✅ Writing/editing files (always use native Write/StrReplace)
+- ✅ Single-file edits with no context needed
+
+## Recommended workflow for complex tasks:
 
 ```
 1. smart_turn(start) - Start session and recover context
@@ -27,14 +37,7 @@ When the devctx MCP is installed and active, you MUST use devctx tools instead o
 - ✅ Running diagnostic shell commands
 - ✅ Multi-step tasks that benefit from session persistence
 
-## When NOT to use devctx:
-
-- ❌ Writing/editing files (use native Write/StrReplace)
-- ❌ Deleting files (use native Delete)
-- ❌ File operations that modify content
-- ❌ Simple single-file edits with no context needed
-
-## Preflight (recommended):
+## Preflight for complex tasks:
 
 Before starting work:
 ```
@@ -53,6 +56,9 @@ The MCP will automatically show:
 
 To disable: `export DEVCTX_SHOW_USAGE=false DEVCTX_EXPLAIN=false DEVCTX_DETECT_MISSED=false`
 
-## Compliance:
+## Decision Guideline:
 
-If you use native tools instead of devctx, you MUST explain why in your response.
+Choose based on task complexity:
+- **Simple task** (1-2 files, <200 lines) → Native tools are fine
+- **Complex task** (multiple files, large files, context needed) → Use devctx
+- **When in doubt** → Start with native, switch to devctx if needed

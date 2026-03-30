@@ -833,8 +833,12 @@ export const getChangedFiles = async (diff, root) => {
           'git', ['ls-files', '--others', '--exclude-standard'],
           { cwd: root, timeout: 10000 },
         );
+        const pathSet = new Set(allPaths);
         for (const u of untrackedOut.split('\n').map((l) => l.trim()).filter(Boolean)) {
-          if (!allPaths.includes(u)) allPaths.push(u);
+          if (!pathSet.has(u)) {
+            allPaths.push(u);
+            pathSet.add(u);
+          }
         }
       } catch { /* ignore — untracked listing is best-effort */ }
     }

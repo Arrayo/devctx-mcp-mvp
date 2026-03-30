@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import ts from 'typescript';
 import { isBinaryBuffer } from './utils/fs.js';
+import { IGNORED_DIRS } from './config/ignored-paths.js';
 
 const INDEX_VERSION = 4;
 
@@ -61,10 +62,7 @@ const indexableExtensions = new Set([
   '.cs', '.kt', '.php', '.swift',
 ]);
 
-const ignoredDirs = new Set([
-  'node_modules', '.git', '.next', 'dist', 'build', 'coverage',
-  '.venv', 'venv', '__pycache__', '.terraform', '.devctx',
-]);
+const ignoredDirs = new Set(IGNORED_DIRS);
 
 const scriptKindByExtension = {
   '.js': ts.ScriptKind.JS,
