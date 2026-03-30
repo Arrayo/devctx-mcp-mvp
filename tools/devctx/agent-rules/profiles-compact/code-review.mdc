@@ -5,21 +5,35 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ## Code Review Workflow
 
+**Always start with `smart_turn(start)` to track review context:**
+
 ```
-smart_turn(start)
-→ smart_context(diff=true, detail=moderate)
-→ smart_read(mode=signatures, filePath=<changed files>)
-→ [review API surface]
-→ smart_read(mode=symbol, symbol=<key functions>)
-→ git_blame({ mode: 'symbol', filePath: <file> })
-→ smart_shell('npm test')
-→ smart_turn(end, event=milestone)
+1. smart_turn(start, userPrompt='Review PR #123', ensureSession=true)
+   → Recovers: Previous review context (if exists)
+   
+2. smart_context(diff=true, detail=moderate)
+   → Returns: Changed files with graph, prioritizes API
+   
+3. smart_read(mode=signatures, filePath=<changed files>)
+   → Reviews: API surface before implementation
+   
+4. smart_read(mode=symbol, symbol=<key functions>)
+   → Inspects: Implementation details
+   
+5. git_blame({ mode: 'symbol', filePath: <file> })
+   → Checks: Code attribution
+   
+6. smart_shell('npm test')
+   → Verifies: Tests pass
+   
+7. smart_turn(end, event=milestone, summary='PR approved', nextStep='...')
+   → Checkpoints: Review decision
 ```
 
-**Key points:**
-- `diff=true` focuses on changed files
-- `mode=signatures` reviews API before implementation
-- `git_blame` for code attribution
-- Verify tests pass before approval
+**Why this flow?**
+- `smart_turn(start)` tracks review progress
+- `diff=true` focuses on changes only
+- `mode=signatures` reviews API first
+- `smart_turn(end)` records approval/rejection
 
 **Token savings:** 87% (200K → 25K typical)

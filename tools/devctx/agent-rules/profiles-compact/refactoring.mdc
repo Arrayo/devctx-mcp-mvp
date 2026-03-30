@@ -5,21 +5,37 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ## Refactoring Workflow
 
+**Always start with `smart_turn(start)` to track refactor progress:**
+
 ```
-smart_turn(start)
-→ smart_context(entryFile=<target>, detail=moderate)
-→ smart_read(mode=signatures, filePath=<files>)
-→ smart_read(mode=symbol, symbol=<function to refactor>)
-→ git_blame({ mode: 'symbol', filePath: <file> })
-→ [refactor]
-→ smart_shell('npm test')
-→ smart_turn(end, event=milestone)
+1. smart_turn(start, userPrompt='Extract auth logic', ensureSession=true)
+   → Recovers: Previous refactor context (if exists)
+   
+2. smart_context(entryFile=<target>, detail=moderate)
+   → Builds: Dependency graph
+   
+3. smart_read(mode=signatures, filePath=<files>)
+   → Understands: API surface before changes
+   
+4. smart_read(mode=symbol, symbol=<function to refactor>)
+   → Extracts: Target function
+   
+5. git_blame({ mode: 'symbol', filePath: <file> })
+   → Checks: Authorship
+   
+6. [refactor code]
+
+7. smart_shell('npm test')
+   → Verifies: Tests still pass
+   
+8. smart_turn(end, event=milestone, summary='...', nextStep='...')
+   → Checkpoints: Refactor progress
 ```
 
-**Key points:**
-- `smart_context` builds dependency graph
-- `mode=signatures` understands API before changes
-- `git_blame` checks authorship
-- Always verify tests after refactor
+**Why this flow?**
+- `smart_turn(start)` recovers refactor context
+- `smart_context` reveals impact
+- `mode=signatures` preserves API
+- `smart_turn(end)` tracks multi-step refactors
 
 **Token savings:** 89% (180K → 20K typical)

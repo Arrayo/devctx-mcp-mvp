@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- **`smart_turn(start)` as Recommended Entry Point:**
+  - Emphasized as optimal flow for non-trivial tasks
+  - Added 5 complete workflow examples (debugging, review, refactor, testing, architecture)
+  - Updated base rules to highlight `smart_turn` benefits
+  - Updated all task profiles to start with `smart_turn(start)`
+  - Created comprehensive docs/smart-turn-entry-point.md
+  - Benefits: Context recovery, session persistence, metrics tracking, repo safety
+  - When to use: Debugging, review, refactor, testing, architecture
+  - When to skip: Trivial tasks, one-off questions, simple reads
 - **Two-Layer Agent Rules Architecture:**
   - Base rule ultra-short (~150 tokens, always active)
   - Task-specific profiles compact (~100-150 tokens, conditional)

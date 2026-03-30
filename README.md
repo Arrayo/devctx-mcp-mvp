@@ -24,6 +24,45 @@ AI agents waste tokens in three ways:
 
 This MCP solves all three by providing tools that return compressed, ranked, and cached context.
 
+## Recommended Workflow
+
+### The Entry Point: `smart_turn(start)`
+
+For **non-trivial tasks** (debugging, review, refactor, testing, architecture), the optimal flow is:
+
+```
+1. smart_turn(start, userPrompt, ensureSession=true)
+   ↓ recovers previous context, classifies task, checks repo safety
+   
+2. smart_context(...) or smart_search(intent=...)
+   ↓ builds context or finds relevant code
+   
+3. smart_read(mode=outline|signatures|symbol)
+   ↓ reads compressed, cascades to full only if needed
+   
+4. [work: make changes, analyze, review]
+   
+5. smart_shell('npm test')
+   ↓ verifies changes safely
+   
+6. smart_turn(end, event=milestone|blocker|task_complete)
+   ↓ checkpoints progress for recovery
+```
+
+**Why start with `smart_turn`?**
+- ✅ Recovers previous session context (if exists)
+- ✅ Classifies task continuation vs new task
+- ✅ Provides repo safety check
+- ✅ Enables session recovery if interrupted
+- ✅ Tracks metrics for optimization
+
+**When to skip `smart_turn`:**
+- ❌ Trivial tasks (read single file, simple search)
+- ❌ One-off questions (no continuity needed)
+- ❌ Quick diagnostics (no session context)
+
+---
+
 ## How it Works in Practice
 
 ### The Reality
@@ -32,18 +71,20 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 
 1. **You write a prompt:** "Fix the login bug"
 2. **Agent reads rules:** Sees debugging workflow suggestion
-3. **Agent decides:** "This is a debugging task, I'll use `smart_search(intent=debug)`"
-4. **Agent calls tool:** `smart_search({ query: 'login error', intent: 'debug' })`
-5. **MCP returns:** Ranked results (errors prioritized)
-6. **Agent continues:** Calls `smart_read(mode=symbol)` for specific function
-7. **Agent fixes bug:** Makes changes
-8. **Agent verifies:** Calls `smart_shell('npm test')`
-9. **Agent checkpoints:** Calls `smart_turn(end)` to persist progress
+3. **Agent decides:** "This is a debugging task, I'll start with `smart_turn(start)`"
+4. **Agent calls:** `smart_turn({ phase: 'start', userPrompt: '...', ensureSession: true })`
+5. **MCP returns:** Previous context (if exists) + repo safety check
+6. **Agent continues:** Calls `smart_search(intent=debug)` for error location
+7. **Agent reads:** Calls `smart_read(mode=symbol)` for specific function
+8. **Agent fixes bug:** Makes changes
+9. **Agent verifies:** Calls `smart_shell('npm test')`
+10. **Agent checkpoints:** Calls `smart_turn(end)` to persist progress
 
 **Key points:**
 - ✅ Agent **chooses** to use devctx tools (not forced)
 - ✅ Rules **guide** the agent (not enforce)
-- ✅ Agent can use built-in tools when appropriate
+- ✅ `smart_turn(start)` is **recommended entry point** for non-trivial tasks
+- ✅ Agent can skip workflow for trivial tasks
 - ✅ You control nothing directly—the agent decides
 
 ### What You Get
@@ -110,6 +151,273 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - No harm done (MCP is passive)
 
 **You can check:** `npm run report:metrics` shows actual tool usage.
+
+---
+
+## Workflow Examples
+
+### Debugging
+
+```javascript
+// 1. Start session
+smart_turn({ 
+  phase: 'start', 
+  userPrompt: 'TypeError: Cannot read property "user" of undefined',
+  ensureSession: true 
+})
+// → Recovers: "Last worked on auth system, checked validateToken()"
+
+// 2. Find error
+smart_search({ 
+  query: 'TypeError user undefined',
+  intent: 'debug'
+})
+// → Returns: src/auth.js (error handling), src/routes/login.js (recent change)
+
+// 3. Read structure
+smart_read({ 
+  filePath: 'src/routes/login.js',
+  mode: 'signatures'
+})
+// → Returns: loginHandler, validateCredentials, generateToken
+
+// 4. Extract failing function
+smart_read({ 
+  filePath: 'src/routes/login.js',
+  mode: 'symbol',
+  symbol: 'loginHandler'
+})
+// → Returns: Full function code (250 tokens vs 5K for full file)
+
+// 5. Reproduce error
+smart_shell({ command: 'npm test -- login.test.js' })
+// → Returns: Test failure output
+
+// [Fix bug]
+
+// 6. Verify fix
+smart_shell({ command: 'npm test -- login.test.js' })
+// → Returns: Tests pass
+
+// 7. Checkpoint
+smart_turn({ 
+  phase: 'end',
+  event: 'milestone',
+  summary: 'Fixed TypeError in loginHandler - null check added',
+  nextStep: 'Consider adding integration tests'
+})
+```
+
+**Token usage:** 150K → 15K (90% savings)
+
+---
+
+### Code Review
+
+```javascript
+// 1. Start session
+smart_turn({ 
+  phase: 'start',
+  userPrompt: 'Review PR #123 - Add JWT refresh token support',
+  ensureSession: true
+})
+
+// 2. Get changed files context
+smart_context({ 
+  diff: true,
+  detail: 'moderate'
+})
+// → Returns: Changed files with graph, prioritizes API surface
+
+// 3. Review API surface
+smart_read({ 
+  filePath: 'src/auth.js',
+  mode: 'signatures'
+})
+// → Returns: Exported functions only
+
+// 4. Check implementation
+smart_read({ 
+  filePath: 'src/auth.js',
+  mode: 'symbol',
+  symbol: 'refreshToken'
+})
+
+// 5. Check authorship
+git_blame({ 
+  mode: 'symbol',
+  filePath: 'src/auth.js'
+})
+// → Returns: Who wrote each function
+
+// 6. Verify tests
+smart_shell({ command: 'npm test' })
+
+// 7. Checkpoint
+smart_turn({ 
+  phase: 'end',
+  event: 'milestone',
+  summary: 'PR #123 approved - JWT refresh implemented correctly',
+  nextStep: 'Monitor production metrics after deploy'
+})
+```
+
+**Token usage:** 200K → 25K (87% savings)
+
+---
+
+### Refactoring
+
+```javascript
+// 1. Start session
+smart_turn({ 
+  phase: 'start',
+  userPrompt: 'Extract authentication logic into separate service',
+  ensureSession: true
+})
+
+// 2. Build dependency graph
+smart_context({ 
+  entryFile: 'src/routes/login.js',
+  detail: 'moderate'
+})
+// → Returns: Dependencies, imports, exports
+
+// 3. Understand current structure
+smart_read({ 
+  filePath: 'src/routes/login.js',
+  mode: 'signatures'
+})
+
+// 4. Extract target function
+smart_read({ 
+  filePath: 'src/routes/login.js',
+  mode: 'symbol',
+  symbol: 'validateCredentials'
+})
+
+// 5. Check authorship
+git_blame({ 
+  mode: 'symbol',
+  filePath: 'src/routes/login.js'
+})
+
+// [Refactor: create src/services/auth.js, move logic]
+
+// 6. Verify tests still pass
+smart_shell({ command: 'npm test' })
+
+// 7. Checkpoint
+smart_turn({ 
+  phase: 'end',
+  event: 'milestone',
+  summary: 'Extracted auth logic to AuthService - tests pass',
+  nextStep: 'Update other routes to use AuthService'
+})
+```
+
+**Token usage:** 180K → 20K (89% savings)
+
+---
+
+### Testing
+
+```javascript
+// 1. Start session
+smart_turn({ 
+  phase: 'start',
+  userPrompt: 'Write tests for validateToken function',
+  ensureSession: true
+})
+
+// 2. Find existing test patterns
+smart_search({ 
+  query: 'validateToken test',
+  intent: 'tests'
+})
+// → Returns: Existing test files, test patterns
+
+// 3. Read function to test
+smart_read({ 
+  filePath: 'src/auth.js',
+  mode: 'symbol',
+  symbol: 'validateToken'
+})
+
+// 4. Understand dependencies
+smart_context({ 
+  entryFile: 'src/auth.js',
+  detail: 'minimal'
+})
+// → Returns: Dependencies (jwt, bcrypt, db)
+
+// [Write test]
+
+// 5. Run tests
+smart_shell({ command: 'npm test -- auth.test.js' })
+
+// 6. Checkpoint
+smart_turn({ 
+  phase: 'end',
+  event: 'milestone',
+  summary: 'Added 5 tests for validateToken - all pass',
+  nextStep: 'Add edge case tests for expired tokens'
+})
+```
+
+**Token usage:** 120K → 12K (90% savings)
+
+---
+
+### Architecture Exploration
+
+```javascript
+// 1. Start session
+smart_turn({ 
+  phase: 'start',
+  userPrompt: 'Understand how authentication works in this codebase',
+  ensureSession: true
+})
+
+// 2. Get high-level overview
+smart_context({ 
+  detail: 'minimal'
+})
+// → Returns: Project structure, key modules
+
+// 3. Find auth-related code
+smart_search({ 
+  query: 'authentication authorization',
+  intent: 'explore'
+})
+// → Returns: Ranked files by relevance
+
+// 4. Review API surface
+smart_read({ 
+  filePath: 'src/auth.js',
+  mode: 'signatures'
+})
+// → Returns: Exported functions only
+
+// 5. Check cross-project patterns (if monorepo)
+cross_project({ 
+  mode: 'search',
+  query: 'AuthService'
+})
+// → Returns: Similar auth patterns in other projects
+
+// 6. Checkpoint
+smart_turn({ 
+  phase: 'end',
+  event: 'milestone',
+  summary: 'Auth uses JWT with 1h expiry, refresh tokens in Redis',
+  nextStep: 'Document auth flow in architecture.md'
+})
+```
+
+**Token usage:** 300K → 30K (90% savings)
+
+---
 
 ## Core Tools
 

@@ -375,7 +375,19 @@ const updatePreCommitHook = (targetDir, dryRun) => {
 // Agent rules — instruct agents to prefer devctx tools over built-in ones
 // ---------------------------------------------------------------------------
 
-const agentRuleBody = `For file reading, code search, and diagnostics, prefer devctx MCP tools when they add value:
+const agentRuleBody = `Recommended entry point for non-trivial tasks (debugging, review, refactor, testing, architecture):
+
+  smart_turn(start, userPrompt, ensureSession=true)
+  → recovers context, classifies task, checks repo safety
+  → work with devctx tools
+  → smart_turn(end, event=milestone|blocker|task_complete)
+
+Why start with smart_turn?
+- Recovers previous session context (if exists)
+- Enables session recovery if interrupted
+- Tracks metrics for optimization
+
+When to skip: Trivial tasks (read single file, simple search, one-off questions)
 
 Core tools:
 - smart_read(outline|signatures|symbol) - Compressed reading (90% savings)
@@ -383,18 +395,13 @@ Core tools:
 - smart_context - One-call context builder
 - smart_shell - Safe diagnostic commands
 
-Entry point for non-trivial tasks:
-  smart_turn(start, userPrompt, ensureSession=true)
-  → work with devctx tools
-  → smart_turn(end, event=milestone|blocker|task_complete)
-
 Reading cascade (prefer compressed):
 1. outline - Structure only (~90% savings)
 2. signatures - Exported API
 3. symbol - Specific function
 4. full - Last resort
 
-These are suggestions, not guarantees. You decide when devctx tools add value based on the task.
+These are suggestions, not guarantees. You decide when devctx tools add value.
 
 For detailed workflows, see: .cursor/rules/profiles-compact/ (debugging, code-review, refactoring, testing, architecture)`;
 

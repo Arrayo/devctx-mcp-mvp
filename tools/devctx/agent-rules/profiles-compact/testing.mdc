@@ -5,20 +5,34 @@ globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**"]
 
 ## Testing Workflow
 
+**Always start with `smart_turn(start)` to track test coverage:**
+
 ```
-smart_turn(start)
-→ smart_search(intent=tests, query=<feature>)
-→ smart_read(mode=symbol, symbol=<function to test>)
-→ smart_context(entryFile=<function file>, detail=minimal)
-→ [write test]
-→ smart_shell('npm test')
-→ smart_turn(end, event=milestone)
+1. smart_turn(start, userPrompt='Write tests for validateToken', ensureSession=true)
+   → Recovers: Previous test context (if exists)
+   
+2. smart_search(intent=tests, query=<feature>)
+   → Finds: Existing test patterns
+   
+3. smart_read(mode=symbol, symbol=<function to test>)
+   → Extracts: Function to test
+   
+4. smart_context(entryFile=<function file>, detail=minimal)
+   → Reveals: Dependencies (jwt, bcrypt, db)
+   
+5. [write test]
+
+6. smart_shell('npm test')
+   → Runs: Tests immediately
+   
+7. smart_turn(end, event=milestone, summary='Added 5 tests', nextStep='...')
+   → Checkpoints: Test coverage progress
 ```
 
-**Key points:**
-- `intent=tests` finds existing test patterns
-- `mode=symbol` extracts function to test
-- `smart_context` reveals dependencies
-- Run tests immediately after writing
+**Why this flow?**
+- `smart_turn(start)` tracks test coverage
+- `intent=tests` finds patterns
+- `mode=symbol` reads only what's tested
+- `smart_turn(end)` records coverage progress
 
 **Token savings:** 90% (120K → 12K typical)

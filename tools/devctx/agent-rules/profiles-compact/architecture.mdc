@@ -5,19 +5,32 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ## Architecture Exploration Workflow
 
+**Always start with `smart_turn(start)` to track exploration:**
+
 ```
-smart_turn(start)
-→ smart_context(detail=minimal)
-→ smart_search(intent=explore, query=<concept>)
-→ smart_read(mode=signatures, filePath=<key files>)
-→ cross_project({ mode: 'search', query: <shared concept> })
-→ smart_turn(end, event=milestone)
+1. smart_turn(start, userPrompt='Understand auth flow', ensureSession=true)
+   → Recovers: Previous exploration context (if exists)
+   
+2. smart_context(detail=minimal)
+   → Returns: High-level project structure
+   
+3. smart_search(intent=explore, query=<concept>)
+   → Finds: Architectural patterns
+   
+4. smart_read(mode=signatures, filePath=<key files>)
+   → Reveals: API surface only
+   
+5. cross_project({ mode: 'search', query: <shared concept> })
+   → Discovers: Cross-project patterns (if monorepo)
+   
+6. smart_turn(end, event=milestone, summary='Auth uses JWT...', nextStep='...')
+   → Checkpoints: Architecture understanding
 ```
 
-**Key points:**
-- `detail=minimal` for high-level overview
-- `mode=signatures` reveals API surface
-- `intent=explore` finds architectural patterns
-- `cross_project` for monorepo context
+**Why this flow?**
+- `smart_turn(start)` recovers exploration progress
+- `detail=minimal` provides overview
+- `mode=signatures` reveals API
+- `smart_turn(end)` documents findings
 
 **Token savings:** 90% (300K → 30K typical)
