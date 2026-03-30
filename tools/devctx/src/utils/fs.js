@@ -2,17 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { projectRoot } from './paths.js';
 
-const assertInsideProject = (fullPath) => {
-  const relative = path.relative(projectRoot, fullPath);
+const assertInsideProject = (fullPath, root = projectRoot) => {
+  const relative = path.relative(root, fullPath);
 
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error(`Path escapes project root: ${fullPath}`);
   }
 };
 
-export const resolveSafePath = (inputPath = '.') => {
-  const fullPath = path.resolve(projectRoot, inputPath);
-  assertInsideProject(fullPath);
+export const resolveSafePath = (inputPath = '.', root = projectRoot) => {
+  const fullPath = path.resolve(root, inputPath);
+  assertInsideProject(fullPath, root);
   return fullPath;
 };
 
@@ -35,8 +35,8 @@ export const isDockerfile = (filePath) => {
   return baseName === 'dockerfile' || baseName.startsWith('dockerfile.');
 };
 
-export const readTextFile = (inputPath) => {
-  const fullPath = resolveSafePath(inputPath);
+export const readTextFile = (inputPath, root = projectRoot) => {
+  const fullPath = resolveSafePath(inputPath, root);
   const raw = fs.readFileSync(fullPath);
 
   if (isBinaryBuffer(raw)) {

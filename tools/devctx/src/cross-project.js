@@ -9,7 +9,7 @@ import path from 'node:path';
 import { loadIndex } from './index.js';
 import { smartSearch } from './tools/smart-search.js';
 import { smartRead } from './tools/smart-read.js';
-import { projectRoot, setProjectRoot } from './utils/paths.js';
+import { projectRoot } from './utils/paths.js';
 
 const CROSS_PROJECT_CONFIG_FILE = '.devctx-projects.json';
 
@@ -136,7 +136,6 @@ export const readAcrossProjects = async (fileRefs, root = projectRoot) => {
   const relatedProjects = discoverRelatedProjects(root);
   const projectMap = new Map(relatedProjects.map(p => [p.name, p]));
 
-  const originalRoot = projectRoot;
   const results = [];
 
   for (const ref of fileRefs) {
@@ -151,11 +150,10 @@ export const readAcrossProjects = async (fileRefs, root = projectRoot) => {
     }
 
     try {
-      setProjectRoot(project.path);
-
       const readResult = await smartRead({
         filePath: ref.file,
         mode: ref.mode || 'outline',
+        cwd: project.path,
       });
 
       results.push({
@@ -175,7 +173,6 @@ export const readAcrossProjects = async (fileRefs, root = projectRoot) => {
     }
   }
 
-  setProjectRoot(originalRoot);
   return results;
 };
 

@@ -70,11 +70,11 @@ const extractRange = (content, startLine, endLine) => {
   return truncate(numbered.join('\n'), 12000);
 };
 
-const lookupIndexLine = (fullPath, symbolName) => {
+const lookupIndexLine = (fullPath, symbolName, root = projectRoot) => {
   try {
-    const index = loadIndex(projectRoot);
+    const index = loadIndex(root);
     if (!index) return { line: undefined, used: false };
-    const relPath = path.relative(projectRoot, fullPath).replace(/\\/g, '/');
+    const relPath = path.relative(root, fullPath).replace(/\\/g, '/');
     const hits = queryIndex(index, symbolName);
     const match = hits.find((h) => h.path === relPath);
     return { line: match?.line, used: !!match };
@@ -365,11 +365,12 @@ const formatContextSections = (sections) => {
   return parts.length > 0 ? '\n' + parts.join('\n') : '';
 };
 
-export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine, symbol, maxTokens, context: includeContext }) => {
+export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine, symbol, maxTokens, context: includeContext, cwd }) => {
   let fullPath, content;
+  const effectiveRoot = cwd || projectRoot;
   
   try {
-    const result = readTextFile(filePath);
+    const result = readTextFile(filePath, effectiveRoot);
     fullPath = result.fullPath;
     content = result.content;
   } catch (error) {
@@ -430,7 +431,7 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
 
   if (mode === 'symbol' && includeContext && symbol) {
     const symbolNames = Array.isArray(symbol) ? symbol : [symbol];
-    const { sections, hints } = await buildSymbolContext(fullPath, symbolNames, projectRoot);
+    const { sections, hints } = await buildSymbolContext(fullPath, symbolNames, effectiveRoot);
     const contextText = formatContextSections(sections);
     if (contextText) compressedText += contextText;
     contextResult = {
@@ -461,7 +462,7 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
   recordToolUsage({
     tool: 'smart_read',
     savedTokens: metrics.savedTokens,
-    target: path.relative(projectRoot, fullPath),
+    target: path.relative(effectiveRoot, fullPath),
   });
   
   // Record devctx operation for missed opportunity detection
@@ -482,7 +483,7 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
   
   recordDecision({
     tool: 'smart_read',
-    action: `read ${path.relative(projectRoot, fullPath)} (${effectiveMode} mode)`,
+    action: `read ${path.relative(effectiveRoot, fullPath)} (${effectiveMode} mode)`,
     reason,
     alternative: 'Read (full file)',
     expectedBenefit,
