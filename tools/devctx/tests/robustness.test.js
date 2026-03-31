@@ -612,7 +612,10 @@ describe('devctx-init agent rules', () => {
     assert.match(cursorRule, /cursor-devctx/);
 
     const cursorLauncher = await fsp.readFile(path.join(tmpDir, '.devctx', 'bin', 'cursor-devctx'), 'utf8');
-    assert.match(cursorLauncher, /headless-wrapper\.js/);
+    assert.match(cursorLauncher, /task-runner\.js/);
+    assert.match(cursorLauncher, /subcommand="\$1"/);
+    assert.match(cursorLauncher, /"\$subcommand" --client cursor/);
+    assert.match(cursorLauncher, / task --client cursor /);
     assert.match(cursorLauncher, /--client cursor/);
     assert.match(cursorLauncher, /DEVCTX_PROJECT_ROOT/);
     

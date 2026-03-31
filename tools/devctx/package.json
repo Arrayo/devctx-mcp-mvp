@@ -14,6 +14,7 @@
   },
   "bin": {
     "smart-context-headless": "scripts/headless-wrapper.js",
+    "smart-context-task": "scripts/task-runner.js",
     "smart-context-server": "scripts/devctx-server.js",
     "smart-context-init": "scripts/init-clients.js",
     "smart-context-report": "scripts/report-metrics.js",
@@ -32,6 +33,7 @@
     "scripts/devctx-server.js",
     "scripts/headless-wrapper.js",
     "scripts/init-clients.js",
+    "scripts/task-runner.js",
     "scripts/report-metrics.js",
     "scripts/report-workflow-metrics.js",
     "scripts/report-adoption-metrics.js"

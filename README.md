@@ -85,7 +85,7 @@ Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 4. Use /prompt commands to force usage if needed
 ```
 
-**Automaticity:** Medium by default. Medium-High if you use the assisted launcher `./.devctx/bin/cursor-devctx` for long tasks.
+**Automaticity:** Medium by default. Medium-High if you use the assisted launcher `./.devctx/bin/cursor-devctx` for task-runner workflows.
 
 ---
 
@@ -1136,7 +1136,7 @@ Already included: `.cursorrules` is committed in the project.
 **Verify it's working:**
 - Agent should mention devctx usage policy
 - Agent should use devctx tools automatically
-- For long tasks, prefer `./.devctx/bin/cursor-devctx --prompt "..." -- <agent-command>`
+- For long tasks, prefer `./.devctx/bin/cursor-devctx task --prompt "..." -- <agent-command>`
 
 #### Claude Desktop Users
 

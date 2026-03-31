@@ -193,6 +193,7 @@ export const runHeadlessWrapper = async ({
   dryRun = false,
   streamOutput = false,
   runCommand = runChildProcess,
+  preparedStartResult = null,
 } = {}) => {
   if (!normalizeWhitespace(prompt)) {
     throw new Error('prompt is required');
@@ -202,7 +203,7 @@ export const runHeadlessWrapper = async ({
     throw new Error('command is required unless dryRun=true');
   }
 
-  const start = await smartTurn({
+  const start = preparedStartResult ?? await smartTurn({
     phase: 'start',
     sessionId,
     prompt,

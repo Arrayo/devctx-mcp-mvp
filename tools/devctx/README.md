@@ -16,7 +16,9 @@ Restart Cursor. Done.
 
 Optional assisted mode for long tasks:
 ```bash
-./.devctx/bin/cursor-devctx --prompt "your task" -- <agent-command> [args...]
+./.devctx/bin/cursor-devctx task --prompt "your task" -- <agent-command> [args...]
+./.devctx/bin/cursor-devctx review --prompt "review the latest diff" -- <agent-command> [args...]
+./.devctx/bin/cursor-devctx doctor
 ```
 
 ### Codex CLI

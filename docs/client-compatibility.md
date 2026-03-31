@@ -62,7 +62,7 @@ npx smart-context-init --target . --clients cursor
 - `.cursor/mcp.json` - MCP server config
 - `.cursor/rules/devctx.mdc` - Base rule (always active)
 - `.cursor/rules/profiles-compact/*.mdc` - Task profiles (conditional)
-- `.devctx/bin/cursor-devctx` - Optional assisted launcher using the shared headless wrapper
+- `.devctx/bin/cursor-devctx` - Optional assisted task-runner launcher using the shared wrapper/policy stack
 - `.git/hooks/pre-commit` - Safety hook
 - `.gitignore` - Adds `.devctx/`
 
@@ -74,12 +74,13 @@ npx smart-context-init --target . --clients cursor
 - Conditional profiles activate based on file globs
 - `smart_turn` requires agent to call it (not automatic)
 - Blocked-state remediation is still guided, not enforced
-- `./.devctx/bin/cursor-devctx` provides an assisted path for long tasks using the same shared start/end wrapper contract as terminal clients
+- `./.devctx/bin/cursor-devctx` provides an assisted path for long tasks using the same shared start/end wrapper contract and task-runner policy as terminal clients
 
 **Best practices:**
 - Use Agent mode (not Ask mode)
 - Let agent follow workflows naturally
-- For long multi-step tasks, prefer `./.devctx/bin/cursor-devctx --prompt "..." -- <agent-command>`
+- For long multi-step tasks, prefer `./.devctx/bin/cursor-devctx task --prompt "..." -- <agent-command>`
+- For specialized workflows, use subcommands like `review`, `debug`, `refactor`, `test`, `doctor`, `status`, `checkpoint`, or `cleanup`
 - Check metrics: `npm run report:metrics`
 - Verify profiles activate: Check `.cursor/rules/profiles-compact/`
 

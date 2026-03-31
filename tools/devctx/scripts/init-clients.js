@@ -166,7 +166,7 @@ const updateCursorConfig = (targetDir, serverConfig, dryRun) => {
 };
 
 const buildCursorAssistedLauncher = (targetDir) => {
-  const wrapperScript = normalizeCommandPath(path.relative(targetDir, path.join(devctxDir, 'scripts', 'headless-wrapper.js')));
+  const runnerScript = normalizeCommandPath(path.relative(targetDir, path.join(devctxDir, 'scripts', 'task-runner.js')));
   return `#!/bin/sh
 set -eu
 
@@ -175,7 +175,13 @@ project_root="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
 
 export DEVCTX_PROJECT_ROOT="$project_root"
 
-exec "${process.execPath}" "$project_root/${wrapperScript}" --client cursor "$@"
+if [ "$#" -gt 0 ] && [ "\${1#-}" = "$1" ]; then
+  subcommand="$1"
+  shift
+  exec "${process.execPath}" "$project_root/${runnerScript}" "$subcommand" --client cursor "$@"
+fi
+
+exec "${process.execPath}" "$project_root/${runnerScript}" task --client cursor "$@"
 `;
 };
 
@@ -415,7 +421,8 @@ Client contract:
 
 Cursor assisted mode:
 - For long or continuity-sensitive tasks, prefer the local launcher \`./.devctx/bin/cursor-devctx\`
-- Usage: \`./.devctx/bin/cursor-devctx --prompt "your task" -- <agent-command> [args...]\`
+- Usage: \`./.devctx/bin/cursor-devctx task --prompt "your task" -- <agent-command> [args...]\`
+- Specialized flows: \`review\`, \`debug\`, \`refactor\`, \`test\`, \`doctor\`, \`status\`, \`checkpoint\`, \`cleanup\`
 - This launcher wraps the prompt with smart_turn(start/end) orchestration and the shared operational contract
 
 Reading cascade: outline → signatures → symbol → full (last resort)
