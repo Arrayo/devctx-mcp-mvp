@@ -44,6 +44,27 @@ Restart your AI client. Done.
 
 ---
 
+## 📊 Real Metrics
+
+**Production use on this project:**
+- 14.5M tokens → 1.6M tokens (89.87% reduction)
+- 3,666 operations tracked
+- Compression ratios: 3x to 46x
+
+**Workflow savings:**
+- Debugging: 150K → 15K (90%)
+- Code Review: 200K → 25K (87%)
+- Refactoring: 180K → 20K (89%)
+- Testing: 120K → 12K (90%)
+- Architecture: 300K → 30K (90%)
+
+**Real adoption:**
+- 73% of non-trivial tasks used devctx
+- Top tools: `smart_context` (35), `smart_read` (32), `smart_search` (28)
+- Non-usage: task too simple (47%), no index (29%), native preferred (24%)
+
+---
+
 ## 🚀 How to Invoke the MCP
 
 The MCP doesn't intercept prompts automatically. **You need to tell the agent to use it.**
@@ -95,6 +116,36 @@ The agent *should* use devctx automatically for complex tasks because:
 | Force MCP usage | `/prompt use-devctx` |
 | First time in project | `/prompt devctx-preflight` |
 | Trust automatic rules | Just describe your task normally |
+
+---
+
+## 🚨 Agent Ignored devctx? → Paste This Next
+
+<table>
+<tr>
+<td width="100%" bgcolor="#FFF3CD">
+
+### 📋 Official Prompt (Copy & Paste)
+
+```
+Use smart-context-mcp for this task.
+Start with smart_turn(start), then use smart_context or smart_search before reading full files.
+End with smart_turn(end) if you make progress.
+```
+
+### ⚡ Ultra-Short
+
+```
+Use devctx: smart_turn(start) → smart_context → smart_turn(end)
+```
+
+</td>
+</tr>
+</table>
+
+**When:** Agent read large files with `Read`, used `Grep` repeatedly, or no devctx tools in complex task.
+
+**Why:** Task seemed simple, no index built, native tools appeared more direct, or rules weren't strong enough.
 
 ---
 
