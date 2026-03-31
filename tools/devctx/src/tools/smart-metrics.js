@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import { getRepoMutationSafety, getRepoSafety } from '../repo-safety.js';
 import {
   ACTIVE_SESSION_SCOPE,
+  diagnoseStateStorage,
+  getStateStorageHealth,
   importLegacyState,
   withStateDb,
   withStateDbSnapshot,
@@ -16,6 +18,7 @@ import {
 } from '../metrics.js';
 import { analyzeAdoption } from '../analytics/adoption.js';
 import { analyzeProductQuality } from '../analytics/product-quality.js';
+import { attachSafetyMetadata } from '../utils/mutation-safety.js';
 
 const WINDOW_MS = {
   '24h': 24 * 60 * 60 * 1000,
@@ -177,6 +180,7 @@ export const smartMetrics = async ({
   latest = 10,
 }) => {
   const resolved = resolveMetricsInput({ file });
+  const preflightStorageHealth = resolved.kind === 'sqlite' ? getStateStorageHealth({ filePath: resolved.storagePath }) : null;
 
   if (resolved.kind === 'file') {
     const { entries, invalidLines } = readMetricsEntries(resolved.storagePath);
@@ -187,12 +191,10 @@ export const smartMetrics = async ({
 
     const adoption = analyzeAdoption(filteredEntries);
     
-    return {
+    return attachSafetyMetadata({
       filePath: resolved.storagePath,
       storagePath: resolved.storagePath,
       source: resolved.source,
-      repoSafety: null,
-      sideEffectsSuppressed: false,
       activeSessionId: null,
       filters: {
         tool: tool ?? null,
@@ -205,8 +207,34 @@ export const smartMetrics = async ({
       adoption,
       productQuality: analyzeProductQuality(filteredEntries),
       latestEntries: buildLatestEntries(filteredEntries, latest),
-    };
+    }, {
+      repoSafety: null,
+      sideEffectsSuppressed: false,
+      subject: 'Project-local metrics writes',
+    });
   }
+
+  const sqliteResult = await (async () => {
+    try {
+      return await readSqliteMetricsEntries({
+        tool,
+        sessionId,
+        window,
+      });
+    } catch (error) {
+      const storageHealth = error.storageHealth ?? await diagnoseStateStorage({ filePath: resolved.storagePath });
+      return {
+        entries: [],
+        activeSessionId: null,
+        resolvedSessionId: resolveSessionId(sessionId, null),
+        invalidLines: [],
+        repoSafety: getRepoSafety(),
+        sideEffectsSuppressed: false,
+        error,
+        storageHealth,
+      };
+    }
+  })();
 
   const {
     entries,
@@ -215,20 +243,16 @@ export const smartMetrics = async ({
     invalidLines,
     repoSafety,
     sideEffectsSuppressed,
-  } = await readSqliteMetricsEntries({
-    tool,
-    sessionId,
-    window,
-  });
+    error,
+    storageHealth,
+  } = sqliteResult;
 
   const adoption = analyzeAdoption(entries);
-  
-  return {
+
+  return attachSafetyMetadata({
     filePath: resolved.storagePath,
     storagePath: resolved.storagePath,
     source: resolved.source,
-    repoSafety,
-    sideEffectsSuppressed,
     activeSessionId,
     filters: {
       tool: tool ?? null,
@@ -241,5 +265,16 @@ export const smartMetrics = async ({
     adoption,
     productQuality: analyzeProductQuality(entries),
     latestEntries: buildLatestEntries(entries, latest),
-  };
+    storageHealth: storageHealth ?? (sideEffectsSuppressed
+      ? await diagnoseStateStorage({ filePath: resolved.storagePath })
+      : (preflightStorageHealth ?? null)),
+    ...(error ? { error: error.message } : {}),
+  }, {
+    repoSafety,
+    sideEffectsSuppressed,
+    subject: 'Project-local metrics writes',
+    degradedReason: 'repo_safety_blocked',
+    degradedMode: 'snapshot_metrics_read',
+    degradedImpact: 'Metrics writes and maintenance side effects are paused while git hygiene is blocked.',
+  });
 };

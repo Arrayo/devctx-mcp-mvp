@@ -8,6 +8,7 @@ import {
 } from '../workflow-tracker.js';
 import { persistMetrics } from '../metrics.js';
 import { PRODUCT_QUALITY_ANALYTICS_KIND } from '../analytics/product-quality.js';
+import { attachSafetyMetadata, buildMutationSafety } from '../utils/mutation-safety.js';
 import { smartContext } from './smart-context.js';
 import { smartMetrics } from './smart-metrics.js';
 import { smartSummary } from './smart-summary.js';
@@ -21,10 +22,6 @@ const REFRESHED_CONTEXT_FILE_LIMIT = 3;
 const SAFE_CONTINUITY_STATES = new Set(['aligned', 'resume']);
 const WORKFLOW_END_EVENTS = new Set(['milestone', 'task_complete', 'session_end', 'blocker']);
 const INDEX_REFRESH_STATES = new Set(['stale', 'unavailable']);
-const HARD_BLOCK_REASONS = Object.freeze([
-  ['tracked', 'isTracked'],
-  ['staged', 'isStaged'],
-]);
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'when', 'where',
   'what', 'have', 'will', 'your', 'about', 'there', 'their', 'then', 'than',
@@ -100,28 +97,6 @@ const summarizeMetrics = (metrics) => {
       netSavedTokens: tool.netSavedTokens,
       count: tool.count,
     })),
-  };
-};
-
-const buildMutationSafety = (repoSafety) => {
-  if (!repoSafety) {
-    return null;
-  }
-
-  const blockedBy = HARD_BLOCK_REASONS
-    .filter(([, field]) => repoSafety[field])
-    .map(([reason]) => reason);
-  const blocked = blockedBy.length > 0;
-  const stateDbPath = repoSafety.stateDbPath ?? '.devctx/state.sqlite';
-
-  return {
-    blocked,
-    blockedBy,
-    stateDbPath,
-    recommendedActions: repoSafety.recommendedActions ?? [],
-    message: blocked
-      ? `Project-local context writes are blocked until git hygiene is fixed for ${stateDbPath}.`
-      : `Project-local context writes are allowed for ${stateDbPath}.`,
   };
 };
 
@@ -589,7 +564,7 @@ const startTurn = async ({
     },
   });
 
-  return {
+  return attachSafetyMetadata({
     phase: 'start',
     promptPreview: truncate(prompt, MAX_PROMPT_PREVIEW),
     sessionId: effectiveSessionId,
@@ -601,12 +576,10 @@ const startTurn = async ({
     summary: summaryResult.summary ?? null,
     ...(refreshedContext ? { refreshedContext } : {}),
     ...(workflow ? { workflow } : {}),
-    ...(mutationSafety ? { mutationSafety } : {}),
-    repoSafety: summaryResult.repoSafety ?? metrics?.repoSafety ?? null,
-    sideEffectsSuppressed: Boolean(summaryResult.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
     ...(summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
+    storageHealth: summaryResult.storageHealth ?? metrics?.storageHealth ?? null,
     recommendedPath,
     message: mutationSafety?.blocked
       ? mutationSafety.message
@@ -615,7 +588,14 @@ const startTurn = async ({
         : autoCreated
           ? 'Created a new persisted session for this task prompt.'
           : continuity.reason,
-  };
+  }, {
+    repoSafety: summaryResult.repoSafety ?? metrics?.repoSafety ?? null,
+    sideEffectsSuppressed: Boolean(summaryResult.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
+    subject: 'Project-local context writes',
+    degradedReason: 'repo_safety_blocked',
+    degradedMode: 'read_only_snapshot',
+    degradedImpact: 'Checkpoint and workflow side effects are paused while git hygiene is blocked.',
+  });
 };
 
 const endTurn = async ({
@@ -708,18 +688,23 @@ const endTurn = async ({
     },
   });
 
-  return {
+  return attachSafetyMetadata({
     phase: 'end',
     sessionId: checkpoint.sessionId ?? sessionId ?? null,
     checkpoint,
     ...(workflow ? { workflow } : {}),
-    ...(mutationSafety ? { mutationSafety } : {}),
-    repoSafety: checkpoint.repoSafety ?? metrics?.repoSafety ?? null,
-    sideEffectsSuppressed: Boolean(checkpoint.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
+    storageHealth: checkpoint.storageHealth ?? metrics?.storageHealth ?? null,
     recommendedPath,
     message: mutationSafety?.blocked ? mutationSafety.message : checkpoint.message,
-  };
+  }, {
+    repoSafety: checkpoint.repoSafety ?? metrics?.repoSafety ?? null,
+    sideEffectsSuppressed: Boolean(checkpoint.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
+    subject: 'Project-local context writes',
+    degradedReason: 'repo_safety_blocked',
+    degradedMode: 'read_only_snapshot',
+    degradedImpact: 'Checkpoint and workflow side effects are paused while git hygiene is blocked.',
+  });
 };
 
 export const smartTurn = async ({

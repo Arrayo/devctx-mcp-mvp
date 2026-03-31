@@ -7,6 +7,7 @@ import { projectRoot } from '../utils/runtime-config.js';
 export const STATE_DB_FILENAME = 'state.sqlite';
 export const SQLITE_SCHEMA_VERSION = 5;
 export const ACTIVE_SESSION_SCOPE = 'project';
+export const STATE_DB_SOFT_MAX_BYTES = 32 * 1024 * 1024;
 export const EXPECTED_TABLES = [
   'active_session',
   'context_access',
@@ -191,6 +192,229 @@ const ensureStateDir = (filePath) => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 };
 
+const toRelativeStatePath = (filePath) =>
+  path.relative(projectRoot, filePath).replace(/\\/g, '/') || path.basename(filePath);
+
+const buildStorageDiagnostic = ({
+  filePath,
+  issue,
+  status,
+  exists,
+  sizeBytes,
+  walExists,
+  shmExists,
+  message,
+  recommendedActions,
+  integrity = null,
+  details = {},
+}) => ({
+  filePath,
+  relativePath: toRelativeStatePath(filePath),
+  issue,
+  status,
+  exists,
+  sizeBytes,
+  walExists,
+  shmExists,
+  softMaxBytes: STATE_DB_SOFT_MAX_BYTES,
+  message,
+  recommendedActions,
+  integrity,
+  ...details,
+});
+
+export const getStateStorageHealth = ({ filePath = getStateDbPath() } = {}) => {
+  const exists = fs.existsSync(filePath);
+  const sizeBytes = exists ? fs.statSync(filePath).size : 0;
+  const walExists = fs.existsSync(`${filePath}-wal`);
+  const shmExists = fs.existsSync(`${filePath}-shm`);
+
+  if (!exists) {
+    return buildStorageDiagnostic({
+      filePath,
+      issue: 'missing',
+      status: 'warning',
+      exists,
+      sizeBytes,
+      walExists,
+      shmExists,
+      message: 'Project-local SQLite state does not exist yet.',
+      recommendedActions: [
+        'Run a persisted devctx action such as smart_summary update or smart_turn end to initialize state.sqlite.',
+        'If you expected prior context, verify DEVCTX_STATE_DB_PATH / project root and that .devctx/ was not deleted.',
+      ],
+    });
+  }
+
+  if (sizeBytes > STATE_DB_SOFT_MAX_BYTES) {
+    return buildStorageDiagnostic({
+      filePath,
+      issue: 'oversized',
+      status: 'warning',
+      exists,
+      sizeBytes,
+      walExists,
+      shmExists,
+      message: 'Project-local SQLite state is larger than the recommended soft limit.',
+      recommendedActions: [
+        'Run smart_summary compact to prune retained events and metrics.',
+        'Archive or remove old local state after backing it up if the repository has become long-lived.',
+      ],
+    });
+  }
+
+  return buildStorageDiagnostic({
+    filePath,
+    issue: 'ok',
+    status: 'ok',
+    exists,
+    sizeBytes,
+    walExists,
+    shmExists,
+    message: 'Project-local SQLite state is present and within the recommended size range.',
+    recommendedActions: [],
+  });
+};
+
+export const classifyStateDbError = (error, { filePath = getStateDbPath(), readOnly = false } = {}) => {
+  const base = getStateStorageHealth({ filePath });
+  const message = String(error?.message ?? error ?? '');
+
+  if (/node:sqlite support|Node 22\+/i.test(message)) {
+    return buildStorageDiagnostic({
+      ...base,
+      filePath,
+      issue: 'unavailable',
+      status: 'error',
+      message: 'SQLite runtime support is unavailable in this Node.js process.',
+      recommendedActions: [
+        'Use Node 22+ for SQLite-backed state.',
+        'If you must stay on an older runtime, fall back to legacy JSON/JSONL storage paths only.',
+      ],
+      details: { errorMessage: message, readOnly },
+    });
+  }
+
+  if (/database is locked|database table is locked|SQLITE_BUSY|SQLITE_LOCKED/i.test(message)) {
+    return buildStorageDiagnostic({
+      ...base,
+      filePath,
+      issue: 'locked',
+      status: 'error',
+      message: 'Project-local SQLite state is locked by another process or unfinished transaction.',
+      recommendedActions: [
+        'Close other devctx processes or wait for the active write to finish, then retry.',
+        'Use snapshot-backed reads temporarily if you only need diagnostics while the lock clears.',
+      ],
+      details: { errorMessage: message, readOnly, retriable: true },
+    });
+  }
+
+  if (/file is not a database|database disk image is malformed|malformed/i.test(message)) {
+    return buildStorageDiagnostic({
+      ...base,
+      filePath,
+      issue: 'corrupted',
+      status: 'error',
+      message: 'Project-local SQLite state appears corrupted or unreadable as a database.',
+      recommendedActions: [
+        'Back up .devctx/state.sqlite before removing or replacing it.',
+        'Delete the corrupted state file and let devctx recreate it, then re-import any legacy state if available.',
+      ],
+      details: { errorMessage: message, readOnly, retriable: false },
+    });
+  }
+
+  if (!base.exists && (readOnly || /ENOENT|no such file|unable to open database file/i.test(message))) {
+    return buildStorageDiagnostic({
+      ...base,
+      filePath,
+      issue: 'missing',
+      status: 'warning',
+      message: 'Project-local SQLite state is missing for a read-only/open request.',
+      recommendedActions: [
+        'Run a persisted devctx action to initialize state.sqlite.',
+        'Verify the configured state path if the file should already exist.',
+      ],
+      details: { errorMessage: message, readOnly },
+    });
+  }
+
+  return buildStorageDiagnostic({
+    ...base,
+    filePath,
+    issue: 'unknown',
+    status: 'error',
+    message: 'Project-local SQLite state failed an unexpected storage operation.',
+    recommendedActions: [
+      'Retry once to rule out a transient failure.',
+      'If the problem persists, inspect or back up .devctx/state.sqlite before removing it.',
+    ],
+    details: { errorMessage: message, readOnly },
+  });
+};
+
+export const diagnoseStateStorage = async ({
+  filePath = getStateDbPath(),
+  verifyIntegrity = true,
+} = {}) => {
+  const base = getStateStorageHealth({ filePath });
+  if (!verifyIntegrity || !base.exists) {
+    return base;
+  }
+
+  try {
+    const { DatabaseSync } = await loadSqliteModule();
+    const db = new DatabaseSync(filePath, { readOnly: true });
+
+    try {
+      const quickCheckRows = db.prepare('PRAGMA quick_check(1)').all();
+      const integrity = quickCheckRows?.[0]?.quick_check ?? quickCheckRows?.[0]?.quickCheck ?? 'unknown';
+      const tables = listStateTables(db);
+      const missingTables = EXPECTED_TABLES.filter((table) => !tables.includes(table));
+
+      if (integrity !== 'ok' || missingTables.length > 0) {
+        return buildStorageDiagnostic({
+          ...base,
+          filePath,
+          issue: 'corrupted',
+          status: 'error',
+          message: integrity !== 'ok'
+            ? 'Project-local SQLite state failed integrity checks.'
+            : 'Project-local SQLite state is missing expected schema tables.',
+          recommendedActions: [
+            'Back up .devctx/state.sqlite before attempting recovery.',
+            'Delete and recreate the local state if integrity issues persist after retrying.',
+          ],
+          integrity,
+          details: { missingTables },
+        });
+      }
+
+      return {
+        ...base,
+        integrity: 'ok',
+        tableCount: tables.length,
+        missingTables: [],
+      };
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    return classifyStateDbError(error, { filePath, readOnly: true });
+  }
+};
+
+const enrichStateDbError = (error, { filePath = getStateDbPath(), readOnly = false } = {}) => {
+  const storageHealth = classifyStateDbError(error, { filePath, readOnly });
+  const enriched = new Error(`${storageHealth.message} Original error: ${String(error?.message ?? error ?? 'unknown')}`);
+  enriched.cause = error;
+  enriched.code = error?.code ?? null;
+  enriched.storageHealth = storageHealth;
+  enriched.stateDbIssue = storageHealth.issue;
+  return enriched;
+};
+
 const loadSqliteModule = async () => {
   if (!sqliteModulePromise) {
     sqliteModulePromise = import('node:sqlite')
@@ -280,17 +504,21 @@ export const listStateTables = (db) =>
   `).all().map((row) => row.name);
 
 export const openStateDb = async ({ filePath = getStateDbPath(), readOnly = false } = {}) => {
-  const { DatabaseSync } = await loadSqliteModule();
-  if (!readOnly) {
-    ensureStateDir(filePath);
-  }
+  try {
+    const { DatabaseSync } = await loadSqliteModule();
+    if (!readOnly) {
+      ensureStateDir(filePath);
+    }
 
-  const db = new DatabaseSync(filePath, readOnly ? { readOnly: true } : {});
-  if (!readOnly) {
-    applyPragmas(db);
-    runStateMigrations(db);
+    const db = new DatabaseSync(filePath, readOnly ? { readOnly: true } : {});
+    if (!readOnly) {
+      applyPragmas(db);
+      runStateMigrations(db);
+    }
+    return db;
+  } catch (error) {
+    throw enrichStateDbError(error, { filePath, readOnly });
   }
-  return db;
 };
 
 export const initializeStateDb = async ({ filePath = getStateDbPath() } = {}) => {

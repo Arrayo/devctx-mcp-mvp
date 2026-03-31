@@ -1,10 +1,12 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { smartStatus } from '../src/tools/smart-status.js';
 import { smartSummary } from '../src/tools/smart-summary.js';
+import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 
 let hasNodeSqlite = false;
 try {
@@ -157,5 +159,83 @@ try {
     
     assert.ok(result.summary.includes('Focus: Implementing smart_status tool'));
     assert.equal(result.context.currentFocus, 'Implementing smart_status tool');
+  });
+
+  it('surfaces mutationSafety and degraded mode when repo safety blocks side effects', async function() {
+    const previousProjectRoot = projectRoot;
+    const previousStateDbPath = process.env.DEVCTX_STATE_DB_PATH;
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-status-blocked-'));
+
+    try {
+      setProjectRoot(repoRoot);
+      delete process.env.DEVCTX_STATE_DB_PATH;
+      execFileSync('git', ['init'], { cwd: repoRoot, stdio: 'ignore' });
+
+      await smartSummary({
+        action: 'update',
+        sessionId: 'status-blocked',
+        update: {
+          goal: 'Blocked repo safety status',
+          status: 'in_progress',
+          nextStep: 'Fix git hygiene',
+        },
+      });
+
+      fs.writeFileSync(path.join(repoRoot, '.gitignore'), '.devctx/\n', 'utf8');
+      execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: repoRoot, stdio: 'ignore' });
+
+      const result = await smartStatus({ format: 'compact' });
+
+      assert.equal(result.sessionId, 'status-blocked');
+      assert.equal(result.sideEffectsSuppressed, true);
+      assert.equal(result.mutationSafety.blocked, true);
+      assert.deepStrictEqual(result.mutationSafety.blockedBy, ['tracked', 'staged']);
+      assert.equal(result.degradedMode.active, true);
+      assert.equal(result.repoSafety.isTracked, true);
+      assert.equal(result.repoSafety.isStaged, true);
+    } finally {
+      try {
+        execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: repoRoot, stdio: 'ignore' });
+      } catch {}
+      try {
+        await smartSummary({ action: 'reset', sessionId: 'status-blocked' });
+      } catch {}
+      if (previousStateDbPath !== undefined) {
+        process.env.DEVCTX_STATE_DB_PATH = previousStateDbPath;
+      } else {
+        delete process.env.DEVCTX_STATE_DB_PATH;
+      }
+      setProjectRoot(previousProjectRoot);
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('returns storage diagnostics when state.sqlite is corrupted', async function() {
+    const previousProjectRoot = projectRoot;
+    const previousStateDbPath = process.env.DEVCTX_STATE_DB_PATH;
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-status-corrupt-'));
+    const corruptPath = path.join(repoRoot, '.devctx', 'state.sqlite');
+
+    try {
+      setProjectRoot(repoRoot);
+      process.env.DEVCTX_STATE_DB_PATH = corruptPath;
+      fs.mkdirSync(path.dirname(corruptPath), { recursive: true });
+      fs.writeFileSync(corruptPath, 'not-a-sqlite-database', 'utf8');
+
+      const result = await smartStatus({ format: 'compact' });
+
+      assert.equal(result.success, false);
+      assert.equal(result.storageHealth.issue, 'corrupted');
+      assert.match(result.message, /corrupted|integrity|unreadable/i);
+      assert.ok(result.storageHealth.recommendedActions.length >= 1);
+    } finally {
+      if (previousStateDbPath !== undefined) {
+        process.env.DEVCTX_STATE_DB_PATH = previousStateDbPath;
+      } else {
+        delete process.env.DEVCTX_STATE_DB_PATH;
+      }
+      setProjectRoot(previousProjectRoot);
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
   });
 });

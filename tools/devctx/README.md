@@ -398,6 +398,23 @@ Maintain task checkpoint:
 ```
 
 Stores compressed task state (~100 tokens: goal, status, decisions, blockers), not full conversation. Supports both flat and nested parameter formats.
+When git hygiene or SQLite storage health affects persisted state, responses expose `mutationSafety`, `repoSafety`, `degradedMode`, and `storageHealth` so clients can remediate consistently.
+
+### smart_doctor
+
+Run a single operational health check across repo hygiene, SQLite state, compaction hygiene, and legacy cleanup:
+
+```javascript
+smart_doctor({})
+smart_doctor({ verifyIntegrity: false })
+```
+
+CLI:
+
+```bash
+smart-context-doctor --json
+smart-context-doctor --no-integrity
+```
 
 ### smart_status
 
@@ -409,6 +426,17 @@ Display current session context:
 ```
 
 Shows goal, status, recent decisions, touched files, and progress. Updates automatically with each MCP operation.
+When repo safety or SQLite health blocks normal state access, `smart_status` still exposes the same safety contract plus `storageHealth`.
+
+### SQLite Recovery
+
+If `.devctx/state.sqlite` is unhealthy, use the surfaced `storageHealth.issue`:
+
+- `missing`: initialize local state with a persisted action
+- `oversized`: run `smart_summary compact`
+- `locked`: stop competing devctx writers, then retry
+- `corrupted`: back up and remove the file so devctx can recreate it
+- broader inspection: run `smart_doctor` / `smart-context-doctor`
 
 ### smart_edit
 

@@ -1,6 +1,7 @@
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
 import { getRepoMutationSafety, getRepoSafety } from '../repo-safety.js';
+import { attachSafetyMetadata, buildMutationSafety } from '../utils/mutation-safety.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
@@ -9,6 +10,7 @@ import {
   SQLITE_SCHEMA_VERSION,
   cleanupLegacyState,
   compactState,
+  getStateStorageHealth,
   importLegacyState,
   withStateDb,
   withStateDbSnapshot,
@@ -969,10 +971,18 @@ const buildResumeCandidates = (sessions) =>
     isStale: session.isStale,
   }));
 
-const addRepoSafety = (result, repoSafety = getRepoSafety()) => ({
-  ...result,
-  repoSafety,
-});
+const addRepoSafety = (result, repoSafety = getRepoSafety(), sideEffectsSuppressed = false) =>
+  attachSafetyMetadata({
+    ...result,
+    storageHealth: getStateStorageHealth(),
+  }, {
+    repoSafety,
+    sideEffectsSuppressed,
+    subject: 'Project-local context writes',
+    degradedReason: 'repo_safety_blocked',
+    degradedMode: 'read_only_snapshot',
+    degradedImpact: 'Checkpoint maintenance side effects are paused while git hygiene is blocked.',
+  });
 
 const getMutationSafetyPolicy = () => {
   return getRepoMutationSafety();
@@ -994,15 +1004,20 @@ const buildMutationBlockedMessage = (reasons, stateDbPath = '.devctx/state.sqlit
   return `Refused to mutate project-local context because ${stateDbPath} failed runtime safety checks.`;
 };
 
-const buildMutationBlockedResponse = ({ action, sessionId, repoSafety, reasons }) =>
-  addRepoSafety({
+const buildMutationBlockedResponse = ({ action, sessionId, repoSafety, reasons }) => {
+  const mutationSafety = buildMutationSafety(repoSafety, {
+    subject: 'Project-local context writes',
+  });
+
+  return addRepoSafety({
     action,
     sessionId: sessionId ?? null,
     blocked: true,
     mutationBlocked: true,
-    blockedBy: reasons,
+    blockedBy: mutationSafety?.blockedBy ?? reasons,
     message: buildMutationBlockedMessage(reasons, repoSafety.stateDbPath ?? '.devctx/state.sqlite'),
   }, repoSafety);
+};
 
 const resolveAutoResumeTarget = (db, { forceRecommended = false, cleanup = true } = {}) => {
   const sessions = listSessions(db, { cleanup });
@@ -1144,7 +1159,7 @@ export const smartSummary = async ({
         activeSessionId,
         totalSessions: sessions.length,
         staleSessions: sessions.filter((session) => session.isStale).length,
-      });
+      }, mutationSafety.repoSafety, !allowReadSideEffects);
     }, allowReadSideEffects ? undefined : {});
   }
 
@@ -1180,7 +1195,7 @@ export const smartSummary = async ({
             candidates: resolution.candidates,
             recommendedSessionId: resolution.recommendedSessionId,
             message: resolution.message,
-          });
+          }, mutationSafety.repoSafety, suppressReadSideEffects);
         }
 
         targetSessionId = resolution.sessionId;
@@ -1193,7 +1208,7 @@ export const smartSummary = async ({
           sessionId: null,
           found: false,
           message: 'No active session found. Use action=update to create one.',
-        });
+        }, mutationSafety.repoSafety, suppressReadSideEffects);
       }
 
       const session = hydrateSession(getSessionRow(db, targetSessionId));
@@ -1203,7 +1218,7 @@ export const smartSummary = async ({
           sessionId: targetSessionId,
           found: false,
           message: 'Session not found.',
-        });
+        }, mutationSafety.repoSafety, suppressReadSideEffects);
       }
 
       if (resumeMeta?.autoResumed && allowReadSideEffects) {
@@ -1263,10 +1278,9 @@ export const smartSummary = async ({
         ambiguous: resumeMeta?.ambiguous ?? false,
         recommendedSessionId: resumeMeta?.recommendedSessionId ?? targetSessionId,
         ...(resumeMeta?.candidates ? { candidates: resumeMeta.candidates } : {}),
-        ...(suppressReadSideEffects ? { sideEffectsSuppressed: true } : {}),
         schemaVersion: session.schemaVersion ?? 1,
         updatedAt: session.updatedAt,
-      });
+      }, mutationSafety.repoSafety, suppressReadSideEffects);
     }, allowReadSideEffects ? undefined : {});
   }
 

@@ -222,6 +222,10 @@ test('smart_metrics - suppresses SQLite side effects and global metric writes wh
     assert.strictEqual(result.sideEffectsSuppressed, true);
     assert.strictEqual(result.repoSafety.isTracked, true);
     assert.strictEqual(result.repoSafety.isStaged, true);
+    assert.strictEqual(result.mutationSafety.blocked, true);
+    assert.deepStrictEqual(result.mutationSafety.blockedBy, ['tracked', 'staged']);
+    assert.strictEqual(result.degradedMode.active, true);
+    assert.strictEqual(result.degradedMode.mode, 'snapshot_metrics_read');
     assert.strictEqual(result.summary.count, 1);
     assert.strictEqual(result.latestEntries.length, 1);
     assert.strictEqual(result.latestEntries[0].tool, 'smart_read');
@@ -407,6 +411,35 @@ test('smart_metrics - reports product-quality signals from smart_turn quality me
     assert.strictEqual(result.productQuality.checkpointing.persistedEnds, 1);
     assert.strictEqual(result.productQuality.checkpointing.skippedEnds, 1);
   } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_metrics - returns storage diagnostics when sqlite state is corrupted', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-corrupt-'));
+  const previousProjectRoot = projectRoot;
+  const previousMetricsFile = process.env.DEVCTX_METRICS_FILE;
+  const corruptPath = path.join(tmpRoot, '.devctx', 'state.sqlite');
+
+  try {
+    setProjectRoot(tmpRoot);
+    delete process.env.DEVCTX_METRICS_FILE;
+    fs.mkdirSync(path.dirname(corruptPath), { recursive: true });
+    fs.writeFileSync(corruptPath, 'not-a-sqlite-database', 'utf8');
+
+    const result = await smartMetrics({ window: 'all', latest: 5 });
+
+    assert.strictEqual(result.summary.count, 0);
+    assert.strictEqual(result.storageHealth.issue, 'corrupted');
+    assert.ok(result.error);
+    assert.ok(result.storageHealth.recommendedActions.length >= 1);
+  } finally {
+    setProjectRoot(previousProjectRoot);
+    if (previousMetricsFile === undefined) {
+      delete process.env.DEVCTX_METRICS_FILE;
+    } else {
+      process.env.DEVCTX_METRICS_FILE = previousMetricsFile;
+    }
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });

@@ -7,12 +7,16 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import {
+  classifyStateDbError,
   cleanupLegacyState,
   compactState,
+  diagnoseStateStorage,
   EXPECTED_TABLES,
+  getStateStorageHealth,
   getMeta,
   initializeStateDb,
   importLegacyState,
+  STATE_DB_SOFT_MAX_BYTES,
   SQLITE_SCHEMA_VERSION,
   withStateDb,
 } from '../src/storage/sqlite.js';
@@ -322,4 +326,60 @@ test('sqlite storage - cleanupLegacyState deletes only imported legacy artifacts
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
+});
+
+test('sqlite storage - reports missing and oversized storage health states', () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-health-'));
+  const missingPath = path.join(tmpRoot, '.devctx', 'missing.sqlite');
+  const oversizedPath = path.join(tmpRoot, '.devctx', 'oversized.sqlite');
+
+  try {
+    const missing = getStateStorageHealth({ filePath: missingPath });
+    assert.strictEqual(missing.issue, 'missing');
+    assert.strictEqual(missing.status, 'warning');
+    assert.ok(missing.recommendedActions.length >= 1);
+
+    fs.mkdirSync(path.dirname(oversizedPath), { recursive: true });
+    fs.writeFileSync(oversizedPath, Buffer.alloc(STATE_DB_SOFT_MAX_BYTES + 1));
+
+    const oversized = getStateStorageHealth({ filePath: oversizedPath });
+    assert.strictEqual(oversized.issue, 'oversized');
+    assert.strictEqual(oversized.status, 'warning');
+    assert.ok(oversized.sizeBytes > STATE_DB_SOFT_MAX_BYTES);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('sqlite storage - diagnoseStateStorage reports corrupted files and enriched errors', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-corrupt-'));
+  const filePath = path.join(tmpRoot, '.devctx', 'state.sqlite');
+
+  try {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, 'not-a-sqlite-database', 'utf8');
+
+    const diagnostic = await diagnoseStateStorage({ filePath });
+    assert.strictEqual(diagnostic.issue, 'corrupted');
+    assert.strictEqual(diagnostic.status, 'error');
+    assert.ok(diagnostic.recommendedActions.length >= 1);
+
+    await assert.rejects(
+      () => initializeStateDb({ filePath }),
+      (error) => error?.storageHealth?.issue === 'corrupted',
+    );
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('sqlite storage - classifyStateDbError identifies locked databases', () => {
+  const diagnostic = classifyStateDbError(new Error('database is locked'), {
+    filePath: path.join('/tmp', 'state.sqlite'),
+    readOnly: false,
+  });
+
+  assert.strictEqual(diagnostic.issue, 'locked');
+  assert.strictEqual(diagnostic.status, 'error');
+  assert.strictEqual(diagnostic.retriable, true);
 });

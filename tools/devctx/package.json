@@ -17,6 +17,7 @@
     "smart-context-server": "scripts/devctx-server.js",
     "smart-context-init": "scripts/init-clients.js",
     "smart-context-report": "scripts/report-metrics.js",
+    "smart-context-doctor": "scripts/doctor-state.js",
     "smart-context-protect": "scripts/check-repo-safety.js"
   },
   "exports": {
@@ -27,6 +28,7 @@
     "src/",
     "scripts/claude-hook.js",
     "scripts/check-repo-safety.js",
+    "scripts/doctor-state.js",
     "scripts/devctx-server.js",
     "scripts/headless-wrapper.js",
     "scripts/init-clients.js",

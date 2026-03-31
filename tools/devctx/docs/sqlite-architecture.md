@@ -92,3 +92,45 @@ Automatic persistence must follow these rules:
 - record the overhead of the context system in `metrics_events`
 
 The SQLite migration is only valid if the total overhead remains below the token savings gained by smarter context reuse.
+
+## Operational Diagnostics
+
+`devctx` now distinguishes the main storage-health states for `.devctx/state.sqlite`:
+
+- `missing`: the file has not been created yet or the configured path is wrong
+- `oversized`: the file exists but is beyond the recommended soft limit
+- `locked`: another process or unfinished transaction is holding SQLite busy
+- `corrupted`: integrity checks fail or the file is not readable as SQLite
+
+These diagnostics are surfaced through `storageHealth` in user-facing tools such as `smart_status`, `smart_metrics`, `smart_summary`, and the inspect-only `smart_doctor`.
+
+## Recovery Flow
+
+When `storageHealth.issue !== "ok"`, use this order:
+
+1. `missing`
+   - run a persisted action such as `smart_summary(update)` or `smart_turn(end)` to initialize local state
+   - verify `DEVCTX_STATE_DB_PATH` and the project root if you expected prior state
+2. `oversized`
+   - run `smart_summary compact`
+   - back up and prune old local state in long-lived repos
+3. `locked`
+   - stop or wait for competing devctx processes
+   - retry after the writer finishes; snapshot-backed reads are still acceptable for diagnostics
+4. `corrupted`
+   - back up `.devctx/state.sqlite`
+   - remove or replace the corrupted file
+   - let devctx recreate it, then re-import legacy state if available
+
+The recovery path is intentionally explicit: repair local state first, then resume normal checkpointing.
+
+## Doctor Entry Point
+
+`smart_doctor` and the companion CLI `smart-context-doctor` aggregate:
+
+- repo safety / mutation blocking
+- SQLite `storageHealth`
+- compaction and retention hygiene
+- presence of legacy JSON/JSONL artifacts
+
+This is the intended first-stop preflight before release or when `.devctx/state.sqlite` behaves unexpectedly.

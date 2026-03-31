@@ -1,4 +1,12 @@
-import { withStateDb } from '../storage/sqlite.js';
+import { getRepoMutationSafety } from '../repo-safety.js';
+import {
+  diagnoseStateStorage,
+  getStateStorageHealth,
+  importLegacyState,
+  withStateDb,
+  withStateDbSnapshot,
+} from '../storage/sqlite.js';
+import { attachSafetyMetadata } from '../utils/mutation-safety.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
@@ -7,7 +15,15 @@ import { countTokens } from '../tokenCounter.js';
 const ACTIVE_SESSION_SCOPE = 'active';
 
 const getActiveSession = async () => {
-  return withStateDb((db) => {
+  const mutationSafety = getRepoMutationSafety();
+  const allowReadSideEffects = !mutationSafety.shouldBlock;
+  const reader = allowReadSideEffects ? withStateDb : withStateDbSnapshot;
+
+  if (allowReadSideEffects) {
+    await importLegacyState();
+  }
+
+  const session = await reader((db) => {
     let activeSessionId = db.prepare(`
       SELECT session_id
       FROM active_session
@@ -63,7 +79,13 @@ const getActiveSession = async () => {
       touchedFilesCount: row.touched_files_count || 0,
       updatedAt: row.updated_at,
     };
-  });
+  }, allowReadSideEffects ? undefined : {});
+
+  return {
+    session,
+    repoSafety: mutationSafety.repoSafety,
+    sideEffectsSuppressed: !allowReadSideEffects,
+  };
 };
 
 const formatContextItem = (item, index, total) => {
@@ -89,6 +111,7 @@ const compactPath = (filePath) => {
 
 export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) => {
   const startTime = Date.now();
+  const preflightStorageHealth = getStateStorageHealth();
 
   recordDecision({
     tool: 'smart_status',
@@ -98,14 +121,54 @@ export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) =
 
   recordDevctxOperation('smart_status');
 
-  const session = await getActiveSession();
+  let sessionResult;
+  try {
+    sessionResult = await getActiveSession();
+  } catch (error) {
+    const storageHealth = error.storageHealth ?? await diagnoseStateStorage();
+    const response = attachSafetyMetadata({
+      success: false,
+      message: storageHealth.message,
+      hint: storageHealth.recommendedActions?.[0] ?? 'Inspect .devctx/state.sqlite before retrying.',
+      storageHealth,
+      error: error.message,
+    }, {
+      repoSafety: getRepoMutationSafety().repoSafety,
+      sideEffectsSuppressed: false,
+      subject: 'Project-local context writes',
+      degradedReason: 'storage_unavailable',
+      degradedMode: 'storage_error',
+      degradedImpact: 'Persistent session state could not be opened.',
+    });
+
+    recordToolUsage({
+      tool: 'smart_status',
+      rawTokens: 0,
+      compressedTokens: countTokens(JSON.stringify(response)),
+      savedTokens: 0,
+      savingsPct: 0,
+    });
+
+    return response;
+  }
+
+  const { session, repoSafety, sideEffectsSuppressed } = sessionResult;
+  const storageHealth = sideEffectsSuppressed ? await diagnoseStateStorage() : preflightStorageHealth;
 
   if (!session) {
-    const response = {
+    const response = attachSafetyMetadata({
       success: false,
       message: 'No active session found',
       hint: 'Use smart_summary with action=update to create a session',
-    };
+      storageHealth,
+    }, {
+      repoSafety,
+      sideEffectsSuppressed,
+      subject: 'Project-local context writes',
+      degradedReason: 'repo_safety_blocked',
+      degradedMode: 'read_only_snapshot',
+      degradedImpact: 'Session-maintenance side effects are paused while git hygiene is blocked.',
+    });
 
     recordToolUsage({
       tool: 'smart_status',
@@ -135,6 +198,7 @@ export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) =
         files: session.touchedFilesCount,
       },
       recentFiles: recentFiles.slice(-3),
+      storageHealth,
       updatedAt: session.updatedAt,
     };
   } else {
@@ -182,6 +246,7 @@ export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) =
         pinned: session.pinnedContext,
         questions: session.unresolvedQuestions,
       },
+      storageHealth,
       updatedAt: session.updatedAt,
     };
   }
@@ -197,5 +262,12 @@ export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) =
     savingsPct: 0,
   });
 
-  return output;
+  return attachSafetyMetadata(output, {
+    repoSafety,
+    sideEffectsSuppressed,
+    subject: 'Project-local context writes',
+    degradedReason: 'repo_safety_blocked',
+    degradedMode: 'read_only_snapshot',
+    degradedImpact: 'Session-maintenance side effects are paused while git hygiene is blocked.',
+  });
 };

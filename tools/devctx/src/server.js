@@ -10,6 +10,7 @@ import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
+import { smartDoctor } from './tools/smart-doctor.js';
 import { smartEdit } from './tools/smart-edit.js';
 import { smartMetrics } from './tools/smart-metrics.js';
 import { smartTurn } from './tools/smart-turn.js';
@@ -379,7 +380,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_summary',
-    'Maintain compressed conversation state across turns. Actions: get (retrieve current/last session), update (create or replace a session; omitted fields are cleared), append (add to existing session), auto_append (append only if something meaningful changed), checkpoint (event-driven orchestration that decides whether to auto-persist), reset (clear session), list_sessions (show all sessions), compact (apply retention/compaction to SQLite events), cleanup_legacy (inspect or remove imported legacy JSON/JSONL files). Sessions persist in project-local SQLite with 30-day retention defaults. Auto-generates sessionId from goal if omitted. `get` auto-resumes the active session when present, otherwise falls back to the best saved session when unambiguous; pass `sessionId: "auto"` to accept the recommended session even when multiple recent candidates exist. Returns a resume summary capped at maxTokens (default 500) plus compression metadata (`truncated`, `compressionLevel`, `omitted`) and `schemaVersion`. Includes `repoSafety` so agents can catch `.devctx/state.sqlite` git hygiene issues early; mutating actions are blocked at runtime when that SQLite file is tracked or staged. Tracks: goal, status, pinned context, unresolved questions, current focus, blockers, next step, completed steps, key decisions, and touched files.',
+    'Maintain compressed conversation state across turns. Actions: get (retrieve current/last session), update (create or replace a session; omitted fields are cleared), append (add to existing session), auto_append (append only if something meaningful changed), checkpoint (event-driven orchestration that decides whether to auto-persist), reset (clear session), list_sessions (show all sessions), compact (apply retention/compaction to SQLite events), cleanup_legacy (inspect or remove imported legacy JSON/JSONL files). Sessions persist in project-local SQLite with 30-day retention defaults. Auto-generates sessionId from goal if omitted. `get` auto-resumes the active session when present, otherwise falls back to the best saved session when unambiguous; pass `sessionId: "auto"` to accept the recommended session even when multiple recent candidates exist. Returns a resume summary capped at maxTokens (default 500) plus compression metadata (`truncated`, `compressionLevel`, `omitted`) and `schemaVersion`. Exposes `repoSafety`, `mutationSafety`, `degradedMode`, and `storageHealth` so agents can detect blocked, read-only, missing, oversized, locked, or corrupted local state. Tracks: goal, status, pinned context, unresolved questions, current focus, blockers, next step, completed steps, key decisions, and touched files.',
     {
       action: z.enum(['get', 'update', 'append', 'auto_append', 'checkpoint', 'reset', 'list_sessions', 'compact', 'cleanup_legacy']),
       sessionId: z.string().optional(),
@@ -445,12 +446,21 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_status',
-    'Display the current session context including goal, status, recent decisions, touched files, and progress. Returns a formatted summary of what has been done and what is being tracked in the active session. Use this to understand the current state of work without modifying the session. Supports format=detailed (default, full formatted output) or format=compact (minimal JSON). Optional maxItems limits how many recent items to show (default 10).',
+    'Display the current session context including goal, status, recent decisions, touched files, and progress. Returns a formatted summary of what has been done and what is being tracked in the active session. Use this to understand the current state of work without modifying the session. Supports format=detailed (default, full formatted output) or format=compact (minimal JSON). Optional maxItems limits how many recent items to show (default 10). Exposes `mutationSafety`, `repoSafety`, `degradedMode`, and `storageHealth` when repo-safety or SQLite storage health affects session reads.',
     {
       format: z.enum(['detailed', 'compact']).optional(),
       maxItems: z.number().int().min(1).max(50).optional(),
     },
     async ({ format, maxItems }) => asTextResult(await smartStatus({ format, maxItems })),
+  );
+
+  server.tool(
+    'smart_doctor',
+    'Run an operational health check for local devctx state. Aggregates repo hygiene, SQLite `storageHealth`, retention/compaction hygiene, and legacy JSON/JSONL cleanup guidance into one inspect-only result with explicit remediation steps. Use this when `.devctx/state.sqlite` is missing, oversized, locked, corrupted, or when you want a release/preflight check for local state durability.',
+    {
+      verifyIntegrity: z.boolean().optional(),
+    },
+    async ({ verifyIntegrity }) => asTextResult(await smartDoctor({ verifyIntegrity })),
   );
 
   server.tool(
@@ -469,7 +479,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_turn',
-    'Orchestrate start/end of a meaningful agent turn so context usage becomes almost mandatory with low token overhead. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, returns `recommendedPath` guidance for the next safe devctx actions, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary, returns follow-up `recommendedPath` guidance, and can optionally include compact metrics. Both phases expose `mutationSafety` when repo-safety blocks persisted writes. Use this instead of manually chaining `smart_summary(get)` and `smart_summary(checkpoint)` when you want a single context-first turn workflow.',
+    'Orchestrate start/end of a meaningful agent turn so context usage becomes almost mandatory with low token overhead. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, returns `recommendedPath` guidance for the next safe devctx actions, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary, returns follow-up `recommendedPath` guidance, and can optionally include compact metrics. Both phases expose `mutationSafety` when repo-safety blocks persisted writes and now surface `storageHealth` when SQLite state is missing, oversized, locked, or corrupted. Use this instead of manually chaining `smart_summary(get)` and `smart_summary(checkpoint)` when you want a single context-first turn workflow.',
     {
       phase: z.enum(['start', 'end']),
       sessionId: z.string().optional(),
@@ -513,7 +523,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_metrics',
-    'Inspect token metrics recorded in project-local SQLite storage by default. Returns aggregated totals, per-tool savings, recent entries, adoption analysis, and `productQuality` signals measured from `smart_turn` orchestration events (continuity recovery, blocked-state remediation coverage, context-refresh signals, checkpoint persistence). Supports time windows (`24h`, `7d`, `30d`, `all`), optional tool filtering, and optional session filtering (`sessionId: "active"` resolves the current active session automatically). Pass `file` to inspect a legacy/custom JSONL file explicitly. When `.devctx/state.sqlite` is tracked or staged, reads fall back to a temporary read-only snapshot and report `sideEffectsSuppressed`; metrics writes from other tools are skipped until git hygiene is fixed.',
+    'Inspect token metrics recorded in project-local SQLite storage by default. Returns aggregated totals, per-tool savings, recent entries, adoption analysis, and `productQuality` signals measured from `smart_turn` orchestration events (continuity recovery, blocked-state remediation coverage, context-refresh signals, checkpoint persistence). Supports time windows (`24h`, `7d`, `30d`, `all`), optional tool filtering, and optional session filtering (`sessionId: "active"` resolves the current active session automatically). Pass `file` to inspect a legacy/custom JSONL file explicitly. When `.devctx/state.sqlite` is tracked or staged, reads fall back to a temporary read-only snapshot and expose `repoSafety`, `mutationSafety`, `degradedMode`, `sideEffectsSuppressed`, and `storageHealth`; metrics writes from other tools are skipped until git hygiene is fixed.',
     {
       file: z.string().optional(),
       tool: z.string().optional(),

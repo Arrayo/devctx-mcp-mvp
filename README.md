@@ -758,6 +758,18 @@ Maintain compressed task state across sessions.
 ```
 
 Compresses task context to ~100 tokens (goal, status, decisions, blockers). Critical for long tasks. Supports both flat and nested formats.
+When git hygiene or SQLite health affects local state, responses also surface `mutationSafety`, `repoSafety`, `degradedMode`, and `storageHealth`.
+
+### smart_doctor
+
+Run one operational preflight across repo hygiene, SQLite health, compaction, and legacy cleanup.
+
+```javascript
+smart_doctor({})
+smart_doctor({ verifyIntegrity: false })
+```
+
+Use this before release, after long-lived local usage, or whenever `.devctx/state.sqlite` looks suspicious.
 
 ---
 
@@ -771,6 +783,7 @@ Display current session context with progress visibility.
 ```
 
 Shows goal, status, recent decisions, touched files, pinned context, and progress stats. Updates automatically with each MCP operation.
+When repo safety or SQLite health affects state, `smart_status` stays useful via degraded mode and surfaces `storageHealth` plus the same `mutationSafety` contract as `smart_turn`.
 
 ---
 
@@ -1651,6 +1664,14 @@ sqlite3 .devctx/state.sqlite "SELECT COUNT(*) FROM sessions"
 - Agent not calling `smart_turn` → No task checkpoints
 - Session ID mismatch → Can't recover checkpoint
 - `.devctx/state.sqlite` tracked/staged → runtime context writes are intentionally blocked until git hygiene is fixed
+- `.devctx/state.sqlite` locked/corrupted/oversized → inspect `storageHealth` from `smart_status` or `smart_metrics`
+- broader local-state preflight → run `smart_doctor` or `smart-context-doctor --json`
+
+**Recovery flow:**
+- `missing` → run a persisted action like `smart_summary update` or `smart_turn end`
+- `oversized` → run `smart_summary compact`
+- `locked` → stop competing devctx processes, then retry
+- `corrupted` → back up `.devctx/state.sqlite`, remove it, and let devctx recreate local state
 
 ---
 

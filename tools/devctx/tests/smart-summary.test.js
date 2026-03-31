@@ -602,6 +602,11 @@ test('smart_summary - repoSafety warns when state.sqlite is tracked', { skip: SK
   assert.strictEqual(result.repoSafety.isTracked, true);
   assert.strictEqual(result.repoSafety.riskLevel, 'warning');
   assert.ok(result.repoSafety.warnings.some((warning) => warning.includes('tracked by git')));
+  assert.ok(result.storageHealth);
+  assert.strictEqual(result.mutationSafety.blocked, true);
+  assert.ok(result.mutationSafety.blockedBy.includes('tracked'));
+  assert.strictEqual(result.sideEffectsSuppressed, true);
+  assert.strictEqual(result.degradedMode.active, true);
 
   execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: summaryTestRoot, stdio: 'ignore' });
   await smartSummary({ action: 'reset', sessionId: 'test-repo-safety' });
@@ -638,9 +643,14 @@ test('smart_summary - mutating actions are blocked when state.sqlite is tracked 
   assert.strictEqual(blocked.blocked, true);
   assert.strictEqual(blocked.mutationBlocked, true);
   assert.deepStrictEqual(blocked.blockedBy, ['tracked', 'staged']);
+  assert.strictEqual(blocked.mutationSafety.blocked, true);
+  assert.deepStrictEqual(blocked.mutationSafety.blockedBy, ['tracked', 'staged']);
+  assert.ok(blocked.mutationSafety.recommendedActions.length >= 1);
   assert.match(blocked.message, /tracked and staged/i);
   assert.strictEqual(afterEvents, beforeEvents);
   assert.strictEqual(current.sideEffectsSuppressed, true);
+  assert.strictEqual(current.mutationSafety.blocked, true);
+  assert.strictEqual(current.degradedMode.active, true);
   assert.ok(!current.summary.recentCompleted?.includes('should not persist'));
   assert.ok(!current.summary.nextStep || current.summary.nextStep !== 'this write should be blocked');
 
