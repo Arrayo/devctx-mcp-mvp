@@ -97,10 +97,10 @@ CREATE TABLE workflow_metrics (
 - Not needed for basic usage
 - Useful for production metrics
 
-**No integration in `smart_turn`:**
-- Avoided to prevent test issues
-- Workflow tracking remains standalone
-- Can be integrated later when needed
+**Core integration in `smart_turn`:**
+- `smart_turn(start)` can auto-start workflow tracking when `DEVCTX_WORKFLOW_TRACKING=true`
+- `smart_turn(end)` can close the active workflow for milestone-style turn boundaries
+- Tracking remains opt-in to keep the default path lightweight
 
 ---
 

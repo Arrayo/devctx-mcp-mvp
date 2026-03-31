@@ -52,6 +52,7 @@ Agent: "Ah, I was checking validateToken() in src/auth.js. Let me continue there
 - ✅ Key decisions made
 - ✅ Next step to take
 - ✅ Blockers and unresolved questions
+- ✅ A lightweight refreshed context preview for the current prompt when the task is meaningful
 
 **What does NOT get recovered:**
 - ❌ Full conversation transcript

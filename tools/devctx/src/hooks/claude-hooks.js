@@ -90,6 +90,18 @@ const buildAdditionalContext = ({ result, sessionStart = false }) => {
     lines.push(`repo safety: .devctx/state.sqlite is ${reasons.join(' and ')}; context writes are blocked.`);
   }
 
+  if (result?.refreshedContext?.indexRefreshed) {
+    lines.push('context refresh: project index was refreshed for this prompt.');
+  }
+
+  if (result?.refreshedContext?.topFiles?.length > 0) {
+    lines.push(`files: ${result.refreshedContext.topFiles.map((item) => item.file).slice(0, 2).join(', ')}`);
+  }
+
+  if (result?.refreshedContext?.hints?.[0]) {
+    lines.push(`hint: ${truncate(result.refreshedContext.hints[0], 110)}`);
+  }
+
   const clipped = lines.slice(0, MAX_CONTEXT_LINES).join('\n').slice(0, MAX_CONTEXT_CHARS).trim();
   return clipped || null;
 };

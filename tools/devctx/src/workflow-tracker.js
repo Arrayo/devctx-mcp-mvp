@@ -1,5 +1,10 @@
 import { withStateDb } from './storage/sqlite.js';
 
+const WORKFLOW_TRACKING_ENABLED_RE = /^(1|true|yes|on)$/i;
+
+export const isWorkflowTrackingEnabled = () =>
+  WORKFLOW_TRACKING_ENABLED_RE.test(process.env.DEVCTX_WORKFLOW_TRACKING ?? '');
+
 const isWorkflowTrackingAvailable = () => {
   try {
     return withStateDb((db) => workflowTableExists(db));
@@ -351,10 +356,64 @@ const workflowTableExists = (db) => {
   }
 };
 
+export const getActiveWorkflowForSession = (sessionId) => {
+  try {
+    return withStateDb((db) => {
+      if (!workflowTableExists(db)) {
+        return null;
+      }
+
+      const workflow = db
+        .prepare(
+          `
+        SELECT
+          workflow_id,
+          workflow_type,
+          session_id,
+          start_time,
+          end_time,
+          duration_ms,
+          tools_used_json,
+          steps_count,
+          raw_tokens,
+          compressed_tokens,
+          saved_tokens,
+          savings_pct,
+          baseline_tokens,
+          vs_baseline_pct,
+          metadata_json,
+          created_at
+        FROM workflow_metrics
+        WHERE session_id = ? AND end_time IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+        )
+        .get(sessionId);
+
+      if (!workflow) {
+        return null;
+      }
+
+      return {
+        ...workflow,
+        toolsUsed: JSON.parse(workflow.tools_used_json || '[]'),
+        metadata: JSON.parse(workflow.metadata_json || '{}'),
+      };
+    });
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Auto-detect and track workflow from session
  */
 export const autoTrackWorkflow = (sessionId, sessionGoal) => {
+  if (!isWorkflowTrackingEnabled()) {
+    return null;
+  }
+
   try {
     return withStateDb((db) => {
       // Check if table exists (migration v5)

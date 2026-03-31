@@ -1,11 +1,24 @@
+import { buildIndexIncremental, persistIndex } from '../index.js';
+import { projectRoot } from '../utils/runtime-config.js';
+import {
+  autoTrackWorkflow,
+  endWorkflow,
+  getActiveWorkflowForSession,
+  isWorkflowTrackingEnabled,
+} from '../workflow-tracker.js';
+import { smartContext } from './smart-context.js';
 import { smartMetrics } from './smart-metrics.js';
 import { smartSummary } from './smart-summary.js';
 
 const DEFAULT_START_MAX_TOKENS = 400;
 const DEFAULT_END_MAX_TOKENS = 500;
 const DEFAULT_END_EVENT = 'milestone';
+const DEFAULT_REFRESH_CONTEXT_MAX_TOKENS = 1400;
 const MAX_PROMPT_PREVIEW = 160;
+const REFRESHED_CONTEXT_FILE_LIMIT = 3;
 const SAFE_CONTINUITY_STATES = new Set(['aligned', 'resume']);
+const WORKFLOW_END_EVENTS = new Set(['milestone', 'task_complete', 'session_end', 'blocker']);
+const INDEX_REFRESH_STATES = new Set(['stale', 'unavailable']);
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'when', 'where',
   'what', 'have', 'will', 'your', 'about', 'there', 'their', 'then', 'than',
@@ -168,12 +181,67 @@ const buildAutoCreateUpdate = (prompt) => ({
   nextStep: 'Inspect relevant code, confirm the task boundaries, and checkpoint the first milestone.',
 });
 
+const summarizeRefreshedContext = (result, { indexRefreshed = false } = {}) => {
+  if (!result?.success) {
+    return null;
+  }
+
+  return {
+    indexFreshness: result.indexFreshness ?? 'unavailable',
+    indexRefreshed,
+    graphCoverage: result.graphCoverage ?? result.confidence?.graphCoverage ?? null,
+    hints: Array.isArray(result.hints) ? result.hints.slice(0, 2) : [],
+    topFiles: Array.isArray(result.context)
+      ? result.context.slice(0, REFRESHED_CONTEXT_FILE_LIMIT).map((item) => ({
+          file: item.file,
+          role: item.role,
+          readMode: item.readMode ?? null,
+          reasonIncluded: item.reasonIncluded ?? null,
+          symbols: Array.isArray(item.symbols) ? item.symbols.slice(0, 3) : [],
+        }))
+      : [],
+  };
+};
+
+const refreshPromptContext = async (prompt) => {
+  if (!hasMeaningfulPrompt(prompt)) {
+    return null;
+  }
+
+  const buildContext = async () => smartContext({
+    task: prompt,
+    detail: 'minimal',
+    include: ['hints'],
+    maxTokens: DEFAULT_REFRESH_CONTEXT_MAX_TOKENS,
+  });
+
+  let result = await buildContext();
+  let indexRefreshed = false;
+
+  if (INDEX_REFRESH_STATES.has(result?.indexFreshness ?? '')) {
+    try {
+      const { index } = buildIndexIncremental(projectRoot);
+      await persistIndex(index, projectRoot);
+      indexRefreshed = true;
+      result = await buildContext();
+    } catch {
+      // best-effort refresh only
+    }
+  }
+
+  return summarizeRefreshedContext(result, { indexRefreshed });
+};
+
 const shouldIsolateSession = ({ sessionId, ensureSession, prompt, continuity }) =>
   !sessionId
   && ensureSession
   && hasMeaningfulPrompt(prompt)
   && continuity
   && !SAFE_CONTINUITY_STATES.has(continuity.state ?? '');
+
+const shouldRefreshContext = ({ prompt, ensureSession, summaryResult, isolatedSession, autoCreated }) =>
+  hasMeaningfulPrompt(prompt)
+  && (ensureSession || Boolean(summaryResult?.found) || isolatedSession || autoCreated);
 
 const startTurn = async ({
   sessionId,
@@ -231,6 +299,42 @@ const startTurn = async ({
   }
 
   const effectiveSessionId = summaryResult.sessionId ?? sessionId ?? summaryResult.recommendedSessionId ?? null;
+  const refreshedContext = shouldRefreshContext({
+    prompt,
+    ensureSession,
+    summaryResult,
+    isolatedSession,
+    autoCreated,
+  })
+    ? await refreshPromptContext(prompt)
+    : null;
+
+  let workflow = null;
+  if (effectiveSessionId && isWorkflowTrackingEnabled()) {
+    const workflowId = await autoTrackWorkflow(
+      effectiveSessionId,
+      summaryResult.summary?.goal ?? prompt ?? '',
+    );
+    if (workflowId) {
+      const activeWorkflow = await getActiveWorkflowForSession(effectiveSessionId);
+      workflow = activeWorkflow
+        ? {
+            enabled: true,
+            workflowId: activeWorkflow.workflow_id,
+            workflowType: activeWorkflow.workflow_type,
+            autoTracked: true,
+          }
+        : {
+            enabled: true,
+            workflowId,
+            workflowType: null,
+            autoTracked: true,
+          };
+    } else {
+      workflow = { enabled: true, workflowId: null, workflowType: null, autoTracked: false };
+    }
+  }
+
   const metrics = includeMetrics
     ? await smartMetrics({
         window: metricsWindow,
@@ -250,6 +354,8 @@ const startTurn = async ({
     ...(previousSessionId ? { previousSessionId } : {}),
     continuity,
     summary: summaryResult.summary ?? null,
+    ...(refreshedContext ? { refreshedContext } : {}),
+    ...(workflow ? { workflow } : {}),
     repoSafety: summaryResult.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(summaryResult.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
@@ -283,6 +389,35 @@ const endTurn = async ({
   });
 
   const effectiveSessionId = checkpoint.sessionId ?? sessionId ?? 'active';
+  let workflow = null;
+  if (
+    checkpoint.sessionId
+    && !checkpoint.skipped
+    && WORKFLOW_END_EVENTS.has(event)
+    && isWorkflowTrackingEnabled()
+  ) {
+    const activeWorkflow = await getActiveWorkflowForSession(checkpoint.sessionId);
+    if (activeWorkflow?.workflow_id) {
+      const endedWorkflow = await endWorkflow(activeWorkflow.workflow_id);
+      workflow = endedWorkflow
+        ? {
+            enabled: true,
+            workflowId: endedWorkflow.workflowId,
+            workflowType: endedWorkflow.workflowType,
+            ended: true,
+            summary: endedWorkflow,
+          }
+        : {
+            enabled: true,
+            workflowId: activeWorkflow.workflow_id,
+            workflowType: activeWorkflow.workflow_type,
+            ended: false,
+          };
+    } else {
+      workflow = { enabled: true, workflowId: null, workflowType: null, ended: false };
+    }
+  }
+
   const metrics = includeMetrics
     ? await smartMetrics({
         window: metricsWindow,
@@ -295,6 +430,7 @@ const endTurn = async ({
     phase: 'end',
     sessionId: checkpoint.sessionId ?? sessionId ?? null,
     checkpoint,
+    ...(workflow ? { workflow } : {}),
     repoSafety: checkpoint.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(checkpoint.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),

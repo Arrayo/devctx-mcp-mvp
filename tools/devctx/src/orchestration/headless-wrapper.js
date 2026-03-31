@@ -62,6 +62,14 @@ const buildContextLines = (startResult) => {
     lines.push(`Context status: ${truncate(startResult.continuity.reason, 120)}`);
   }
 
+  if (startResult?.refreshedContext?.indexRefreshed) {
+    lines.push('Index refreshed for this prompt.');
+  }
+
+  if (startResult?.refreshedContext?.topFiles?.length) {
+    lines.push(`Relevant files: ${startResult.refreshedContext.topFiles.map((item) => item.file).slice(0, 2).join(', ')}`);
+  }
+
   return lines.slice(0, 5);
 };
 

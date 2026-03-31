@@ -7,9 +7,11 @@ import path from 'node:path';
 import { smartSummary } from '../src/tools/smart-summary.js';
 import { smartTurn } from '../src/tools/smart-turn.js';
 import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
+import { getWorkflowMetrics } from '../src/workflow-tracker.js';
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
+const previousWorkflowTracking = process.env.DEVCTX_WORKFLOW_TRACKING;
 
 const originalProjectRoot = projectRoot;
 let turnTestRoot = null;
@@ -24,6 +26,11 @@ before(() => {
 after(() => {
   if (SKIP_SQLITE_TESTS) return;
   setProjectRoot(originalProjectRoot);
+  if (previousWorkflowTracking === undefined) {
+    delete process.env.DEVCTX_WORKFLOW_TRACKING;
+  } else {
+    process.env.DEVCTX_WORKFLOW_TRACKING = previousWorkflowTracking;
+  }
   if (turnTestRoot) {
     fs.rmSync(turnTestRoot, { recursive: true, force: true });
   }
@@ -54,6 +61,7 @@ test('smart_turn start reuses aligned persisted context', { skip: SKIP_SQLITE_TE
   assert.strictEqual(result.continuity.state, 'aligned');
   assert.strictEqual(result.continuity.shouldReuseContext, true);
   assert.ok(result.summary.goal.includes('repo safety'));
+  assert.ok(result.refreshedContext);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-aligned' });
 });
@@ -71,6 +79,28 @@ test('smart_turn start can auto-create a planning session for a substantial new 
   assert.ok(typeof result.sessionId === 'string' && result.sessionId.length > 0);
   assert.strictEqual(result.continuity.shouldReuseContext, true);
   assert.ok(result.summary.goal.toLowerCase().includes('orchestration layer'));
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('smart_turn start refreshes lightweight context for the new prompt', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const srcDir = path.join(turnTestRoot, 'src');
+  fs.mkdirSync(srcDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(srcDir, 'auth.js'),
+    'export function loginHandler(token) {\n  if (!token) throw new Error("Missing token");\n  return token;\n}\n',
+    'utf8',
+  );
+
+  const result = await smartTurn({
+    phase: 'start',
+    prompt: 'Fix the token error in loginHandler and continue the auth debugging flow',
+    ensureSession: true,
+  });
+
+  assert.ok(result.refreshedContext);
+  assert.ok(Array.isArray(result.refreshedContext.topFiles));
+  assert.ok(result.refreshedContext.topFiles.some((item) => item.file.includes('src/auth.js')));
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
@@ -102,6 +132,50 @@ test('smart_turn start isolates a new session when the prompt mismatches the act
 
   await smartSummary({ action: 'reset', sessionId: 'turn-existing' });
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('smart_turn start and end integrate workflow tracking when enabled', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  process.env.DEVCTX_WORKFLOW_TRACKING = 'true';
+
+  try {
+    const start = await smartTurn({
+      phase: 'start',
+      prompt: 'Fix the login error in the auth handler and verify the failing test',
+      ensureSession: true,
+    });
+
+    assert.equal(start.workflow?.enabled, true);
+    assert.equal(start.workflow?.workflowType, 'debugging');
+
+    const active = await getWorkflowMetrics({ sessionId: start.sessionId, completed: false, limit: 1 });
+    assert.equal(active.length, 1);
+    assert.equal(active[0].workflow_type, 'debugging');
+
+    const end = await smartTurn({
+      phase: 'end',
+      sessionId: start.sessionId,
+      event: 'milestone',
+      update: {
+        completed: ['Fixed the auth handler null-token bug'],
+        nextStep: 'Run the authentication regression tests',
+      },
+    });
+
+    assert.equal(end.workflow?.enabled, true);
+    assert.equal(end.workflow?.ended, true);
+    assert.equal(end.workflow?.summary?.workflowType, 'debugging');
+
+    const completed = await getWorkflowMetrics({ sessionId: start.sessionId, completed: true, limit: 1 });
+    assert.equal(completed.length, 1);
+
+    await smartSummary({ action: 'reset', sessionId: start.sessionId });
+  } finally {
+    if (previousWorkflowTracking === undefined) {
+      delete process.env.DEVCTX_WORKFLOW_TRACKING;
+    } else {
+      process.env.DEVCTX_WORKFLOW_TRACKING = previousWorkflowTracking;
+    }
+  }
 });
 
 test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {

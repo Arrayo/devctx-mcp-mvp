@@ -38,7 +38,7 @@ export DEVCTX_WORKFLOW_TRACKING=true
 
 ### 1. Auto-Detection
 
-When workflow tracking integration is enabled in a wrapper or caller around `smart_turn(start)`, the system can:
+When `DEVCTX_WORKFLOW_TRACKING=true` and `smart_turn(start)` is called with a meaningful prompt, the system can:
 1. Analyze the prompt for workflow patterns
 2. Check tools used so far in the session
 3. Detect workflow type (debugging, review, refactor, testing, architecture)
@@ -74,7 +74,7 @@ Each tool call records:
 
 ### 3. Workflow Completion
 
-When a tracked workflow is closed, typically alongside `smart_turn(end)` with `event=milestone` or `event=task_complete`:
+When a tracked workflow is closed by `smart_turn(end)` with `event=milestone`, `task_complete`, `session_end`, or `blocker`:
 1. Workflow tracking ends
 2. Metrics are aggregated
 3. Savings are calculated vs baseline
