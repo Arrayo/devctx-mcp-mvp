@@ -179,7 +179,7 @@ const MIGRATIONS = [
 let sqliteModulePromise = null;
 
 export const getStateDir = () => path.join(projectRoot, '.devctx');
-export const getStateDbPath = () => path.join(getStateDir(), STATE_DB_FILENAME);
+export const getStateDbPath = () => process.env.DEVCTX_STATE_DB_PATH || path.join(getStateDir(), STATE_DB_FILENAME);
 export const getLegacySessionsDir = () => path.join(getStateDir(), 'sessions');
 export const getLegacyMetricsPath = () => path.join(getStateDir(), 'metrics.jsonl');
 export const getLegacyActiveSessionPath = () => path.join(getLegacySessionsDir(), 'active.json');

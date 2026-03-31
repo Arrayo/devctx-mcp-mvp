@@ -1,18 +1,55 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { smartStatus } from '../src/tools/smart-status.js';
 import { smartSummary } from '../src/tools/smart-summary.js';
 
+let hasNodeSqlite = false;
+try {
+  await import('node:sqlite');
+  hasNodeSqlite = true;
+} catch {
+  hasNodeSqlite = false;
+}
+
 describe('smart_status', () => {
-  before(async () => {
+  let tempDbPath;
+  let originalEnv;
+
+  before(async function() {
+    if (!hasNodeSqlite) {
+      this.skip();
+      return;
+    }
+    
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-test-'));
+    tempDbPath = path.join(tempDir, 'state.sqlite');
+    originalEnv = process.env.DEVCTX_STATE_DB_PATH;
+    process.env.DEVCTX_STATE_DB_PATH = tempDbPath;
+    
     await smartSummary({ action: 'reset' });
   });
 
-  after(async () => {
+  after(async function() {
+    if (!hasNodeSqlite) return;
+    
     await smartSummary({ action: 'reset' });
+    
+    if (originalEnv !== undefined) {
+      process.env.DEVCTX_STATE_DB_PATH = originalEnv;
+    } else {
+      delete process.env.DEVCTX_STATE_DB_PATH;
+    }
+    
+    if (tempDbPath && fs.existsSync(tempDbPath)) {
+      fs.rmSync(path.dirname(tempDbPath), { recursive: true, force: true });
+    }
   });
 
-  it('should display active session context', async () => {
+  it('should display active session context', async function() {
+    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -37,7 +74,8 @@ describe('smart_status', () => {
     assert.equal(result.context.stats.files, 2);
   });
 
-  it('should support compact format', async () => {
+  it('should support compact format', async function() {
+    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -59,7 +97,8 @@ describe('smart_status', () => {
     assert.equal(result.recentFiles.length, 3);
   });
 
-  it('should limit recent items with maxItems', async () => {
+  it('should limit recent items with maxItems', async function() {
+    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -76,7 +115,8 @@ describe('smart_status', () => {
     assert.ok(result.context.recent.files.length <= 5);
   });
 
-  it('should show pinned context and unresolved questions', async () => {
+  it('should show pinned context and unresolved questions', async function() {
+    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -97,7 +137,8 @@ describe('smart_status', () => {
     assert.equal(result.context.questions.length, 2);
   });
 
-  it('should handle blocked status', async () => {
+  it('should handle blocked status', async function() {
+    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -114,7 +155,8 @@ describe('smart_status', () => {
     assert.equal(result.context.whyBlocked, 'Waiting for API key');
   });
 
-  it('should show current focus when set', async () => {
+  it('should show current focus when set', async function() {
+    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {

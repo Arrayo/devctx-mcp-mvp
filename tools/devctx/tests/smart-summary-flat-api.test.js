@@ -1,17 +1,54 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { smartSummary } from '../src/tools/smart-summary.js';
 
+let hasNodeSqlite = false;
+try {
+  await import('node:sqlite');
+  hasNodeSqlite = true;
+} catch {
+  hasNodeSqlite = false;
+}
+
 describe('smart_summary flat API', () => {
-  before(async () => {
+  let tempDbPath;
+  let originalEnv;
+
+  before(async function() {
+    if (!hasNodeSqlite) {
+      this.skip();
+      return;
+    }
+    
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-test-'));
+    tempDbPath = path.join(tempDir, 'state.sqlite');
+    originalEnv = process.env.DEVCTX_STATE_DB_PATH;
+    process.env.DEVCTX_STATE_DB_PATH = tempDbPath;
+    
     await smartSummary({ action: 'reset' });
   });
 
-  after(async () => {
+  after(async function() {
+    if (!hasNodeSqlite) return;
+    
     await smartSummary({ action: 'reset' });
+    
+    if (originalEnv !== undefined) {
+      process.env.DEVCTX_STATE_DB_PATH = originalEnv;
+    } else {
+      delete process.env.DEVCTX_STATE_DB_PATH;
+    }
+    
+    if (tempDbPath && fs.existsSync(tempDbPath)) {
+      fs.rmSync(path.dirname(tempDbPath), { recursive: true, force: true });
+    }
   });
 
-  it('should accept flat format (new API)', async () => {
+  it('should accept flat format (new API)', async function() {
+    if (!hasNodeSqlite) this.skip();
     const result = await smartSummary({
       action: 'update',
       goal: 'Test flat API',
@@ -26,7 +63,8 @@ describe('smart_summary flat API', () => {
     assert.equal(result.summary.nextStep, 'Verify it works');
   });
 
-  it('should still accept nested format (old API)', async () => {
+  it('should still accept nested format (old API)', async function() {
+    if (!hasNodeSqlite) this.skip();
     const result = await smartSummary({
       action: 'update',
       update: {
@@ -42,7 +80,8 @@ describe('smart_summary flat API', () => {
     assert.equal(result.summary.status, 'in_progress');
   });
 
-  it('should prioritize nested format when both provided', async () => {
+  it('should prioritize nested format when both provided', async function() {
+    if (!hasNodeSqlite) this.skip();
     const result = await smartSummary({
       action: 'update',
       goal: 'Flat goal',
