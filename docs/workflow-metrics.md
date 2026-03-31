@@ -70,6 +70,8 @@ Each tool call records:
 - Compressed tokens (what was actually sent)
 - Saved tokens (raw - compressed)
 
+If `.devctx/state.sqlite` is tracked or staged, workflow-tracker mutations are paused at runtime until git hygiene is fixed. Reads still work from snapshot mode so reporting stays safe.
+
 ---
 
 ### 3. Workflow Completion

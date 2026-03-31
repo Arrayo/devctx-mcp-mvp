@@ -4,6 +4,11 @@ import { execFileSync } from 'node:child_process';
 import { getStateDbPath } from './storage/sqlite.js';
 import { projectRoot } from './utils/runtime-config.js';
 
+export const HARD_BLOCK_REPO_SAFETY_REASONS = Object.freeze([
+  ['tracked', 'isTracked'],
+  ['staged', 'isStaged'],
+]);
+
 const hasGitignoreEntry = (content, entry) => {
   const target = entry.replace(/\/+$/, '');
   return content
@@ -162,5 +167,21 @@ export const enforceRepoSafety = ({
     message: violations.length === 0
       ? 'Repository safety checks passed.'
       : 'Repository safety checks failed.',
+  };
+};
+
+export const getRepoMutationSafety = ({
+  root = projectRoot,
+  stateDbPath = getStateDbPath(),
+} = {}) => {
+  const repoSafety = enforceRepoSafety({ root, stateDbPath });
+  const reasons = HARD_BLOCK_REPO_SAFETY_REASONS
+    .filter(([, field]) => repoSafety[field])
+    .map(([reason]) => reason);
+
+  return {
+    repoSafety,
+    shouldBlock: reasons.length > 0,
+    reasons,
   };
 };

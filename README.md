@@ -1647,6 +1647,7 @@ sqlite3 .devctx/state.sqlite "SELECT COUNT(*) FROM sessions"
 - Node 18-20 → No SQLite (upgrade to 22+)
 - Agent not calling `smart_turn` → No task checkpoints
 - Session ID mismatch → Can't recover checkpoint
+- `.devctx/state.sqlite` tracked/staged → runtime context writes are intentionally blocked until git hygiene is fixed
 
 ---
 

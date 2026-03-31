@@ -1,6 +1,6 @@
 import { countTokens } from '../tokenCounter.js';
 import { persistMetrics } from '../metrics.js';
-import { enforceRepoSafety, getRepoSafety } from '../repo-safety.js';
+import { getRepoMutationSafety, getRepoSafety } from '../repo-safety.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
@@ -105,11 +105,6 @@ const CHECKPOINT_POLICY_BY_EVENT = {
   },
 };
 const SUMMARY_WRITE_ACTIONS = new Set(['update', 'append', 'auto_append', 'checkpoint', 'reset', 'compact']);
-const HARD_BLOCK_REPO_SAFETY_REASONS = [
-  ['tracked', 'isTracked'],
-  ['staged', 'isStaged'],
-];
-
 const getTimestamp = (value, fallback = Date.now()) => {
   const parsed = Date.parse(value ?? '');
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -980,16 +975,7 @@ const addRepoSafety = (result, repoSafety = getRepoSafety()) => ({
 });
 
 const getMutationSafetyPolicy = () => {
-  const repoSafety = enforceRepoSafety();
-  const reasons = HARD_BLOCK_REPO_SAFETY_REASONS
-    .filter(([, field]) => repoSafety[field])
-    .map(([reason]) => reason);
-
-  return {
-    repoSafety,
-    shouldBlock: reasons.length > 0,
-    reasons,
-  };
+  return getRepoMutationSafety();
 };
 
 const buildMutationBlockedMessage = (reasons, stateDbPath = '.devctx/state.sqlite') => {

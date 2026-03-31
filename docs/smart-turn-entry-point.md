@@ -96,6 +96,7 @@ smart_turn({ phase: 'start', userPrompt: 'Document the wrapper onboarding flow',
 - `.devctx/state.sqlite` not tracked in git
 - No sensitive files staged
 - Repo is in clean state
+- If repo safety fails, context mutations stay blocked across checkpoints, workflow tracking, and hook turn state
 
 **Example:**
 ```javascript

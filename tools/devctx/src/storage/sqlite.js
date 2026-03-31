@@ -728,9 +728,10 @@ const upsertHookTurnRow = (db, record) => {
   );
 };
 
-export const getHookTurnState = async ({ filePath = getStateDbPath(), hookKey } = {}) => withStateDb((db) =>
-  normalizeHookTurnRow(readHookTurnRow(db, hookKey))
-, { filePath });
+export const getHookTurnState = async ({ filePath = getStateDbPath(), hookKey, readOnly = false } = {}) => {
+  const reader = readOnly ? withStateDbSnapshot : withStateDb;
+  return reader((db) => normalizeHookTurnRow(readHookTurnRow(db, hookKey)), { filePath });
+};
 
 export const setHookTurnState = async ({ filePath = getStateDbPath(), hookKey, state } = {}) => withStateDb((db) => {
   const record = buildHookTurnRecord(hookKey, state);

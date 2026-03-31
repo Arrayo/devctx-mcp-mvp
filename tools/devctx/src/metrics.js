@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
-import { enforceRepoSafety } from './repo-safety.js';
+import { getRepoMutationSafety } from './repo-safety.js';
 import { countTokens } from './tokenCounter.js';
 import { projectRoot } from './utils/paths.js';
 import {
@@ -16,11 +16,6 @@ import {
 const defaultMetricsDir = () => path.join(projectRoot, '.devctx');
 const defaultMetricsFile = () => path.join(defaultMetricsDir(), 'metrics.jsonl');
 const resolveEnvMetricsFile = () => process.env.DEVCTX_METRICS_FILE?.trim() || null;
-const HARD_BLOCK_REPO_SAFETY_REASONS = [
-  ['tracked', 'isTracked'],
-  ['staged', 'isStaged'],
-];
-
 export const getMetricsFilePath = () => resolveEnvMetricsFile() ?? defaultMetricsFile();
 
 let lastEnsuredDir = null;
@@ -92,16 +87,7 @@ const readActiveSessionIdFromDb = (db) =>
   db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE)?.session_id ?? null;
 
 const getSqliteSafetyPolicy = () => {
-  const repoSafety = enforceRepoSafety();
-  const reasons = HARD_BLOCK_REPO_SAFETY_REASONS
-    .filter(([, field]) => repoSafety[field])
-    .map(([reason]) => reason);
-
-  return {
-    repoSafety,
-    shouldBlock: reasons.length > 0,
-    reasons,
-  };
+  return getRepoMutationSafety();
 };
 
 export const getActiveSessionId = async () => {

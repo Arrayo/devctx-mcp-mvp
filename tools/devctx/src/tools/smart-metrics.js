@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { enforceRepoSafety, getRepoSafety } from '../repo-safety.js';
+import { getRepoMutationSafety, getRepoSafety } from '../repo-safety.js';
 import {
   ACTIVE_SESSION_SCOPE,
   importLegacyState,
@@ -62,22 +62,8 @@ const buildLatestEntries = (entries, limit) =>
 
 const getActiveSessionId = (db) =>
   db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE)?.session_id ?? null;
-const HARD_BLOCK_REPO_SAFETY_REASONS = [
-  ['tracked', 'isTracked'],
-  ['staged', 'isStaged'],
-];
-
 const getSqliteSafetyPolicy = () => {
-  const repoSafety = enforceRepoSafety();
-  const reasons = HARD_BLOCK_REPO_SAFETY_REASONS
-    .filter(([, field]) => repoSafety[field])
-    .map(([reason]) => reason);
-
-  return {
-    repoSafety,
-    shouldBlock: reasons.length > 0,
-    reasons,
-  };
+  return getRepoMutationSafety();
 };
 
 const resolveSessionId = (sessionId, activeSessionId) => {

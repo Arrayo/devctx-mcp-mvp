@@ -1,4 +1,5 @@
-import { withStateDb } from './storage/sqlite.js';
+import { getRepoMutationSafety } from './repo-safety.js';
+import { withStateDb, withStateDbSnapshot } from './storage/sqlite.js';
 import { getNetSavedTokens } from './metrics.js';
 
 const WORKFLOW_TRACKING_ENABLED_RE = /^(1|true|yes|on)$/i;
@@ -27,12 +28,20 @@ const buildSummaryNetMetricsCoverage = ({ coveredWorkflows, totalWorkflows }) =>
   complete: totalWorkflows > 0 && coveredWorkflows === totalWorkflows,
 });
 
+const getWorkflowMutationSafety = () => getRepoMutationSafety();
+
+const withWorkflowReadDb = (callback) => {
+  const safety = getWorkflowMutationSafety();
+  const reader = safety.shouldBlock ? withStateDbSnapshot : withStateDb;
+  return reader(callback);
+};
+
 export const isWorkflowTrackingEnabled = () =>
   WORKFLOW_TRACKING_ENABLED_RE.test(process.env.DEVCTX_WORKFLOW_TRACKING ?? '');
 
 const isWorkflowTrackingAvailable = () => {
   try {
-    return withStateDb((db) => workflowTableExists(db));
+    return withWorkflowReadDb((db) => workflowTableExists(db));
   } catch {
     return false;
   }
@@ -123,6 +132,10 @@ export const getWorkflowBaseline = (workflowType) => {
  */
 export const startWorkflow = (workflowType, sessionId, metadata = {}) => {
   try {
+    if (getWorkflowMutationSafety().shouldBlock) {
+      return null;
+    }
+
     return withStateDb((db) => {
       if (!workflowTableExists(db)) {
         return null;
@@ -161,6 +174,10 @@ export const startWorkflow = (workflowType, sessionId, metadata = {}) => {
  */
 export const endWorkflow = (workflowId) => {
   try {
+    if (getWorkflowMutationSafety().shouldBlock) {
+      return null;
+    }
+
     return withStateDb((db) => {
       if (!workflowTableExists(db)) {
         return null;
@@ -291,7 +308,7 @@ export const endWorkflow = (workflowId) => {
  */
 export const getWorkflowMetrics = (options = {}) => {
   try {
-    return withStateDb((db) => {
+    return withWorkflowReadDb((db) => {
       if (!workflowTableExists(db)) {
         return [];
       }
@@ -384,7 +401,7 @@ export const getWorkflowMetrics = (options = {}) => {
  */
 export const getWorkflowSummaryByType = () => {
   try {
-    return withStateDb((db) => {
+    return withWorkflowReadDb((db) => {
       if (!workflowTableExists(db)) {
         return [];
       }
@@ -500,7 +517,7 @@ const workflowTableExists = (db) => {
 
 export const getActiveWorkflowForSession = (sessionId) => {
   try {
-    return withStateDb((db) => {
+    return withWorkflowReadDb((db) => {
       if (!workflowTableExists(db)) {
         return null;
       }
@@ -552,7 +569,11 @@ export const getActiveWorkflowForSession = (sessionId) => {
  * Auto-detect and track workflow from session
  */
 export const autoTrackWorkflow = (sessionId, sessionGoal) => {
-  if (!isWorkflowTrackingEnabled()) {
+  if (!sessionId || !isWorkflowTrackingEnabled()) {
+    return null;
+  }
+
+  if (getWorkflowMutationSafety().shouldBlock) {
     return null;
   }
 

@@ -56,6 +56,39 @@ test('claude UserPromptSubmit hook rehydrates context and tracks the turn in SQL
   await deleteHookTurnState({ hookKey: 'claude:main:claude-hook-user-prompt' });
 });
 
+test('claude UserPromptSubmit hook does not persist hook state when repo safety blocks SQLite writes', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'claude-hook-blocked-session',
+    update: {
+      goal: 'Blocked hook state persistence',
+      status: 'in_progress',
+      currentFocus: 'Repo safety',
+    },
+  });
+
+  fs.writeFileSync(path.join(hookTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+  execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: hookTestRoot, stdio: 'ignore' });
+  try {
+    const response = await handleClaudeHookEvent({
+      hook_event_name: 'UserPromptSubmit',
+      session_id: 'claude-hook-blocked',
+      prompt: 'Continue the blocked hook turn and preserve context safely',
+    });
+
+    assert.match(response?.hookSpecificOutput?.additionalContext ?? '', /context writes are blocked/i);
+
+    const state = await getHookTurnState({
+      hookKey: 'claude:main:claude-hook-blocked',
+      readOnly: true,
+    });
+    assert.equal(state, null);
+  } finally {
+    execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: hookTestRoot, stdio: 'ignore' });
+    await smartSummary({ action: 'reset', sessionId: 'claude-hook-blocked-session' });
+  }
+});
+
 test('claude PostToolUse hook marks devctx end-of-turn checkpoints', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await setHookTurnState({
     hookKey: 'claude:main:claude-hook-post-tool',
@@ -189,4 +222,50 @@ test('claude Stop hook ignores low-signal turns without writes or concrete carry
     hookKey: 'claude:main:claude-hook-stop-trivial',
   });
   assert.equal(state, null);
+});
+
+test('claude Stop hook does not demand a checkpoint when repo safety blocks SQLite mutations', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'claude-hook-stop-blocked-session',
+    update: {
+      goal: 'Blocked stop hook',
+      status: 'in_progress',
+    },
+  });
+
+  await setHookTurnState({
+    hookKey: 'claude:main:claude-hook-stop-blocked',
+    state: {
+      client: 'claude',
+      claudeSessionId: 'claude-hook-stop-blocked',
+      projectSessionId: 'claude-hook-stop-blocked-session',
+      turnId: 'turn-stop-blocked',
+      promptPreview: 'Blocked hook stop handling',
+      continuityState: 'aligned',
+      requireCheckpoint: true,
+      promptMeaningful: true,
+      checkpointed: false,
+      touchedFiles: ['tools/devctx/src/hooks/claude-hooks.js'],
+      meaningfulWriteCount: 1,
+    },
+  });
+
+  fs.writeFileSync(path.join(hookTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+  execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: hookTestRoot, stdio: 'ignore' });
+
+  try {
+    const result = await handleClaudeHookEvent({
+      hook_event_name: 'Stop',
+      session_id: 'claude-hook-stop-blocked',
+      stop_hook_active: false,
+      last_assistant_message: 'There is blocked state that would normally require a checkpoint.',
+    });
+
+    assert.equal(result, null);
+  } finally {
+    execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: hookTestRoot, stdio: 'ignore' });
+    await deleteHookTurnState({ hookKey: 'claude:main:claude-hook-stop-blocked' });
+    await smartSummary({ action: 'reset', sessionId: 'claude-hook-stop-blocked-session' });
+  }
 });

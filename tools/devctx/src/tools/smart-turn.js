@@ -304,6 +304,10 @@ const startTurn = async ({
   }
 
   const effectiveSessionId = summaryResult.sessionId ?? sessionId ?? summaryResult.recommendedSessionId ?? null;
+  const workflowBlocked = Boolean(
+    isWorkflowTrackingEnabled()
+    && (summaryResult.repoSafety?.isTracked || summaryResult.repoSafety?.isStaged),
+  );
   const refreshedContext = shouldRefreshContext({
     prompt,
     ensureSession,
@@ -316,7 +320,9 @@ const startTurn = async ({
     : null;
 
   let workflow = null;
-  if (effectiveSessionId && isWorkflowTrackingEnabled()) {
+  if (workflowBlocked) {
+    workflow = { enabled: true, blocked: true, workflowId: null, workflowType: null, autoTracked: false };
+  } else if (effectiveSessionId && isWorkflowTrackingEnabled()) {
     const workflowId = await autoTrackWorkflow(
       effectiveSessionId,
       summaryResult.summary?.goal ?? prompt ?? '',
@@ -395,8 +401,14 @@ const endTurn = async ({
   });
 
   const effectiveSessionId = checkpoint.sessionId ?? sessionId ?? 'active';
+  const workflowBlocked = Boolean(
+    isWorkflowTrackingEnabled()
+    && (checkpoint.repoSafety?.isTracked || checkpoint.repoSafety?.isStaged),
+  );
   let workflow = null;
-  if (
+  if (workflowBlocked) {
+    workflow = { enabled: true, blocked: true, workflowId: null, workflowType: null, ended: false };
+  } else if (
     checkpoint.sessionId
     && !checkpoint.skipped
     && WORKFLOW_END_EVENTS.has(event)

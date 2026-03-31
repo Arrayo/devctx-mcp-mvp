@@ -1,4 +1,5 @@
 import { persistMetrics } from '../metrics.js';
+import { getRepoMutationSafety } from '../repo-safety.js';
 import { countTokens } from '../tokenCounter.js';
 import { smartSummary } from '../tools/smart-summary.js';
 import { smartTurn } from '../tools/smart-turn.js';
@@ -117,6 +118,28 @@ const buildHookContextResponse = (hookEventName, additionalContext) => {
       additionalContext,
     },
   };
+};
+
+const readHookTurnState = (hookKey) =>
+  getHookTurnState({
+    hookKey,
+    readOnly: getRepoMutationSafety().shouldBlock,
+  });
+
+const maybeSetTrackedTurnState = async ({ hookKey, state }) => {
+  if (getRepoMutationSafety().shouldBlock) {
+    return null;
+  }
+
+  return setHookTurnState({ hookKey, state });
+};
+
+const maybeDeleteTrackedTurnState = async ({ hookKey }) => {
+  if (getRepoMutationSafety().shouldBlock) {
+    return null;
+  }
+
+  return deleteHookTurnState({ hookKey });
 };
 
 const recordHookMetrics = async ({
@@ -259,7 +282,7 @@ const maybeTrackTurn = async ({
     return null;
   }
 
-  return setHookTurnState({
+  return maybeSetTrackedTurnState({
     hookKey,
     state: {
       client: HOOK_CLIENT,
@@ -320,7 +343,7 @@ const handleUserPromptSubmit = async (input) => {
 
 const handlePostToolUse = async (input) => {
   const hookKey = buildHookKey({ sessionId: input.session_id });
-  const existing = await getHookTurnState({ hookKey });
+  const existing = await readHookTurnState(hookKey);
   if (!existing) {
     return null;
   }
@@ -344,7 +367,7 @@ const handlePostToolUse = async (input) => {
     updatedAt: new Date().toISOString(),
   };
 
-  await setHookTurnState({ hookKey, state: nextState });
+  await maybeSetTrackedTurnState({ hookKey, state: nextState });
   if (checkpoint.matched || touchedFiles.length > 0) {
     await recordHookMetrics({
       action: 'PostToolUse',
@@ -358,8 +381,19 @@ const handlePostToolUse = async (input) => {
 
 const handleStop = async (input) => {
   const hookKey = buildHookKey({ sessionId: input.session_id });
-  const state = await getHookTurnState({ hookKey });
+  const state = await readHookTurnState(hookKey);
   if (!state) {
+    return null;
+  }
+
+  if (getRepoMutationSafety().shouldBlock) {
+    await recordHookMetrics({
+      action: 'Stop',
+      sessionId: state.projectSessionId,
+      additionalContext: '',
+      blocked: false,
+      continuityState: state.continuityState,
+    });
     return null;
   }
 
@@ -373,7 +407,7 @@ const handleStop = async (input) => {
       blocked: false,
       continuityState: state.continuityState,
     });
-    await deleteHookTurnState({ hookKey });
+    await maybeDeleteTrackedTurnState({ hookKey });
     return null;
   }
 
@@ -396,7 +430,7 @@ const handleStop = async (input) => {
       autoAppended: true,
       continuityState: state.continuityState,
     });
-    await deleteHookTurnState({ hookKey });
+    await maybeDeleteTrackedTurnState({ hookKey });
     return null;
   }
 

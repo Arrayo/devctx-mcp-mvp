@@ -1,3 +1,4 @@
+import { getRepoMutationSafety } from './repo-safety.js';
 import { withStateDb, withStateDbSnapshot } from './storage/sqlite.js';
 
 const PATTERN_CONFIDENCE_THRESHOLD = 0.6;
@@ -55,6 +56,7 @@ const computeTaskSimilarity = (task1, task2) => {
 
 export const recordContextAccess = async ({ task, intent, files }) => {
   if (!task || !Array.isArray(files) || files.length === 0) return;
+  if (getRepoMutationSafety().shouldBlock) return null;
 
   const signature = normalizeTaskSignature(task);
   if (!signature) return;
@@ -174,6 +176,15 @@ export const predictContextFiles = async ({ task, intent, maxFiles = MAX_PREDICT
 };
 
 export const cleanupStalePatterns = async ({ retentionDays = PATTERN_DECAY_DAYS } = {}) => {
+  if (getRepoMutationSafety().shouldBlock) {
+    return {
+      action: 'cleanup_patterns',
+      deletedPatterns: 0,
+      retentionDays,
+      blocked: true,
+    };
+  }
+
   return withStateDb((db) => {
     initPatternTables(db);
     

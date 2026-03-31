@@ -214,6 +214,54 @@ test('smart_turn start and end integrate workflow tracking when enabled', { skip
   }
 });
 
+test('smart_turn reports workflow tracking blocked when state sqlite is staged', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  process.env.DEVCTX_WORKFLOW_TRACKING = 'true';
+
+  try {
+    await smartSummary({
+      action: 'update',
+      sessionId: 'turn-workflow-blocked',
+      update: {
+        goal: 'Debug blocked workflow tracking',
+        status: 'in_progress',
+        currentFocus: 'Repo safety enforcement',
+      },
+    });
+
+    fs.writeFileSync(path.join(turnTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+    execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: turnTestRoot, stdio: 'ignore' });
+    try {
+      const result = await smartTurn({
+        phase: 'start',
+        sessionId: 'turn-workflow-blocked',
+        prompt: 'Continue the blocked debugging workflow safely',
+      });
+
+      assert.equal(result.repoSafety?.isTracked, true);
+      assert.equal(result.repoSafety?.isStaged, true);
+      assert.deepEqual(result.workflow, {
+        enabled: true,
+        blocked: true,
+        workflowId: null,
+        workflowType: null,
+        autoTracked: false,
+      });
+
+      const active = await getWorkflowMetrics({ sessionId: 'turn-workflow-blocked', completed: false, limit: 1 });
+      assert.equal(active.length, 0);
+    } finally {
+      execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: turnTestRoot, stdio: 'ignore' });
+      await smartSummary({ action: 'reset', sessionId: 'turn-workflow-blocked' });
+    }
+  } finally {
+    if (previousWorkflowTracking === undefined) {
+      delete process.env.DEVCTX_WORKFLOW_TRACKING;
+    } else {
+      process.env.DEVCTX_WORKFLOW_TRACKING = previousWorkflowTracking;
+    }
+  }
+});
+
 test('smart_turn start does not enable workflow tracking when the env flag is off', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   delete process.env.DEVCTX_WORKFLOW_TRACKING;
 
