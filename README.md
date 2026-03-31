@@ -21,7 +21,12 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 - Testing: 120K → 12K tokens (90% savings)
 - Architecture: 300K → 30K tokens (90% savings)
 
-See [Workflow Metrics](./docs/workflow-metrics.md) for complete workflows.
+**Real adoption in non-trivial tasks:**
+- 73% of complex tasks used devctx tools (measured on this project)
+- Most used: `smart_context` (35 uses), `smart_read` (32 uses), `smart_search` (28 uses)
+- Primary reasons for non-usage: task too simple (47%), no index (29%), native preferred (24%)
+
+See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
 ## Why it exists
 
@@ -32,6 +37,38 @@ AI agents waste tokens in three ways:
 3. **Repeating context** across conversation turns
 
 This MCP solves all three by providing tools that return compressed, ranked, and cached context.
+
+---
+
+## 🚨 Agent Ignored devctx? → Paste This Next
+
+<table>
+<tr>
+<td width="100%" bgcolor="#FFF3CD">
+
+### 📋 Official Prompt (Copy & Paste)
+
+```
+Use smart-context-mcp for this task.
+Start with smart_turn(start), then use smart_context or smart_search before reading full files.
+End with smart_turn(end) if you make progress.
+```
+
+### ⚡ Ultra-Short Version
+
+```
+Use devctx: smart_turn(start) → smart_context → smart_turn(end)
+```
+
+</td>
+</tr>
+</table>
+
+**When to use:** Agent read large files with `Read`, used `Grep` repeatedly, or you see no devctx tools in a complex task.
+
+**Why this happens:** Task seemed simple, no index built, native tools appeared more direct, or rules weren't strong enough.
+
+---
 
 ## Quick Start: Which Client Should I Use?
 
@@ -85,34 +122,24 @@ This MCP solves all three by providing tools that return compressed, ranked, and
 
 ### 📊 Quick Comparison
 
-| Client | Automaticity | smart_turn Value | Best Use Case |
-|--------|--------------|------------------|---------------|
-| **Cursor** | Medium | High | Complex IDE tasks, conditional workflows |
-| **Claude Desktop** | High (hooks) | Very High | Session continuity, auto-recovery |
-| **Codex CLI** | Low-Medium | Medium | Terminal workflows, scripting |
-| **Qwen Code** | Low-Medium | Medium | Alternative to Cursor |
+| Client | Automaticity | Best For |
+|--------|--------------|----------|
+| **Cursor** | Medium | Complex IDE tasks |
+| **Claude Desktop** | High (hooks) | Session continuity |
+| **Codex CLI** | Low-Medium | Terminal workflows |
+| **Qwen Code** | Low-Medium | Alternative to Cursor |
 
-### ⚠️ What "Automaticity" Does NOT Mean
+**Important:** Agent always decides whether to use devctx. Rules increase probability, but don't guarantee it.
 
-- ❌ Automatic prompt interception (none of these clients do this)
-- ❌ Forced tool usage (agent always decides)
-- ❌ Guaranteed adoption (agent may ignore rules if task seems simple)
-
-The agent **always decides** whether to use devctx. Rules increase the probability, but don't guarantee it.
-
----
-
-**📖 Detailed Setup:** See [Client Compatibility](./docs/client-compatibility.md) for installation instructions per client.
+**📖 Full setup:** [Client Compatibility](./docs/client-compatibility.md)
 
 ---
 
 ## 🚀 How to Invoke the MCP
 
-The MCP doesn't intercept prompts automatically. **You need to tell the agent to use it.**
+**Key point:** The MCP doesn't intercept prompts automatically. You need to tell the agent to use it.
 
-### Option 1: Use MCP Prompts (Easiest)
-
-In Cursor, type in the chat:
+### 1️⃣ Use MCP Prompts (Easiest - Cursor only)
 
 ```
 /prompt use-devctx
@@ -120,33 +147,24 @@ In Cursor, type in the chat:
 [Your task here]
 ```
 
-**Available prompts:**
-- `/prompt use-devctx` - Force devctx tools for current task
-- `/prompt devctx-workflow` - Full workflow (start → context → work → end)
-- `/prompt devctx-preflight` - Preflight only (build_index + smart_turn start)
+**Other prompts:**
+- `/prompt devctx-workflow` - Full workflow
+- `/prompt devctx-preflight` - Build index + start session
 
-### Option 2: Explicit Instruction
-
-Just tell the agent directly:
+### 2️⃣ Explicit Instruction (Any client)
 
 ```
 Use smart_turn(start) to recover context, then [your task]
 ```
 
-Or:
+### 3️⃣ Automatic via Rules (Not guaranteed)
 
-```
-Use the MCP to review this code
-```
+Agent *should* use devctx for complex tasks if rules are active:
+- Cursor: `.cursorrules`
+- Claude Desktop: `CLAUDE.md`
+- Others: `AGENTS.md`
 
-### Option 3: Automatic (via Rules)
-
-The agent *should* use devctx automatically for complex tasks because:
-- ✅ `.cursorrules` is active in Cursor
-- ✅ `CLAUDE.md` is active in Claude Desktop (if you created it)
-- ✅ `AGENTS.md` is active in other clients (if you created it)
-
-**But it's not guaranteed** - the agent decides based on task complexity.
+**But:** Agent decides based on task complexity.
 
 ### ⚡ Quick Reference
 
@@ -160,37 +178,6 @@ The agent *should* use devctx automatically for complex tasks because:
 
 ---
 
----
-
-## 🚨 If the Agent Ignored devctx → Paste This
-
-<table>
-<tr>
-<td width="100%" bgcolor="#FFF3CD">
-
-### 📋 Short Prompt (Copy & Paste)
-
-```
-Use smart-context-mcp for this task.
-Start with smart_turn(start), then use smart_context or smart_search before reading full files.
-End with smart_turn(end) if you make progress.
-```
-
-### ⚡ Ultra-Short
-
-```
-Use devctx: smart_turn(start) → smart_context → smart_turn(end)
-```
-
-</td>
-</tr>
-</table>
-
-**When to use:** Agent read large files with `Read`, used `Grep` repeatedly, or you see no devctx tools in a complex task.
-
-**Why this happens:** Task seemed simple, no index built, native tools appeared more direct, or rules weren't strong enough.
-
----
 
 ## Recommended Workflow
 
