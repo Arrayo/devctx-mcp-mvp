@@ -165,6 +165,29 @@ const updateCursorConfig = (targetDir, serverConfig, dryRun) => {
   writeFile(filePath, `${JSON.stringify(current, null, 2)}\n`, dryRun);
 };
 
+const buildCursorAssistedLauncher = (targetDir) => {
+  const wrapperScript = normalizeCommandPath(path.relative(targetDir, path.join(devctxDir, 'scripts', 'headless-wrapper.js')));
+  return `#!/bin/sh
+set -eu
+
+script_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+project_root="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
+
+export DEVCTX_PROJECT_ROOT="$project_root"
+
+exec "${process.execPath}" "$project_root/${wrapperScript}" --client cursor "$@"
+`;
+};
+
+const updateCursorAssistedLauncher = (targetDir, dryRun) => {
+  const filePath = path.join(targetDir, '.devctx', 'bin', 'cursor-devctx');
+  writeFile(filePath, buildCursorAssistedLauncher(targetDir), dryRun);
+
+  if (!dryRun) {
+    fs.chmodSync(filePath, 0o755);
+  }
+};
+
 const updateClaudeConfig = (targetDir, serverConfig, dryRun) => {
   const filePath = path.join(targetDir, '.mcp.json');
   const current = readJson(filePath, { mcpServers: {} });
@@ -385,8 +408,15 @@ Prefer devctx MCP for non-trivial tasks:
 - smart_shell instead of Shell for safe diagnostics
 - smart_turn(end, event=milestone) after meaningful progress
 
+If devctx MCP is installed and enabled, default to devctx on every non-trivial multi-file or multi-step task. Skip it only for genuinely trivial work, and then state why it was skipped.
+
 Client contract:
 - ${CLIENT_CONTRACT_RULE_LINES.join('\n- ')}
+
+Cursor assisted mode:
+- For long or continuity-sensitive tasks, prefer the local launcher \`./.devctx/bin/cursor-devctx\`
+- Usage: \`./.devctx/bin/cursor-devctx --prompt "your task" -- <agent-command> [args...]\`
+- This launcher wraps the prompt with smart_turn(start/end) orchestration and the shared operational contract
 
 Reading cascade: outline → signatures → symbol → full (last resort)
 
@@ -518,6 +548,7 @@ const main = () => {
   if (clientSet.has('cursor')) {
     updateCursorConfig(targetDir, serverConfig, options.dryRun);
     updateCursorRule(targetDir, options.dryRun);
+    updateCursorAssistedLauncher(targetDir, options.dryRun);
   }
 
   if (clientSet.has('codex')) {

@@ -608,6 +608,13 @@ describe('devctx-init agent rules', () => {
     assert.match(cursorRule, /smart_read/);
     assert.match(cursorRule, /smart_turn/);
     assert.match(cursorRule, /smart_turn\(end/);
+    assert.match(cursorRule, /default to devctx on every non-trivial multi-file or multi-step task/i);
+    assert.match(cursorRule, /cursor-devctx/);
+
+    const cursorLauncher = await fsp.readFile(path.join(tmpDir, '.devctx', 'bin', 'cursor-devctx'), 'utf8');
+    assert.match(cursorLauncher, /headless-wrapper\.js/);
+    assert.match(cursorLauncher, /--client cursor/);
+    assert.match(cursorLauncher, /DEVCTX_PROJECT_ROOT/);
     
     // Task profiles (conditional)
     const debuggingProfile = await fsp.readFile(path.join(tmpDir, '.cursor', 'rules', 'profiles-compact', 'debugging.mdc'), 'utf8');
@@ -661,6 +668,8 @@ describe('devctx-init agent rules', () => {
 
     const cursorRule = await fsp.readFile(path.join(tmpDir, '.cursor', 'rules', 'devctx.mdc'), 'utf8');
     assert.match(cursorRule, /smart_read/);
+    const cursorLauncherExists = fs.existsSync(path.join(tmpDir, '.devctx', 'bin', 'cursor-devctx'));
+    assert.equal(cursorLauncherExists, true, 'cursor assisted launcher should be created for cursor-only');
 
     const agentsExists = fs.existsSync(path.join(tmpDir, 'AGENTS.md'));
     assert.equal(agentsExists, false, 'AGENTS.md should not be created for cursor-only');

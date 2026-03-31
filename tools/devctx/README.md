@@ -14,6 +14,11 @@ npx smart-context-init --target . --clients cursor
 ```
 Restart Cursor. Done.
 
+Optional assisted mode for long tasks:
+```bash
+./.devctx/bin/cursor-devctx --prompt "your task" -- <agent-command> [args...]
+```
+
 ### Codex CLI
 ```bash
 npm install -g smart-context-mcp

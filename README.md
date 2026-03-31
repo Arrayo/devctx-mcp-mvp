@@ -85,7 +85,7 @@ Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 4. Use /prompt commands to force usage if needed
 ```
 
-**Automaticity:** Medium - Rules guide the agent, but it decides based on task complexity.
+**Automaticity:** Medium by default. Medium-High if you use the assisted launcher `./.devctx/bin/cursor-devctx` for long tasks.
 
 ---
 
@@ -1026,6 +1026,7 @@ Restart Cursor. Tools appear in Agent mode.
 - `.cursor/mcp.json` - MCP server config
 - `.cursor/rules/devctx.mdc` - Base agent rules (10 lines, always active)
 - `.cursor/rules/profiles-compact/*.mdc` - Task profiles (conditional)
+- `.devctx/bin/cursor-devctx` - Optional assisted launcher for long tasks
 - `.git/hooks/pre-commit` - Safety hook
 - `.gitignore` - Adds `.devctx/`
 
@@ -1135,6 +1136,7 @@ Already included: `.cursorrules` is committed in the project.
 **Verify it's working:**
 - Agent should mention devctx usage policy
 - Agent should use devctx tools automatically
+- For long tasks, prefer `./.devctx/bin/cursor-devctx --prompt "..." -- <agent-command>`
 
 #### Claude Desktop Users
 
