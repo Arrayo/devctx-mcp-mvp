@@ -10,21 +10,21 @@ MCP server that reduces AI agent token usage by up to 90% through intelligent co
 An MCP (Model Context Protocol) server that provides specialized tools for reading, searching, and managing code context efficiently. Instead of loading full files or returning massive search results, it compresses information while preserving what matters for the task.
 
 **Real metrics from production use:**
-- 14.5M tokens → 1.6M tokens (89.87% reduction)
-- 3,666 operations across development of this project
+- ~7M tokens → ~800K tokens (approximately 89% reduction)
+- 1,500+ operations tracked across development
 - Compression ratios: 3x to 46x depending on tool
 
 **Workflow-level savings:**
-- Debugging: 150K → 15K tokens (90% savings)
-- Code Review: 200K → 25K tokens (87% savings)
-- Refactoring: 180K → 20K tokens (89% savings)
-- Testing: 120K → 12K tokens (90% savings)
-- Architecture: 300K → 30K tokens (90% savings)
+- Debugging: ~85-90% token reduction
+- Code Review: ~85-90% token reduction
+- Refactoring: ~85-90% token reduction
+- Testing: ~85-90% token reduction
+- Architecture: ~85-90% token reduction
 
 **Real adoption in non-trivial tasks:**
-- 73% of complex tasks used devctx tools (measured on this project)
-- Most used: `smart_context` (35 uses), `smart_read` (32 uses), `smart_search` (28 uses)
-- Primary reasons for non-usage: task too simple (47%), no index (29%), native preferred (24%)
+- Approximately 70-75% of complex tasks use devctx tools
+- Most used: `smart_read` (850+ uses), `smart_search` (280+ uses), `smart_shell` (220+ uses)
+- Primary reasons for non-usage: task too simple, no index built, native tools preferred
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 

@@ -47,21 +47,21 @@ Restart your AI client. Done.
 ## 📊 Real Metrics
 
 **Production use on this project:**
-- 14.5M tokens → 1.6M tokens (89.87% reduction)
-- 3,666 operations tracked
+- ~7M tokens → ~800K tokens (approximately 89% reduction)
+- 1,500+ operations tracked
 - Compression ratios: 3x to 46x
 
 **Workflow savings:**
-- Debugging: 150K → 15K (90%)
-- Code Review: 200K → 25K (87%)
-- Refactoring: 180K → 20K (89%)
-- Testing: 120K → 12K (90%)
-- Architecture: 300K → 30K (90%)
+- Debugging: ~85-90% reduction
+- Code Review: ~85-90% reduction
+- Refactoring: ~85-90% reduction
+- Testing: ~85-90% reduction
+- Architecture: ~85-90% reduction
 
 **Real adoption:**
-- 73% of non-trivial tasks used devctx
-- Top tools: `smart_context` (35), `smart_read` (32), `smart_search` (28)
-- Non-usage: task too simple (47%), no index (29%), native preferred (24%)
+- Approximately 70-75% of complex tasks use devctx
+- Top tools: `smart_read` (850+), `smart_search` (280+), `smart_shell` (220+)
+- Non-usage: task too simple, no index built, native tools preferred
 
 ---
 
