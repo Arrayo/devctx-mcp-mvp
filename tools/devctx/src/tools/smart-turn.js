@@ -19,6 +19,10 @@ const REFRESHED_CONTEXT_FILE_LIMIT = 3;
 const SAFE_CONTINUITY_STATES = new Set(['aligned', 'resume']);
 const WORKFLOW_END_EVENTS = new Set(['milestone', 'task_complete', 'session_end', 'blocker']);
 const INDEX_REFRESH_STATES = new Set(['stale', 'unavailable']);
+const HARD_BLOCK_REASONS = Object.freeze([
+  ['tracked', 'isTracked'],
+  ['staged', 'isStaged'],
+]);
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'when', 'where',
   'what', 'have', 'will', 'your', 'about', 'there', 'their', 'then', 'than',
@@ -94,6 +98,28 @@ const summarizeMetrics = (metrics) => {
       netSavedTokens: tool.netSavedTokens,
       count: tool.count,
     })),
+  };
+};
+
+const buildMutationSafety = (repoSafety) => {
+  if (!repoSafety) {
+    return null;
+  }
+
+  const blockedBy = HARD_BLOCK_REASONS
+    .filter(([, field]) => repoSafety[field])
+    .map(([reason]) => reason);
+  const blocked = blockedBy.length > 0;
+  const stateDbPath = repoSafety.stateDbPath ?? '.devctx/state.sqlite';
+
+  return {
+    blocked,
+    blockedBy,
+    stateDbPath,
+    recommendedActions: repoSafety.recommendedActions ?? [],
+    message: blocked
+      ? `Project-local context writes are blocked until git hygiene is fixed for ${stateDbPath}.`
+      : `Project-local context writes are allowed for ${stateDbPath}.`,
   };
 };
 
@@ -304,10 +330,8 @@ const startTurn = async ({
   }
 
   const effectiveSessionId = summaryResult.sessionId ?? sessionId ?? summaryResult.recommendedSessionId ?? null;
-  const workflowBlocked = Boolean(
-    isWorkflowTrackingEnabled()
-    && (summaryResult.repoSafety?.isTracked || summaryResult.repoSafety?.isStaged),
-  );
+  const mutationSafety = buildMutationSafety(summaryResult.repoSafety);
+  const workflowBlocked = Boolean(isWorkflowTrackingEnabled() && mutationSafety?.blocked);
   const refreshedContext = shouldRefreshContext({
     prompt,
     ensureSession,
@@ -368,16 +392,19 @@ const startTurn = async ({
     summary: summaryResult.summary ?? null,
     ...(refreshedContext ? { refreshedContext } : {}),
     ...(workflow ? { workflow } : {}),
+    ...(mutationSafety ? { mutationSafety } : {}),
     repoSafety: summaryResult.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(summaryResult.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
     ...(summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
-    message: summaryResult.found
-      ? continuity.reason
-      : autoCreated
-        ? 'Created a new persisted session for this task prompt.'
-        : continuity.reason,
+    message: mutationSafety?.blocked
+      ? mutationSafety.message
+      : summaryResult.found
+        ? continuity.reason
+        : autoCreated
+          ? 'Created a new persisted session for this task prompt.'
+          : continuity.reason,
   };
 };
 
@@ -401,10 +428,8 @@ const endTurn = async ({
   });
 
   const effectiveSessionId = checkpoint.sessionId ?? sessionId ?? 'active';
-  const workflowBlocked = Boolean(
-    isWorkflowTrackingEnabled()
-    && (checkpoint.repoSafety?.isTracked || checkpoint.repoSafety?.isStaged),
-  );
+  const mutationSafety = buildMutationSafety(checkpoint.repoSafety);
+  const workflowBlocked = Boolean(isWorkflowTrackingEnabled() && mutationSafety?.blocked);
   let workflow = null;
   if (workflowBlocked) {
     workflow = { enabled: true, blocked: true, workflowId: null, workflowType: null, ended: false };
@@ -449,10 +474,11 @@ const endTurn = async ({
     sessionId: checkpoint.sessionId ?? sessionId ?? null,
     checkpoint,
     ...(workflow ? { workflow } : {}),
+    ...(mutationSafety ? { mutationSafety } : {}),
     repoSafety: checkpoint.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(checkpoint.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
-    message: checkpoint.message,
+    message: mutationSafety?.blocked ? mutationSafety.message : checkpoint.message,
   };
 };
 

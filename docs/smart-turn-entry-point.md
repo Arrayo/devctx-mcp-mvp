@@ -97,6 +97,7 @@ smart_turn({ phase: 'start', userPrompt: 'Document the wrapper onboarding flow',
 - No sensitive files staged
 - Repo is in clean state
 - If repo safety fails, context mutations stay blocked across checkpoints, workflow tracking, and hook turn state
+- `smart_turn(start/end)` now exposes `mutationSafety = { blocked, blockedBy, stateDbPath, recommendedActions, message }`
 
 **Example:**
 ```javascript

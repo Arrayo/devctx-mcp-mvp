@@ -239,6 +239,13 @@ test('smart_turn reports workflow tracking blocked when state sqlite is staged',
 
       assert.equal(result.repoSafety?.isTracked, true);
       assert.equal(result.repoSafety?.isStaged, true);
+      assert.deepEqual(result.mutationSafety, {
+        blocked: true,
+        blockedBy: ['tracked', 'staged'],
+        stateDbPath: '.devctx/state.sqlite',
+        recommendedActions: result.repoSafety.recommendedActions,
+        message: 'Project-local context writes are blocked until git hygiene is fixed for .devctx/state.sqlite.',
+      });
       assert.deepEqual(result.workflow, {
         enabled: true,
         blocked: true,
@@ -274,6 +281,46 @@ test('smart_turn start does not enable workflow tracking when the env flag is of
   assert.equal(result.workflow, undefined);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('smart_turn end exposes mutationSafety when checkpoint writes are blocked by repo safety', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'turn-end-blocked',
+    update: {
+      goal: 'Blocked end-turn checkpoint',
+      status: 'in_progress',
+      nextStep: 'Attempt blocked checkpoint',
+    },
+  });
+
+  fs.writeFileSync(path.join(turnTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+  execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: turnTestRoot, stdio: 'ignore' });
+
+  try {
+    const result = await smartTurn({
+      phase: 'end',
+      sessionId: 'turn-end-blocked',
+      event: 'milestone',
+      update: {
+        completed: ['Blocked milestone write'],
+        nextStep: 'Fix git hygiene first',
+      },
+    });
+
+    assert.equal(result.checkpoint.blocked, true);
+    assert.deepEqual(result.mutationSafety, {
+      blocked: true,
+      blockedBy: ['tracked', 'staged'],
+      stateDbPath: '.devctx/state.sqlite',
+      recommendedActions: result.repoSafety.recommendedActions,
+      message: 'Project-local context writes are blocked until git hygiene is fixed for .devctx/state.sqlite.',
+    });
+    assert.equal(result.message, result.mutationSafety.message);
+  } finally {
+    execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: turnTestRoot, stdio: 'ignore' });
+    await smartSummary({ action: 'reset', sessionId: 'turn-end-blocked' });
+  }
 });
 
 test('smart_turn end does not close workflow when checkpoint is skipped', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
