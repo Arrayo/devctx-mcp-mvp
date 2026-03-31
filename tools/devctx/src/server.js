@@ -9,6 +9,7 @@ import { smartContext } from './tools/smart-context.js';
 import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
 import { smartSummary } from './tools/smart-summary.js';
+import { smartStatus } from './tools/smart-status.js';
 import { smartMetrics } from './tools/smart-metrics.js';
 import { smartTurn } from './tools/smart-turn.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
@@ -417,6 +418,16 @@ This ensures optimal performance and context recovery.`,
         vacuum,
         apply,
       })),
+  );
+
+  server.tool(
+    'smart_status',
+    'Display the current session context including goal, status, recent decisions, touched files, and progress. Returns a formatted summary of what has been done and what is being tracked in the active session. Use this to understand the current state of work without modifying the session. Supports format=detailed (default, full formatted output) or format=compact (minimal JSON). Optional maxItems limits how many recent items to show (default 10).',
+    {
+      format: z.enum(['detailed', 'compact']).optional(),
+      maxItems: z.number().int().min(1).max(50).optional(),
+    },
+    async ({ format, maxItems }) => asTextResult(await smartStatus({ format, maxItems })),
   );
 
   server.tool(
