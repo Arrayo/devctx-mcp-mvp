@@ -96,17 +96,47 @@ const buildPreflightSummary = (preflightResult) => {
   };
 };
 
-const runWorkflowPreflight = async ({ workflowProfile, prompt }) => {
+const buildPreflightTask = ({ workflowProfile, prompt, startResult }) => {
+  const normalizedPrompt = normalizeWhitespace(prompt);
+  const persistedNextStep = normalizeWhitespace(startResult?.summary?.nextStep);
+  const currentFocus = normalizeWhitespace(startResult?.summary?.currentFocus);
+  const refreshedTopFiles = uniqueCompact(startResult?.refreshedContext?.topFiles).slice(0, 3);
+
+  if (workflowProfile.commandName === 'continue' || workflowProfile.commandName === 'resume') {
+    if (persistedNextStep) {
+      return persistedNextStep;
+    }
+    if (currentFocus) {
+      return currentFocus;
+    }
+  }
+
+  if (workflowProfile.commandName === 'task' && currentFocus && persistedNextStep) {
+    return `${currentFocus}. ${persistedNextStep}`;
+  }
+
+  if (normalizedPrompt) {
+    return normalizedPrompt;
+  }
+
+  if (refreshedTopFiles.length > 0) {
+    return `Inspect ${refreshedTopFiles.join(', ')} and continue the persisted task`;
+  }
+
+  return workflowProfile.label;
+};
+
+const runWorkflowPreflight = async ({ workflowProfile, prompt, startResult }) => {
   const preflight = workflowProfile.preflight;
   if (!preflight) {
     return null;
   }
 
-  const normalizedPrompt = normalizeWhitespace(prompt) || workflowProfile.label;
+  const preflightTask = buildPreflightTask({ workflowProfile, prompt, startResult });
 
   if (preflight.tool === 'smart_context') {
     const result = await smartContext({
-      task: normalizedPrompt,
+      task: preflightTask,
       detail: preflight.detail ?? 'minimal',
       include: preflight.include ?? ['hints'],
       maxTokens: preflight.maxTokens ?? 1200,
@@ -114,7 +144,7 @@ const runWorkflowPreflight = async ({ workflowProfile, prompt }) => {
     return {
       tool: 'smart_context',
       request: {
-        task: normalizedPrompt,
+        task: preflightTask,
         detail: preflight.detail ?? 'minimal',
         include: preflight.include ?? ['hints'],
         maxTokens: preflight.maxTokens ?? 1200,
@@ -125,13 +155,13 @@ const runWorkflowPreflight = async ({ workflowProfile, prompt }) => {
 
   if (preflight.tool === 'smart_search') {
     const result = await smartSearch({
-      query: normalizedPrompt,
+      query: preflightTask,
       intent: preflight.intent ?? workflowProfile.workflowIntent,
     });
     return {
       tool: 'smart_search',
       request: {
-        query: normalizedPrompt,
+        query: preflightTask,
         intent: preflight.intent ?? workflowProfile.workflowIntent,
       },
       result,
@@ -141,7 +171,47 @@ const runWorkflowPreflight = async ({ workflowProfile, prompt }) => {
   return null;
 };
 
-const buildWorkflowPromptWithPolicy = ({ prompt, workflowProfile, preflightSummary }) => {
+const buildContinuityGuidance = ({ startResult }) => {
+  const continuityState = startResult?.continuity?.state ?? 'unknown';
+  const lines = [
+    `- Continuity: ${continuityState}`,
+  ];
+  const nextStep = normalizeWhitespace(startResult?.summary?.nextStep);
+  const currentFocus = normalizeWhitespace(startResult?.summary?.currentFocus);
+  const refreshedTopFiles = uniqueCompact(startResult?.refreshedContext?.topFiles).slice(0, 3);
+  const recommendedNextTools = asArray(startResult?.recommendedPath?.nextTools)
+    .map((tool) => normalizeWhitespace(tool))
+    .filter(Boolean)
+    .slice(0, 3);
+
+  if (currentFocus) {
+    lines.push(`- Persisted focus: ${truncate(currentFocus, 140)}`);
+  }
+
+  if (nextStep) {
+    lines.push(`- Persisted next step: ${truncate(nextStep, 140)}`);
+  }
+
+  if (refreshedTopFiles.length > 0) {
+    lines.push(`- Refreshed top files: ${refreshedTopFiles.join(', ')}`);
+  }
+
+  if (recommendedNextTools.length > 0) {
+    lines.push(`- smart_turn suggested: ${recommendedNextTools.join(' -> ')}`);
+  }
+
+  if (startResult?.isolatedSession) {
+    lines.push('- Session handling: smart_turn already isolated this work from the previous session; revalidate before assuming old focus.');
+  } else if (continuityState === 'aligned' || continuityState === 'resume') {
+    lines.push('- Session handling: reuse the active session context and stay close to the persisted next step unless the task proves otherwise.');
+  } else if (continuityState === 'possible_shift' || continuityState === 'context_mismatch') {
+    lines.push('- Session handling: treat this as a shifted slice, validate the working set early, and avoid silent context reuse.');
+  }
+
+  return lines;
+};
+
+const buildWorkflowPromptWithPolicy = ({ prompt, workflowProfile, preflightSummary, startResult }) => {
   const lines = [
     prompt,
     '',
@@ -154,6 +224,8 @@ const buildWorkflowPromptWithPolicy = ({ prompt, workflowProfile, preflightSumma
   if (workflowProfile.checkpointStrategy) {
     lines.push(`- Checkpoint rule: ${workflowProfile.checkpointStrategy}`);
   }
+
+  lines.push(...buildContinuityGuidance({ startResult }));
 
   if (preflightSummary?.tool) {
     lines.push(`- Preflight: ${preflightSummary.tool}`);
@@ -273,6 +345,7 @@ const runWorkflowCommand = async ({
     const preflightResult = await runWorkflowPreflight({
       workflowProfile,
       prompt: requestedPrompt,
+      startResult: start,
     });
     preflightSummary = buildPreflightSummary(preflightResult);
   }
@@ -286,6 +359,7 @@ const runWorkflowCommand = async ({
     prompt: requestedPrompt,
     workflowProfile,
     preflightSummary,
+    startResult: start,
   });
 
   if (gate.requiresDoctor && !allowDegraded) {

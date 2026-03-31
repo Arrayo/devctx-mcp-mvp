@@ -27,6 +27,7 @@ const buildContinuePrompt = (prompt) => {
 
 export const RUNNER_COMMANDS = Object.freeze([
   'task',
+  'implement',
   'continue',
   'resume',
   'review',
@@ -48,6 +49,7 @@ const DOCTOR_REQUIRED_STORAGE_ISSUES = new Set([
 
 export const WORKFLOW_COMMANDS = new Set([
   'task',
+  'implement',
   'continue',
   'resume',
   'review',
@@ -57,6 +59,7 @@ export const WORKFLOW_COMMANDS = new Set([
 ]);
 
 export const SPECIALIZED_WORKFLOW_COMMANDS = new Set([
+  'implement',
   'review',
   'debug',
   'refactor',
@@ -69,19 +72,55 @@ export const WORKFLOW_DEFINITIONS = Object.freeze({
     defaultEvent: 'milestone',
     requirePrompt: true,
     workflowIntent: 'implementation',
-    policyMode: 'guided',
+    policyMode: 'task_guided',
     nextTools: ['smart_context', 'smart_read', 'smart_turn(end)'],
     checkpointStrategy: 'Checkpoint the first meaningful milestone after you validate the working set.',
+    preflight: {
+      tool: 'smart_context',
+      detail: 'minimal',
+      include: ['hints', 'graph'],
+      maxTokens: 1200,
+    },
     buildPrompt: (prompt) => normalizeWhitespace(prompt),
+  },
+  implement: {
+    label: 'implementation task',
+    defaultEvent: 'milestone',
+    requirePrompt: true,
+    workflowIntent: 'implementation',
+    policyMode: 'implement_guided',
+    nextTools: ['smart_context', 'smart_read(symbol)', 'smart_turn(end)'],
+    checkpointStrategy: 'Checkpoint after the first real implementation slice is integrated or behavior changes materially.',
+    preflight: {
+      tool: 'smart_context',
+      detail: 'minimal',
+      include: ['hints', 'graph', 'symbolDetail'],
+      maxTokens: 1400,
+    },
+    buildPrompt: (prompt) => {
+      const normalized = normalizeWhitespace(prompt);
+      return [
+        'Implement this change using devctx context first.',
+        'Prefer compact dependency-aware context and symbol reads before broad file edits.',
+        '',
+        `Implementation target: ${normalized}`,
+      ].join('\n');
+    },
   },
   continue: {
     label: 'continue task',
     defaultEvent: 'milestone',
     requirePrompt: false,
     workflowIntent: 'implementation',
-    policyMode: 'resume_guided',
+    policyMode: 'continue_guided',
     nextTools: ['smart_turn(start)', 'smart_context', 'smart_turn(end)'],
     checkpointStrategy: 'Continue until you reach the next concrete milestone, then checkpoint it.',
+    preflight: {
+      tool: 'smart_context',
+      detail: 'minimal',
+      include: ['hints', 'graph'],
+      maxTokens: 1200,
+    },
     buildPrompt: buildContinuePrompt,
   },
   resume: {
@@ -92,6 +131,12 @@ export const WORKFLOW_DEFINITIONS = Object.freeze({
     policyMode: 'resume_guided',
     nextTools: ['smart_turn(start)', 'smart_context', 'smart_turn(end)'],
     checkpointStrategy: 'Resume the active session and checkpoint the next meaningful slice rather than every minor step.',
+    preflight: {
+      tool: 'smart_context',
+      detail: 'minimal',
+      include: ['hints', 'graph'],
+      maxTokens: 1200,
+    },
     buildPrompt: buildContinuePrompt,
   },
   review: {

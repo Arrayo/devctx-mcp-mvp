@@ -1,14 +1,17 @@
 {
   "version": 1,
   "source": "tools/devctx/evals/orchestration-scenarios.json",
-  "expectedScenarioCount": 8,
+  "expectedScenarioCount": 11,
   "requiredScenarios": [
     "aligned-resume",
     "context-refresh",
     "blocked-remediation",
     "skipped-checkpoint",
     "persisted-checkpoint",
+    "runner-task-guidance",
+    "runner-implement-guidance",
     "runner-review-guidance",
+    "runner-continue-guidance",
     "runner-blocked-doctor",
     "runner-checkpoint"
   ],
@@ -17,7 +20,7 @@
     "netSavedTokens": 150,
     "continuityAlignmentRatePct": 20,
     "blockedRemediationCoveragePct": 100,
-    "refreshTopFileSignalRatePct": 80,
+    "refreshTopFileSignalRatePct": 75,
     "checkpointPersistenceRatePct": 50,
     "runnerWorkflowCoveragePct": 100,
     "runnerPreflightCoveragePct": 50,

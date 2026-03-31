@@ -72,18 +72,68 @@ test('task runner debug command captures smart_search preflight guidance', { ski
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
-test('task runner continue command can resume without an explicit prompt', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+test('task runner task command adds generic workflow policy and continuity guidance', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const result = await runTaskRunner({
+    commandName: 'task',
+    client: 'cursor',
+    prompt: 'Inspect loginHandler and continue the auth follow-up safely',
+    dryRun: true,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.command, 'task');
+  assert.equal(result.workflowPolicy.policyMode, 'task_guided');
+  assert.equal(result.workflowPolicy.preflight.tool, 'smart_context');
+  assert.match(result.prompt, /Workflow policy:/i);
+  assert.match(result.prompt, /Continuity:/i);
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('task runner implement command uses implementation-specific policy and preflight', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const result = await runTaskRunner({
+    commandName: 'implement',
+    client: 'cursor',
+    prompt: 'Add a guard around loginHandler token handling and preserve current behavior',
+    dryRun: true,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.command, 'implement');
+  assert.equal(result.workflowPolicy.policyMode, 'implement_guided');
+  assert.equal(result.workflowPolicy.preflight.tool, 'smart_context');
+  assert.match(result.prompt, /Implementation target:/i);
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('task runner continue command reuses persisted next-step guidance when resuming', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'task-runner-continue',
+    update: {
+      goal: 'Continue the auth follow-up work',
+      status: 'in_progress',
+      currentFocus: 'Auth token flow',
+      nextStep: 'Inspect loginHandler and keep the token guard behavior intact',
+    },
+  });
+
   const result = await runTaskRunner({
     commandName: 'continue',
     client: 'cursor',
+    sessionId: 'task-runner-continue',
     dryRun: true,
   });
 
   assert.equal(result.success, true);
   assert.equal(result.command, 'continue');
-  assert.match(result.prompt, /Continue the active devctx task/i);
+  assert.equal(result.workflowPolicy.policyMode, 'continue_guided');
+  assert.equal(result.workflowPolicy.preflight.tool, 'smart_context');
+  assert.match(result.prompt, /Persisted next step:/i);
+  assert.match(result.prompt, /loginHandler/i);
 
-  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+  await smartSummary({ action: 'reset', sessionId: 'task-runner-continue' });
 });
 
 test('task runner pauses workflow execution and runs doctor when repo safety blocks persistence', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {

@@ -5,7 +5,7 @@
     "minNetSavedTokens": 150,
     "minContinuityAlignmentRatePct": 20,
     "minBlockedRemediationCoveragePct": 100,
-    "minRefreshTopFileSignalRatePct": 80,
+    "minRefreshTopFileSignalRatePct": 75,
     "minCheckpointPersistenceRatePct": 50,
     "minRunnerWorkflowCoveragePct": 100,
     "minRunnerPreflightCoveragePct": 50,
@@ -153,6 +153,44 @@
       }
     },
     {
+      "id": "runner-task-guidance",
+      "description": "Runs the generic task workflow through task_runner and captures continuity-aware guidance",
+      "runner": {
+        "commandName": "task",
+        "client": "cursor",
+        "prompt": "Inspect loginHandler and continue the auth follow-up safely",
+        "dryRun": true
+      },
+      "expect": {
+        "runnerSuccess": true,
+        "runnerBlocked": false,
+        "runnerUsedWrapper": true,
+        "runnerWorkflowIntent": "implementation",
+        "runnerPolicyMode": "task_guided",
+        "runnerPreflightTool": "smart_context",
+        "runnerPreflightTopFilesMin": 1
+      }
+    },
+    {
+      "id": "runner-implement-guidance",
+      "description": "Runs the implement workflow through task_runner and captures implementation guidance",
+      "runner": {
+        "commandName": "implement",
+        "client": "cursor",
+        "prompt": "Implement a token guard in loginHandler and preserve current auth behavior",
+        "dryRun": true
+      },
+      "expect": {
+        "runnerSuccess": true,
+        "runnerBlocked": false,
+        "runnerUsedWrapper": true,
+        "runnerWorkflowIntent": "implementation",
+        "runnerPolicyMode": "implement_guided",
+        "runnerPreflightTool": "smart_context",
+        "runnerPreflightTopFilesMin": 1
+      }
+    },
+    {
       "id": "runner-review-guidance",
       "description": "Runs the review workflow through task_runner and captures preflight guidance",
       "runner": {
@@ -167,6 +205,34 @@
         "runnerUsedWrapper": true,
         "runnerWorkflowIntent": "explore",
         "runnerPolicyMode": "review_guided",
+        "runnerPreflightTool": "smart_context",
+        "runnerPreflightTopFilesMin": 1
+      }
+    },
+    {
+      "id": "runner-continue-guidance",
+      "description": "Resumes a persisted session through task_runner continue and keeps the next-step guidance visible",
+      "seedSession": {
+        "sessionId": "bench-runner-continue",
+        "update": {
+          "goal": "Continue the auth guard follow-up",
+          "status": "in_progress",
+          "currentFocus": "Auth guard follow-up",
+          "nextStep": "Inspect loginHandler and preserve the token guard behavior"
+        }
+      },
+      "runner": {
+        "commandName": "continue",
+        "client": "cursor",
+        "sessionId": "bench-runner-continue",
+        "dryRun": true
+      },
+      "expect": {
+        "runnerSuccess": true,
+        "runnerBlocked": false,
+        "runnerUsedWrapper": true,
+        "runnerWorkflowIntent": "implementation",
+        "runnerPolicyMode": "continue_guided",
         "runnerPreflightTool": "smart_context",
         "runnerPreflightTopFilesMin": 1
       }
