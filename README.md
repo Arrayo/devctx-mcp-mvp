@@ -35,29 +35,74 @@ This MCP solves all three by providing tools that return compressed, ranked, and
 
 ## Quick Start: Which Client Should I Use?
 
-| Client | Best For | Automaticity | Key Feature |
-|--------|----------|--------------|-------------|
-| **Cursor** | Complex tasks, conditional workflows | Medium | Conditional rules per task type |
-| **Claude Desktop** | Session continuity, hooks | High (with hooks) | Native hooks for auto-recovery |
-| **Codex CLI** | Terminal workflows, scripting | Low-Medium | Embedded rules in prompts |
-| **Qwen Code** | Alternative to Cursor | Low-Medium | Similar to Codex |
+### 🎯 Best Default: Cursor
 
-**What "Automaticity" means:**
-- **High**: Agent can auto-trigger `smart_turn` via hooks (Claude Desktop only)
-- **Medium**: Agent reads rules automatically, decides when to use tools (Cursor)
-- **Low-Medium**: Rules embedded in prompts, agent decides (Codex, Qwen)
+**Use if:** You work in Cursor IDE and want the best balance of guidance and flexibility.
 
-**What it does NOT mean:**
+**Workflow:**
+```
+1. Install MCP → rules auto-load
+2. Start task → agent reads .cursorrules
+3. Agent decides when to use devctx
+4. Use /prompt commands to force usage if needed
+```
+
+**Automaticity:** Medium - Rules guide the agent, but it decides based on task complexity.
+
+---
+
+### 🔄 Best Continuity: Claude Desktop
+
+**Use if:** You want highest session continuity with automatic context recovery.
+
+**Workflow:**
+```
+1. Install MCP + hooks
+2. Start task → hook auto-triggers smart_turn(start)
+3. Work with devctx tools
+4. End task → hook auto-triggers smart_turn(end)
+```
+
+**Automaticity:** High (with hooks) - Can auto-trigger `smart_turn` on session start/end.
+
+---
+
+### 💻 Best Terminal: Codex CLI / Qwen Code
+
+**Use if:** You prefer terminal-based workflows or scripting.
+
+**Workflow:**
+```
+1. Install MCP
+2. Rules embedded in prompts
+3. Agent reads rules, decides when to use
+4. Explicit instructions work best
+```
+
+**Automaticity:** Low-Medium - Rules are visible but require explicit prompting.
+
+---
+
+### 📊 Quick Comparison
+
+| Client | Automaticity | smart_turn Value | Best Use Case |
+|--------|--------------|------------------|---------------|
+| **Cursor** | Medium | High | Complex IDE tasks, conditional workflows |
+| **Claude Desktop** | High (hooks) | Very High | Session continuity, auto-recovery |
+| **Codex CLI** | Low-Medium | Medium | Terminal workflows, scripting |
+| **Qwen Code** | Low-Medium | Medium | Alternative to Cursor |
+
+### ⚠️ What "Automaticity" Does NOT Mean
+
 - ❌ Automatic prompt interception (none of these clients do this)
 - ❌ Forced tool usage (agent always decides)
-- ❌ Guaranteed adoption (agent may ignore rules)
+- ❌ Guaranteed adoption (agent may ignore rules if task seems simple)
 
-**Recommendation:**
-- **Start with Cursor** if you use it (best balance of guidance and flexibility)
-- **Use Claude Desktop** if you want highest session continuity
-- **Use Codex/Qwen** if you prefer terminal-based workflows
+The agent **always decides** whether to use devctx. Rules increase the probability, but don't guarantee it.
 
-See [Client Compatibility](./docs/client-compatibility.md) for detailed comparison and installation per client.
+---
+
+**📖 Detailed Setup:** See [Client Compatibility](./docs/client-compatibility.md) for installation instructions per client.
 
 ---
 
@@ -115,39 +160,86 @@ The agent *should* use devctx automatically for complex tasks because:
 
 ---
 
-## Recommended Workflow
+## ⚠️ If the Agent Ignored devctx
 
-### ⚠️ Preflight: Build Index First
+If the agent didn't use devctx for a complex task, **paste this in your next message:**
 
-**Before using devctx tools for the first time in a project:**
+### Short Prompt (Recommended)
 
-```bash
-# The agent can call this tool directly, or you can run:
-npm run build-index
-# or tell the agent: "Run build_index tool"
+```
+Use smart-context-mcp for this task.
+Start with smart_turn(start), then use smart_context or smart_search before reading full files.
+End with smart_turn(end) if you make progress.
 ```
 
-**Why this matters:**
+### Ultra-Short
 
-Without index:
-- ❌ `smart_search` has no ranking data → returns unranked results
-- ❌ `smart_context` has no symbol graph → can't build optimal context
-- ❌ Quality degraded → agent may prefer native tools → no token savings
+```
+Use devctx: smart_turn(start) → smart_context → smart_turn(end)
+```
 
-With index:
-- ✅ `smart_search` ranks by relevance → finds errors/tests/config fast
-- ✅ `smart_context` builds optimal context → includes related files
-- ✅ 90% token savings enabled → full value proposition
+### When to Use This
 
-**When to run:**
-- ✅ First time in project (after install)
+- The agent read multiple large files with native `Read` tool
+- The agent used `Grep` repeatedly instead of `smart_search`
+- You see no devctx tools in the response
+- The task was clearly non-trivial (debugging, refactoring, multi-file work)
+
+**Why this happens:**
+- Task seemed too simple to the agent
+- No index built yet (run `build_index` first)
+- Native tools appeared more direct
+- Rules weren't strong enough for this specific task
+
+---
+
+## Recommended Workflow
+
+### ✅ Setup Checklist (First Time in Project)
+
+Before starting complex tasks, ensure:
+
+```bash
+# 1. MCP is installed
+npm list -g smart-context-mcp  # or check your MCP client
+
+# 2. Build the index (IMPORTANT)
+npm run build-index
+# or tell the agent: "Run build_index tool"
+
+# 3. Rules are active
+# - Cursor: .cursorrules exists
+# - Claude Desktop: CLAUDE.md exists
+# - Other clients: AGENTS.md exists
+
+# 4. Start with smart_turn
+# Tell the agent: "Use smart_turn(start) to begin"
+```
+
+**Copy-paste to agent (first time):**
+```
+Run build_index, then use smart_turn(start) to begin this task.
+```
+
+---
+
+### ⚠️ Why Index Matters
+
+**Without index:**
+- ❌ `smart_search` returns unranked results
+- ❌ `smart_context` can't build optimal context
+- ❌ Agent may prefer native tools → no savings
+
+**With index:**
+- ✅ `smart_search` ranks by relevance
+- ✅ `smart_context` includes related files
+- ✅ 90% token savings enabled
+
+**When to rebuild:**
+- ✅ First time in project
 - ✅ After major refactors (file moves, renames)
 - ✅ After adding many new files
-- ❌ Not needed for every session (index persists in `.devctx/`)
-
-**How agents know:**
-- Base rule says: "First time in project? Run build_index"
-- Feedback rule can say: "devctx not used because: index not built"
+- ❌ Not needed every session (index persists in `.devctx/`)
 
 ---
 

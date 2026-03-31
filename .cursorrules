@@ -1,64 +1,38 @@
 # devctx MCP Usage Policy
 
+## Core Guidance
+
+Use devctx tools for **non-trivial tasks** where context, compression, or session continuity matter.
+
+**Start complex tasks with:**
+```
+smart_turn(start, userPrompt, ensureSession=true)
+```
+
+**Use compressed context/reading before full:**
+- `smart_context(task)` → builds complete context
+- `smart_read(file, mode="outline")` → compressed file view
+- `smart_search(query)` → project-wide search
+
+**End meaningful work with:**
+```
+smart_turn(end)
+```
+
 ## When to Use devctx
 
-Use devctx tools for **complex or multi-step tasks**:
-
-- **Large files (>500 lines)** → Use `smart_read(mode="outline")` instead of `Read`
-- **Multiple file reads** → Use `smart_context` or `smart_read_batch` instead of multiple `Read` calls
-- **Code search across project** → Use `smart_search` instead of `Grep`
-- **Building context for a task** → Use `smart_context` instead of manual Read + Grep
-- **Diagnostic commands** → Use `smart_shell` instead of `Shell`
+- Large files (>500 lines) → `smart_read(mode="outline")`
+- Multiple file reads → `smart_context` or `smart_read_batch`
+- Code search → `smart_search`
+- Diagnostic commands → `smart_shell`
 
 ## When Native Tools Are Fine
 
-Use native tools for **simple, single-step operations**:
+- Small files (<200 lines)
+- Single-file edits
+- Quick grep
+- Writing/editing (always use native Write/StrReplace)
 
-- ✅ Reading a small file (<200 lines) once
-- ✅ Quick grep for a specific string
-- ✅ Writing/editing files (always use native Write/StrReplace)
-- ✅ Single-file edits with no context needed
+## First time in project?
 
-## Recommended workflow for complex tasks:
-
-```
-1. smart_turn(start) - Start session and recover context
-2. smart_context(task) - Build complete context
-3. smart_search(query) - Search for specific patterns
-4. smart_read(file) - Read files efficiently
-5. smart_turn(end) - Save checkpoint
-```
-
-## When to use devctx:
-
-- ✅ Reading any file (especially large files)
-- ✅ Searching code across the project
-- ✅ Building context for a task
-- ✅ Running diagnostic shell commands
-- ✅ Multi-step tasks that benefit from session persistence
-
-## Preflight for complex tasks:
-
-Before starting work:
-```
-build_index(incremental=true)
-smart_turn(start)
-```
-
-This ensures optimal performance and context recovery.
-
-## Visibility features (enabled by default):
-
-The MCP will automatically show:
-- 📊 **Usage feedback** - Which tools were used and tokens saved
-- 🤖 **Decision explanations** - Why each tool was chosen
-- ⚠️ **Missed opportunities** - When devctx should have been used but wasn't
-
-To disable: `export DEVCTX_SHOW_USAGE=false DEVCTX_EXPLAIN=false DEVCTX_DETECT_MISSED=false`
-
-## Decision Guideline:
-
-Choose based on task complexity:
-- **Simple task** (1-2 files, <200 lines) → Native tools are fine
-- **Complex task** (multiple files, large files, context needed) → Use devctx
-- **When in doubt** → Start with native, switch to devctx if needed
+Run `build_index(incremental=true)` before starting work.
