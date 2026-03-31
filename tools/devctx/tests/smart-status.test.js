@@ -14,16 +14,11 @@ try {
   hasNodeSqlite = false;
 }
 
-describe('smart_status', () => {
+(hasNodeSqlite ? describe : describe.skip)('smart_status', () => {
   let tempDbPath;
   let originalEnv;
 
   before(async function() {
-    if (!hasNodeSqlite) {
-      this.skip();
-      return;
-    }
-    
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-test-'));
     tempDbPath = path.join(tempDir, 'state.sqlite');
     originalEnv = process.env.DEVCTX_STATE_DB_PATH;
@@ -33,8 +28,6 @@ describe('smart_status', () => {
   });
 
   after(async function() {
-    if (!hasNodeSqlite) return;
-    
     await smartSummary({ action: 'reset' });
     
     if (originalEnv !== undefined) {
@@ -49,7 +42,6 @@ describe('smart_status', () => {
   });
 
   it('should display active session context', async function() {
-    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -75,7 +67,6 @@ describe('smart_status', () => {
   });
 
   it('should support compact format', async function() {
-    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -98,7 +89,6 @@ describe('smart_status', () => {
   });
 
   it('should limit recent items with maxItems', async function() {
-    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -116,7 +106,6 @@ describe('smart_status', () => {
   });
 
   it('should show pinned context and unresolved questions', async function() {
-    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -138,7 +127,6 @@ describe('smart_status', () => {
   });
 
   it('should handle blocked status', async function() {
-    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {
@@ -156,7 +144,6 @@ describe('smart_status', () => {
   });
 
   it('should show current focus when set', async function() {
-    if (!hasNodeSqlite) this.skip();
     await smartSummary({
       action: 'update',
       update: {

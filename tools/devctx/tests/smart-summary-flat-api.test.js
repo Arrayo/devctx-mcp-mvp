@@ -13,16 +13,11 @@ try {
   hasNodeSqlite = false;
 }
 
-describe('smart_summary flat API', () => {
+(hasNodeSqlite ? describe : describe.skip)('smart_summary flat API', () => {
   let tempDbPath;
   let originalEnv;
 
   before(async function() {
-    if (!hasNodeSqlite) {
-      this.skip();
-      return;
-    }
-    
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-test-'));
     tempDbPath = path.join(tempDir, 'state.sqlite');
     originalEnv = process.env.DEVCTX_STATE_DB_PATH;
@@ -32,8 +27,6 @@ describe('smart_summary flat API', () => {
   });
 
   after(async function() {
-    if (!hasNodeSqlite) return;
-    
     await smartSummary({ action: 'reset' });
     
     if (originalEnv !== undefined) {
@@ -48,7 +41,6 @@ describe('smart_summary flat API', () => {
   });
 
   it('should accept flat format (new API)', async function() {
-    if (!hasNodeSqlite) this.skip();
     const result = await smartSummary({
       action: 'update',
       goal: 'Test flat API',
@@ -64,7 +56,6 @@ describe('smart_summary flat API', () => {
   });
 
   it('should still accept nested format (old API)', async function() {
-    if (!hasNodeSqlite) this.skip();
     const result = await smartSummary({
       action: 'update',
       update: {
@@ -81,7 +72,6 @@ describe('smart_summary flat API', () => {
   });
 
   it('should prioritize nested format when both provided', async function() {
-    if (!hasNodeSqlite) this.skip();
     const result = await smartSummary({
       action: 'update',
       goal: 'Flat goal',
