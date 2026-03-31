@@ -323,6 +323,8 @@ Get everything for a task in one call:
 
 Returns: relevant files + compressed content + symbol details + graph relationships
 
+**Smart pattern detection:** Automatically detects literal patterns (TODO, FIXME, /**, console.log, debugger) and prioritizes them in search.
+
 ### smart_summary
 
 Maintain task checkpoint:
@@ -336,6 +338,17 @@ Maintain task checkpoint:
 ```
 
 Stores compressed task state (~100 tokens: goal, status, decisions, blockers), not full conversation.
+
+### smart_status
+
+Display current session context:
+
+```javascript
+{ format: 'detailed' }  // Full output with progress stats
+{ format: 'compact' }   // Minimal JSON
+```
+
+Shows goal, status, recent decisions, touched files, and progress. Updates automatically with each MCP operation.
 
 ## New Features
 

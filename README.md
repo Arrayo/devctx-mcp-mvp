@@ -631,6 +631,8 @@ One-call context builder: search + read + graph expansion.
 
 Returns relevant files with compressed content, symbol details, and relationship graph.
 
+**Smart pattern detection:** Automatically detects literal patterns in your task (TODO, FIXME, /**, console.log, debugger) and prioritizes them in search results.
+
 **When to use:** Starting a new task and need comprehensive context.
 
 ---
@@ -674,6 +676,19 @@ Maintain compressed task state across sessions.
 ```
 
 Compresses task context to ~100 tokens (goal, status, decisions, blockers). Critical for long tasks.
+
+---
+
+### smart_status
+
+Display current session context with progress visibility.
+
+```javascript
+{ format: 'detailed' }  // Full formatted output with emojis
+{ format: 'compact' }   // Minimal JSON
+```
+
+Shows goal, status, recent decisions, touched files, pinned context, and progress stats. Updates automatically with each MCP operation.
 
 ---
 

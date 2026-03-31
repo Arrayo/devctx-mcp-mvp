@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **smart_status Tool:** New tool for session context visibility
+  - Displays current session: goal, status, nextStep, currentFocus
+  - Shows recent decisions, touched files, pinned context, unresolved questions
+  - Progress stats: completed count, decisions count, files count
+  - Two formats: `detailed` (formatted with emojis) and `compact` (minimal JSON)
+  - Updates automatically with each MCP operation
+  - Fallback to most recent session if no active session exists
+  - Useful for understanding current work state without modifying session
+
+### Enhanced
+- **smart_context Pattern Detection:** Automatically detects and prioritizes literal patterns
+  - Detects: `/**`, `/*`, `// TODO`, `// FIXME`, `// XXX`, `// HACK`
+  - Detects: `console.log`, `console.error`, `debugger`
+  - When task mentions these patterns, they're prioritized in search results
+  - No manual search needed - smart_context handles it automatically
+  - Example: "Find all TODO comments" → automatically searches for `// TODO`
+
+- **smart_read Range with Outline:** Support line ranges in outline/signatures mode
+  - Previously: `{ mode: 'outline', startLine, endLine }` would extract raw text
+  - Now: Applies outline summarization to the specified range
+  - Useful for large files - get outline of specific section only
+  - Reduces tokens when you know which part of file is relevant
+
 ## [1.3.1] - 2026-03-30
 
 ### Changed
