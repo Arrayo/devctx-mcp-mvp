@@ -239,9 +239,14 @@ const shouldIsolateSession = ({ sessionId, ensureSession, prompt, continuity }) 
   && continuity
   && !SAFE_CONTINUITY_STATES.has(continuity.state ?? '');
 
-const shouldRefreshContext = ({ prompt, ensureSession, summaryResult, isolatedSession, autoCreated }) =>
+const shouldRefreshContext = ({ prompt, ensureSession, summaryResult, continuity, isolatedSession, autoCreated }) =>
   hasMeaningfulPrompt(prompt)
-  && (ensureSession || Boolean(summaryResult?.found) || isolatedSession || autoCreated);
+  && (
+    isolatedSession
+    || autoCreated
+    || (ensureSession && (summaryResult?.ambiguous || !summaryResult?.found))
+    || ['possible_shift', 'context_mismatch'].includes(continuity?.state)
+  );
 
 const startTurn = async ({
   sessionId,
@@ -303,6 +308,7 @@ const startTurn = async ({
     prompt,
     ensureSession,
     summaryResult,
+    continuity,
     isolatedSession,
     autoCreated,
   })

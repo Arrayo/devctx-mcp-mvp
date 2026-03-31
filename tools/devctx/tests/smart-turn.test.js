@@ -7,7 +7,7 @@ import path from 'node:path';
 import { smartSummary } from '../src/tools/smart-summary.js';
 import { smartTurn } from '../src/tools/smart-turn.js';
 import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
-import { getWorkflowMetrics } from '../src/workflow-tracker.js';
+import { getWorkflowMetrics, getWorkflowSummaryByType } from '../src/workflow-tracker.js';
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
@@ -61,7 +61,7 @@ test('smart_turn start reuses aligned persisted context', { skip: SKIP_SQLITE_TE
   assert.strictEqual(result.continuity.state, 'aligned');
   assert.strictEqual(result.continuity.shouldReuseContext, true);
   assert.ok(result.summary.goal.includes('repo safety'));
-  assert.ok(result.refreshedContext);
+  assert.equal(result.refreshedContext, undefined);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-aligned' });
 });
@@ -81,6 +81,17 @@ test('smart_turn start can auto-create a planning session for a substantial new 
   assert.ok(result.summary.goal.toLowerCase().includes('orchestration layer'));
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('smart_turn start does not refresh prompt context for a trivial prompt without session orchestration', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const result = await smartTurn({
+    phase: 'start',
+    prompt: 'Check auth',
+  });
+
+  assert.equal(result.refreshedContext, undefined);
+  assert.equal(result.autoCreated, false);
+  assert.equal(result.isolatedSession, false);
 });
 
 test('smart_turn start refreshes lightweight context for the new prompt', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
@@ -164,9 +175,19 @@ test('smart_turn start and end integrate workflow tracking when enabled', { skip
     assert.equal(end.workflow?.enabled, true);
     assert.equal(end.workflow?.ended, true);
     assert.equal(end.workflow?.summary?.workflowType, 'debugging');
+    assert.ok(typeof end.workflow?.summary?.netSavedTokens === 'number');
+    assert.ok(typeof end.workflow?.summary?.overheadTokens === 'number');
 
     const completed = await getWorkflowMetrics({ sessionId: start.sessionId, completed: true, limit: 1 });
     assert.equal(completed.length, 1);
+    assert.ok(typeof completed[0].netSavedTokens === 'number');
+    assert.ok(typeof completed[0].metadata.summary?.overheadTokens === 'number');
+
+    const byType = await getWorkflowSummaryByType();
+    const debuggingSummary = byType.find((entry) => entry.workflow_type === 'debugging');
+    assert.ok(debuggingSummary);
+    assert.ok(debuggingSummary.net_metrics_count >= 1);
+    assert.ok(typeof debuggingSummary.total_net_saved_tokens === 'number');
 
     await smartSummary({ action: 'reset', sessionId: start.sessionId });
   } finally {
@@ -176,6 +197,79 @@ test('smart_turn start and end integrate workflow tracking when enabled', { skip
       process.env.DEVCTX_WORKFLOW_TRACKING = previousWorkflowTracking;
     }
   }
+});
+
+test('smart_turn start does not enable workflow tracking when the env flag is off', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  delete process.env.DEVCTX_WORKFLOW_TRACKING;
+
+  const result = await smartTurn({
+    phase: 'start',
+    prompt: 'Fix the login error in the auth handler and verify the failing test',
+    ensureSession: true,
+  });
+
+  assert.equal(result.workflow, undefined);
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('smart_turn end does not close workflow when checkpoint is skipped', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  process.env.DEVCTX_WORKFLOW_TRACKING = 'true';
+
+  try {
+    const start = await smartTurn({
+      phase: 'start',
+      prompt: 'Fix the login error in the auth handler and verify the failing test',
+      ensureSession: true,
+    });
+
+    const end = await smartTurn({
+      phase: 'end',
+      sessionId: start.sessionId,
+      event: 'file_change',
+      update: {
+        touchedFiles: ['src/auth.js'],
+      },
+    });
+
+    assert.equal(end.checkpoint.skipped, true);
+    assert.equal(end.workflow, undefined);
+
+    const active = await getWorkflowMetrics({ sessionId: start.sessionId, completed: false, limit: 1 });
+    assert.equal(active.length, 1);
+
+    await smartSummary({ action: 'reset', sessionId: start.sessionId });
+  } finally {
+    if (previousWorkflowTracking === undefined) {
+      delete process.env.DEVCTX_WORKFLOW_TRACKING;
+    } else {
+      process.env.DEVCTX_WORKFLOW_TRACKING = previousWorkflowTracking;
+    }
+  }
+});
+
+test('smart_turn start refreshes context when the index is unavailable', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const stateDir = path.join(turnTestRoot, '.devctx');
+  fs.rmSync(path.join(stateDir, 'index.json'), { force: true });
+
+  const srcDir = path.join(turnTestRoot, 'src');
+  fs.mkdirSync(srcDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(srcDir, 'indexless.js'),
+    'export function indexlessThing() { return 1; }\n',
+    'utf8',
+  );
+
+  const result = await smartTurn({
+    phase: 'start',
+    prompt: 'Inspect the indexlessThing implementation and continue that task',
+    ensureSession: true,
+  });
+
+  assert.ok(result.refreshedContext);
+  assert.equal(result.refreshedContext.indexRefreshed, true);
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
 test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {

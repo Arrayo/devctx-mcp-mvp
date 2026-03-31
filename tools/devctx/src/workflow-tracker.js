@@ -1,6 +1,16 @@
 import { withStateDb } from './storage/sqlite.js';
+import { getNetSavedTokens } from './metrics.js';
 
 const WORKFLOW_TRACKING_ENABLED_RE = /^(1|true|yes|on)$/i;
+const EMPTY_OBJECT = Object.freeze({});
+
+const parseJson = (value, fallback = EMPTY_OBJECT) => {
+  try {
+    return JSON.parse(value || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+};
 
 export const isWorkflowTrackingEnabled = () =>
   WORKFLOW_TRACKING_ENABLED_RE.test(process.env.DEVCTX_WORKFLOW_TRACKING ?? '');
@@ -145,7 +155,7 @@ export const endWorkflow = (workflowId) => {
     const workflow = db
       .prepare(
         `
-      SELECT workflow_type, session_id, start_time, baseline_tokens
+      SELECT workflow_type, session_id, start_time, baseline_tokens, metadata_json
       FROM workflow_metrics
       WHERE workflow_id = ?
     `,
@@ -165,7 +175,7 @@ export const endWorkflow = (workflowId) => {
     const metrics = db
       .prepare(
         `
-      SELECT tool, raw_tokens, compressed_tokens, saved_tokens
+      SELECT tool, raw_tokens, compressed_tokens, saved_tokens, metadata_json
       FROM metrics_events
       WHERE session_id = ? AND created_at >= ?
       ORDER BY created_at ASC
@@ -177,11 +187,33 @@ export const endWorkflow = (workflowId) => {
     const rawTokens = metrics.reduce((sum, m) => sum + (m.raw_tokens || 0), 0);
     const compressedTokens = metrics.reduce((sum, m) => sum + (m.compressed_tokens || 0), 0);
     const savedTokens = metrics.reduce((sum, m) => sum + (m.saved_tokens || 0), 0);
+    const overheadTokens = metrics.reduce((sum, metric) => {
+      try {
+        const metadata = JSON.parse(metric.metadata_json || '{}');
+        return sum + Math.max(0, Number(metadata.overheadTokens ?? 0));
+      } catch {
+        return sum;
+      }
+    }, 0);
+    const netSavedTokens = getNetSavedTokens(savedTokens, overheadTokens);
     const savingsPct = rawTokens > 0 ? ((savedTokens / rawTokens) * 100).toFixed(2) : 0;
+    const netSavingsPct = rawTokens > 0 ? ((netSavedTokens / rawTokens) * 100).toFixed(2) : 0;
 
     // Calculate vs baseline
     const baselineTokens = workflow.baseline_tokens || 0;
     const vsBaselinePct = baselineTokens > 0 ? (((baselineTokens - compressedTokens) / baselineTokens) * 100).toFixed(2) : 0;
+    const vsBaselineNetPct = baselineTokens > 0 ? (((baselineTokens - (compressedTokens + overheadTokens)) / baselineTokens) * 100).toFixed(2) : 0;
+    const persistedMetadata = parseJson(workflow.metadata_json);
+    const metadata = {
+      ...persistedMetadata,
+      summary: {
+        ...(persistedMetadata.summary ?? {}),
+        overheadTokens,
+        netSavedTokens,
+        netSavingsPct: Number(netSavingsPct),
+        vsBaselineNetPct: Number(vsBaselineNetPct),
+      },
+    };
 
     // Get unique tools used
     const toolsUsed = [...new Set(metrics.map((m) => m.tool))];
@@ -197,11 +229,24 @@ export const endWorkflow = (workflowId) => {
           compressed_tokens = ?,
           saved_tokens = ?,
           savings_pct = ?,
-          vs_baseline_pct = ?
+          vs_baseline_pct = ?,
+          metadata_json = ?
       WHERE workflow_id = ?
     `);
 
-    stmt.run(now, durationMs, JSON.stringify(toolsUsed), metrics.length, rawTokens, compressedTokens, savedTokens, savingsPct, vsBaselinePct, workflowId);
+    stmt.run(
+      now,
+      durationMs,
+      JSON.stringify(toolsUsed),
+      metrics.length,
+      rawTokens,
+      compressedTokens,
+      savedTokens,
+      savingsPct,
+      vsBaselinePct,
+      JSON.stringify(metadata),
+      workflowId,
+    );
 
       return {
         workflowId,
@@ -212,9 +257,13 @@ export const endWorkflow = (workflowId) => {
         rawTokens,
         compressedTokens,
         savedTokens,
+        overheadTokens,
+        netSavedTokens,
         savingsPct: Number(savingsPct),
+        netSavingsPct: Number(netSavingsPct),
         baselineTokens,
         vsBaselinePct: Number(vsBaselinePct),
+        vsBaselineNetPct: Number(vsBaselineNetPct),
       };
     });
   } catch {
@@ -284,8 +333,24 @@ export const getWorkflowMetrics = (options = {}) => {
 
       return workflows.map((w) => ({
         ...w,
-        toolsUsed: JSON.parse(w.tools_used_json || '[]'),
-        metadata: JSON.parse(w.metadata_json || '{}'),
+        ...(() => {
+          const metadata = parseJson(w.metadata_json);
+          const summary = metadata.summary ?? EMPTY_OBJECT;
+          const overheadTokens = Number(summary.overheadTokens ?? metadata.overheadTokens);
+          const hasOverhead = Number.isFinite(overheadTokens);
+          const derivedNetSavedTokens = hasOverhead
+            ? getNetSavedTokens(w.saved_tokens, overheadTokens)
+            : undefined;
+
+          return {
+            toolsUsed: parseJson(w.tools_used_json, []),
+            metadata,
+            overheadTokens: hasOverhead ? overheadTokens : undefined,
+            netSavedTokens: summary.netSavedTokens ?? derivedNetSavedTokens,
+            netSavingsPct: summary.netSavingsPct,
+            vsBaselineNetPct: summary.vsBaselineNetPct,
+          };
+        })(),
       }));
     });
   } catch {
@@ -302,35 +367,87 @@ export const getWorkflowSummaryByType = () => {
       if (!workflowTableExists(db)) {
         return [];
       }
-      const summary = db
-      .prepare(
-        `
-      SELECT 
-        workflow_type,
-        COUNT(*) as count,
-        SUM(raw_tokens) as total_raw_tokens,
-        SUM(compressed_tokens) as total_compressed_tokens,
-        SUM(saved_tokens) as total_saved_tokens,
-        AVG(savings_pct) as avg_savings_pct,
-        SUM(baseline_tokens) as total_baseline_tokens,
-        AVG(vs_baseline_pct) as avg_vs_baseline_pct,
-        AVG(duration_ms) as avg_duration_ms,
-        AVG(steps_count) as avg_steps_count
-      FROM workflow_metrics
-      WHERE end_time IS NOT NULL
-      GROUP BY workflow_type
-      ORDER BY count DESC
-    `,
-      )
-      .all();
+      const workflows = db
+        .prepare(
+          `
+        SELECT
+          workflow_type,
+          raw_tokens,
+          compressed_tokens,
+          saved_tokens,
+          savings_pct,
+          baseline_tokens,
+          vs_baseline_pct,
+          duration_ms,
+          steps_count,
+          metadata_json
+        FROM workflow_metrics
+        WHERE end_time IS NOT NULL
+      `,
+        )
+        .all();
 
-      return summary.map((s) => ({
-        ...s,
-        avgSavingsPct: Number(s.avg_savings_pct?.toFixed(2) || 0),
-        avgVsBaselinePct: Number(s.avg_vs_baseline_pct?.toFixed(2) || 0),
-        avgDurationMs: Math.round(s.avg_duration_ms || 0),
-        avgStepsCount: Math.round(s.avg_steps_count || 0),
-      }));
+      const grouped = new Map();
+
+      for (const workflow of workflows) {
+        const existing = grouped.get(workflow.workflow_type) ?? {
+          workflow_type: workflow.workflow_type,
+          count: 0,
+          total_raw_tokens: 0,
+          total_compressed_tokens: 0,
+          total_saved_tokens: 0,
+          total_overhead_tokens: 0,
+          total_net_saved_tokens: 0,
+          net_metrics_count: 0,
+          total_baseline_tokens: 0,
+          savingsPctSum: 0,
+          vsBaselinePctSum: 0,
+          durationMsSum: 0,
+          stepsCountSum: 0,
+        };
+
+        const metadata = parseJson(workflow.metadata_json);
+        const summary = metadata.summary ?? EMPTY_OBJECT;
+        const overheadTokens = Number(summary.overheadTokens);
+        const netSavedTokens = Number(summary.netSavedTokens);
+        const hasNetMetrics = Number.isFinite(overheadTokens) && Number.isFinite(netSavedTokens);
+
+        existing.count += 1;
+        existing.total_raw_tokens += workflow.raw_tokens || 0;
+        existing.total_compressed_tokens += workflow.compressed_tokens || 0;
+        existing.total_saved_tokens += workflow.saved_tokens || 0;
+        existing.total_baseline_tokens += workflow.baseline_tokens || 0;
+        existing.savingsPctSum += workflow.savings_pct || 0;
+        existing.vsBaselinePctSum += workflow.vs_baseline_pct || 0;
+        existing.durationMsSum += workflow.duration_ms || 0;
+        existing.stepsCountSum += workflow.steps_count || 0;
+
+        if (hasNetMetrics) {
+          existing.total_overhead_tokens += overheadTokens;
+          existing.total_net_saved_tokens += netSavedTokens;
+          existing.net_metrics_count += 1;
+        }
+
+        grouped.set(workflow.workflow_type, existing);
+      }
+
+      return [...grouped.values()]
+        .sort((left, right) => right.count - left.count)
+        .map((item) => ({
+          workflow_type: item.workflow_type,
+          count: item.count,
+          total_raw_tokens: item.total_raw_tokens,
+          total_compressed_tokens: item.total_compressed_tokens,
+          total_saved_tokens: item.total_saved_tokens,
+          total_overhead_tokens: item.total_overhead_tokens,
+          total_net_saved_tokens: item.total_net_saved_tokens,
+          net_metrics_count: item.net_metrics_count,
+          total_baseline_tokens: item.total_baseline_tokens,
+          avgSavingsPct: Number((item.savingsPctSum / item.count || 0).toFixed(2)),
+          avgVsBaselinePct: Number((item.vsBaselinePctSum / item.count || 0).toFixed(2)),
+          avgDurationMs: Math.round(item.durationMsSum / item.count || 0),
+          avgStepsCount: Math.round(item.stepsCountSum / item.count || 0),
+        }));
     });
   } catch {
     return [];
@@ -397,8 +514,8 @@ export const getActiveWorkflowForSession = (sessionId) => {
 
       return {
         ...workflow,
-        toolsUsed: JSON.parse(workflow.tools_used_json || '[]'),
-        metadata: JSON.parse(workflow.metadata_json || '{}'),
+        toolsUsed: parseJson(workflow.tools_used_json, []),
+        metadata: parseJson(workflow.metadata_json),
       };
     });
   } catch {

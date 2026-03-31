@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectWorkflowType, getWorkflowBaseline, WORKFLOW_DEFINITIONS } from '../src/workflow-tracker.js';
+import { detectWorkflowType, getWorkflowBaseline, WORKFLOW_DEFINITIONS, isWorkflowTrackingEnabled } from '../src/workflow-tracker.js';
 
 describe('workflow-tracker', () => {
   describe('detectWorkflowType', () => {
@@ -91,6 +91,19 @@ describe('workflow-tracker', () => {
         assert.ok(typeof def.minTools === 'number', `${type} missing minTools`);
         assert.ok(typeof def.baselineTokens === 'number', `${type} missing baselineTokens`);
         assert.ok(def.pattern instanceof RegExp, `${type} missing pattern`);
+      }
+    });
+  });
+
+  describe('isWorkflowTrackingEnabled', () => {
+    it('returns false by default', () => {
+      const previous = process.env.DEVCTX_WORKFLOW_TRACKING;
+      delete process.env.DEVCTX_WORKFLOW_TRACKING;
+      try {
+        assert.equal(isWorkflowTrackingEnabled(), false);
+      } finally {
+        if (previous === undefined) delete process.env.DEVCTX_WORKFLOW_TRACKING;
+        else process.env.DEVCTX_WORKFLOW_TRACKING = previous;
       }
     });
   });

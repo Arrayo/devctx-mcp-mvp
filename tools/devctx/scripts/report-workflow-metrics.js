@@ -116,14 +116,28 @@ const printSummary = (summary) => {
   const totalRaw = summary.reduce((sum, s) => sum + s.total_raw_tokens, 0);
   const totalCompressed = summary.reduce((sum, s) => sum + s.total_compressed_tokens, 0);
   const totalSaved = summary.reduce((sum, s) => sum + s.total_saved_tokens, 0);
+  const totalOverhead = summary.reduce((sum, s) => sum + (s.total_overhead_tokens || 0), 0);
+  const totalNetSaved = summary.reduce((sum, s) => sum + (s.total_net_saved_tokens || 0), 0);
+  const totalNetCoverage = summary.reduce((sum, s) => sum + (s.net_metrics_count || 0), 0);
   const totalBaseline = summary.reduce((sum, s) => sum + s.total_baseline_tokens, 0);
+  const totalSavedPct = totalRaw > 0 ? ((totalSaved / totalRaw) * 100).toFixed(2) : '0.00';
+  const totalNetSavedPct = totalRaw > 0 ? ((totalNetSaved / totalRaw) * 100).toFixed(2) : '0.00';
+  const baselineSavingsPct = totalBaseline > 0
+    ? (((totalBaseline - totalCompressed) / totalBaseline) * 100).toFixed(2)
+    : '0.00';
 
   console.log(`Total Workflows: ${formatNumber(totalWorkflows)}`);
   console.log(`Total Raw Tokens: ${formatNumber(totalRaw)}`);
   console.log(`Total Compressed Tokens: ${formatNumber(totalCompressed)}`);
-  console.log(`Total Saved Tokens: ${formatNumber(totalSaved)} (${((totalSaved / totalRaw) * 100).toFixed(2)}%)`);
+  console.log(`Total Saved Tokens: ${formatNumber(totalSaved)} (${totalSavedPct}%)`);
+  if (totalNetCoverage > 0) {
+    console.log(`Total Overhead Tokens: ${formatNumber(totalOverhead)}`);
+    console.log(
+      `Total Net Saved Tokens${totalNetCoverage < totalWorkflows ? ` (${formatNumber(totalNetCoverage)}/${formatNumber(totalWorkflows)} workflows)` : ''}: ${formatNumber(totalNetSaved)} (${totalNetSavedPct}%)`,
+    );
+  }
   console.log(`Total Baseline Tokens: ${formatNumber(totalBaseline)}`);
-  console.log(`Savings vs Baseline: ${formatNumber(totalBaseline - totalCompressed)} (${(((totalBaseline - totalCompressed) / totalBaseline) * 100).toFixed(2)}%)`);
+  console.log(`Savings vs Baseline: ${formatNumber(totalBaseline - totalCompressed)} (${baselineSavingsPct}%)`);
   console.log('');
   console.log('By Workflow Type:');
   console.log('─'.repeat(120));
@@ -169,6 +183,12 @@ const printSummary = (summary) => {
     console.log(`  Total Raw Tokens: ${formatNumber(s.total_raw_tokens)}`);
     console.log(`  Total Compressed Tokens: ${formatNumber(s.total_compressed_tokens)}`);
     console.log(`  Total Saved Tokens: ${formatNumber(s.total_saved_tokens)} (${s.avgSavingsPct}%)`);
+    if (s.net_metrics_count > 0) {
+      console.log(`  Total Overhead Tokens: ${formatNumber(s.total_overhead_tokens || 0)}`);
+      console.log(
+        `  Total Net Saved Tokens${s.net_metrics_count < s.count ? ` (${formatNumber(s.net_metrics_count)}/${formatNumber(s.count)} workflows)` : ''}: ${formatNumber(s.total_net_saved_tokens || 0)}`,
+      );
+    }
     console.log(`  Baseline Tokens: ${formatNumber(s.total_baseline_tokens)}`);
     console.log(`  Savings vs Baseline: ${formatNumber(s.total_baseline_tokens - s.total_compressed_tokens)} (${s.avgVsBaselinePct}%)`);
     console.log('');
@@ -205,6 +225,12 @@ const printWorkflows = (workflows) => {
       console.log(`  Raw Tokens: ${formatNumber(w.raw_tokens)}`);
       console.log(`  Compressed Tokens: ${formatNumber(w.compressed_tokens)}`);
       console.log(`  Saved Tokens: ${formatNumber(w.saved_tokens)} (${w.savings_pct}%)`);
+      if (w.overheadTokens !== undefined) {
+        console.log(`  Overhead Tokens: ${formatNumber(w.overheadTokens)}`);
+      }
+      if (w.netSavedTokens !== undefined) {
+        console.log(`  Net Saved Tokens: ${formatNumber(w.netSavedTokens)}`);
+      }
       console.log(`  Baseline Tokens: ${formatNumber(w.baseline_tokens)}`);
       console.log(`  Savings vs Baseline: ${formatNumber(w.baseline_tokens - w.compressed_tokens)} (${w.vs_baseline_pct}%)`);
     }
