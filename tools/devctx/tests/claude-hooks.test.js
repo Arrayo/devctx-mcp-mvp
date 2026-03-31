@@ -77,6 +77,7 @@ test('claude UserPromptSubmit hook does not persist hook state when repo safety 
     });
 
     assert.match(response?.hookSpecificOutput?.additionalContext ?? '', /context writes are blocked/i);
+    assert.match(response?.hookSpecificOutput?.additionalContext ?? '', /fix: /i);
 
     const state = await getHookTurnState({
       hookKey: 'claude:main:claude-hook-blocked',

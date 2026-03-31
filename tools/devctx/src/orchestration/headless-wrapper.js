@@ -38,6 +38,11 @@ const extractNextStep = (value) => {
   return '';
 };
 
+const buildMutationSafetyActionLines = (mutationSafety) =>
+  (mutationSafety?.recommendedActions ?? [])
+    .slice(0, 2)
+    .map((action) => `Fix: ${truncate(action, 120)}`);
+
 const buildContextLines = (startResult) => {
   const summary = startResult?.summary ?? {};
   const lines = [];
@@ -62,6 +67,11 @@ const buildContextLines = (startResult) => {
     lines.push(`Context status: ${truncate(startResult.continuity.reason, 120)}`);
   }
 
+  if (startResult?.mutationSafety?.blocked) {
+    lines.push(`Repo safety: ${truncate(startResult.mutationSafety.message, 120)}`);
+    lines.push(...buildMutationSafetyActionLines(startResult.mutationSafety));
+  }
+
   if (startResult?.refreshedContext?.indexRefreshed) {
     lines.push('Index refreshed for this prompt.');
   }
@@ -70,7 +80,7 @@ const buildContextLines = (startResult) => {
     lines.push(`Relevant files: ${startResult.refreshedContext.topFiles.map((item) => item.file).slice(0, 2).join(', ')}`);
   }
 
-  return lines.slice(0, 5);
+  return lines.slice(0, 6);
 };
 
 export const buildWrappedPrompt = ({ prompt, startResult }) => {

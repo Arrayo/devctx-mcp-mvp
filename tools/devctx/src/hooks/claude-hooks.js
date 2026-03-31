@@ -50,9 +50,15 @@ const uniq = (values) => [...new Set(values.filter((value) => typeof value === '
 const buildHookKey = ({ sessionId, agentId = null }) =>
   agentId ? `${HOOK_CLIENT}:subagent:${sessionId}:${agentId}` : `${HOOK_CLIENT}:main:${sessionId}`;
 
+const buildMutationSafetyActionLines = (mutationSafety) =>
+  (mutationSafety?.recommendedActions ?? [])
+    .slice(0, 2)
+    .map((action) => `fix: ${truncate(action, 110)}`);
+
 const buildAdditionalContext = ({ result, sessionStart = false }) => {
   const lines = [];
   const repoSafety = result?.repoSafety;
+  const mutationSafety = result?.mutationSafety;
   const summary = result?.summary;
   const continuityState = result?.continuity?.state;
 
@@ -80,7 +86,11 @@ const buildAdditionalContext = ({ result, sessionStart = false }) => {
     lines.push(`devctx new task session: ${truncate(summary.goal, 110)}`);
   }
 
-  if (repoSafety?.isTracked || repoSafety?.isStaged) {
+  if (mutationSafety?.blocked) {
+    const reasons = mutationSafety.blockedBy?.join(' and ') || 'blocked';
+    lines.push(`repo safety: ${mutationSafety.stateDbPath} is ${reasons}; context writes are blocked.`);
+    lines.push(...buildMutationSafetyActionLines(mutationSafety));
+  } else if (repoSafety?.isTracked || repoSafety?.isStaged) {
     const reasons = [];
     if (repoSafety.isTracked) {
       reasons.push('tracked');

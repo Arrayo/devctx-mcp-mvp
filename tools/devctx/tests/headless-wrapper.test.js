@@ -111,3 +111,35 @@ test('headless wrapper isolates a new session when continuity is only a weak par
   await smartSummary({ action: 'reset', sessionId: 'existing-wrapper-session' });
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
+
+test('headless wrapper includes repo-safety remediation in the wrapped prompt when SQLite writes are blocked', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'wrapper-blocked-session',
+    update: {
+      goal: 'Blocked wrapper run',
+      status: 'in_progress',
+      nextStep: 'Fix git hygiene before continuing',
+    },
+  });
+
+  fs.writeFileSync(path.join(wrapperTestRoot, '.gitignore'), '.devctx/\n', 'utf8');
+  execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: wrapperTestRoot, stdio: 'ignore' });
+
+  try {
+    const result = await runHeadlessWrapper({
+      client: 'codex',
+      prompt: 'Continue the blocked wrapper flow safely',
+      command: 'codex',
+      args: ['exec'],
+      sessionId: 'wrapper-blocked-session',
+      dryRun: true,
+    });
+
+    assert.match(result.wrappedPrompt, /Repo safety:/i);
+    assert.match(result.wrappedPrompt, /Fix:/i);
+  } finally {
+    execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: wrapperTestRoot, stdio: 'ignore' });
+    await smartSummary({ action: 'reset', sessionId: 'wrapper-blocked-session' });
+  }
+});

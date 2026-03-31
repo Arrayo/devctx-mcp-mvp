@@ -98,6 +98,7 @@ smart_turn({ phase: 'start', userPrompt: 'Document the wrapper onboarding flow',
 - Repo is in clean state
 - If repo safety fails, context mutations stay blocked across checkpoints, workflow tracking, and hook turn state
 - `smart_turn(start/end)` now exposes `mutationSafety = { blocked, blockedBy, stateDbPath, recommendedActions, message }`
+- Claude hooks and headless wrappers can surface `recommendedActions` directly in injected context so the agent sees concrete remediation steps
 
 **Example:**
 ```javascript
