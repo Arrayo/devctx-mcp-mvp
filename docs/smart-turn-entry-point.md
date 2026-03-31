@@ -70,6 +70,7 @@ Agent: "Ah, I was checking validateToken() in src/auth.js. Let me continue there
 - What's the **objective**?
 - What's the **current status**?
 - What's the **next step**?
+- When `ensureSession=true`, whether the current prompt is mismatched enough to require a **fresh isolated session**
 
 **Example:**
 ```javascript
@@ -80,6 +81,10 @@ smart_turn({ phase: 'start', userPrompt: 'Add JWT refresh tokens', ensureSession
 // Continuation
 smart_turn({ phase: 'start', userPrompt: 'Continue with JWT refresh', ensureSession: true })
 // → Returns: Previous session "Add JWT refresh tokens", status "in_progress"
+
+// Task switch while another session is active
+smart_turn({ phase: 'start', userPrompt: 'Document the wrapper onboarding flow', ensureSession: true })
+// → Returns: Creates a fresh planning session instead of reusing unrelated task state
 ```
 
 ---

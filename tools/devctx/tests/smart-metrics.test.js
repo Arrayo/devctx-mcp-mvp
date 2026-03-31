@@ -241,8 +241,12 @@ test('smart_metrics - reports context overhead from hook and wrapper metrics met
     const result = await smartMetrics({ window: 'all', latest: 5, sessionId: 'overhead-session' });
     assert.strictEqual(result.summary.count, 3);
     assert.strictEqual(result.summary.overheadTokens, 30);
+    assert.strictEqual(result.summary.netSavedTokens, 30);
+    assert.strictEqual(result.summary.netSavingsPct, 30);
     assert.ok(result.summary.overheadTools.some((entry) => entry.tool === 'claude_hook' && entry.overheadTokens === 18));
     assert.ok(result.summary.overheadTools.some((entry) => entry.tool === 'agent_wrapper' && entry.overheadTokens === 12));
+    assert.ok(result.summary.tools.some((entry) => entry.tool === 'smart_read' && entry.netSavedTokens === 60));
+    assert.ok(result.summary.tools.some((entry) => entry.tool === 'agent_wrapper' && entry.netSavedTokens === 0));
     assert.ok(result.latestEntries.some((entry) => entry.tool === 'claude_hook' && entry.overheadTokens === 18));
   } finally {
     setProjectRoot(previousProjectRoot);

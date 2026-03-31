@@ -5,6 +5,7 @@ const DEFAULT_START_MAX_TOKENS = 400;
 const DEFAULT_END_MAX_TOKENS = 500;
 const DEFAULT_END_EVENT = 'milestone';
 const MAX_PROMPT_PREVIEW = 160;
+const SAFE_CONTINUITY_STATES = new Set(['aligned', 'resume']);
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'when', 'where',
   'what', 'have', 'will', 'your', 'about', 'there', 'their', 'then', 'than',
@@ -71,9 +72,13 @@ const summarizeMetrics = (metrics) => {
     count: metrics.summary.count,
     savedTokens: metrics.summary.savedTokens,
     savingsPct: metrics.summary.savingsPct,
+    netSavedTokens: metrics.summary.netSavedTokens,
+    netSavingsPct: metrics.summary.netSavingsPct,
+    overheadTokens: metrics.summary.overheadTokens,
     topTools: metrics.summary.tools.slice(0, 3).map((tool) => ({
       tool: tool.tool,
       savedTokens: tool.savedTokens,
+      netSavedTokens: tool.netSavedTokens,
       count: tool.count,
     })),
   };
@@ -163,6 +168,13 @@ const buildAutoCreateUpdate = (prompt) => ({
   nextStep: 'Inspect relevant code, confirm the task boundaries, and checkpoint the first milestone.',
 });
 
+const shouldIsolateSession = ({ sessionId, ensureSession, prompt, continuity }) =>
+  !sessionId
+  && ensureSession
+  && hasMeaningfulPrompt(prompt)
+  && continuity
+  && !SAFE_CONTINUITY_STATES.has(continuity.state ?? '');
+
 const startTurn = async ({
   sessionId,
   prompt,
@@ -179,6 +191,8 @@ const startTurn = async ({
   });
 
   let autoCreated = false;
+  let isolatedSession = false;
+  let previousSessionId = null;
   if (!summaryResult.found && !summaryResult.ambiguous && ensureSession && hasMeaningfulPrompt(prompt)) {
     const created = await smartSummary({
       action: 'update',
@@ -195,7 +209,27 @@ const startTurn = async ({
     }
   }
 
-  const continuity = classifyContinuity({ prompt, summaryResult });
+  let continuity = classifyContinuity({ prompt, summaryResult });
+
+  if (summaryResult.found && shouldIsolateSession({ sessionId, ensureSession, prompt, continuity })) {
+    const created = await smartSummary({
+      action: 'update',
+      update: buildAutoCreateUpdate(prompt),
+      maxTokens,
+    });
+
+    if (!created.blocked) {
+      isolatedSession = true;
+      previousSessionId = summaryResult.sessionId ?? null;
+      summaryResult = await smartSummary({
+        action: 'get',
+        sessionId: created.sessionId,
+        maxTokens,
+      });
+      continuity = classifyContinuity({ prompt, summaryResult });
+    }
+  }
+
   const effectiveSessionId = summaryResult.sessionId ?? sessionId ?? summaryResult.recommendedSessionId ?? null;
   const metrics = includeMetrics
     ? await smartMetrics({
@@ -212,6 +246,8 @@ const startTurn = async ({
     sessionId: effectiveSessionId,
     found: summaryResult.found ?? false,
     autoCreated,
+    isolatedSession,
+    ...(previousSessionId ? { previousSessionId } : {}),
     continuity,
     summary: summaryResult.summary ?? null,
     repoSafety: summaryResult.repoSafety ?? metrics?.repoSafety ?? null,

@@ -60,6 +60,7 @@ export const createReport = async (options) => {
     toolFilter: options.tool,
     invalidLines: result.invalidLines,
     summary: result.summary,
+    adoption: result.adoption,
   };
 };
 
@@ -73,6 +74,10 @@ const printHuman = (report) => {
   console.log(`Raw tokens:   ${formatNumber(report.summary.rawTokens)}`);
   console.log(`Final tokens: ${formatNumber(report.summary.compressedTokens)}`);
   console.log(`Saved tokens: ${formatNumber(report.summary.savedTokens)} (${report.summary.savingsPct}%)`);
+  console.log(`Net saved:    ${formatNumber(report.summary.netSavedTokens)} (${report.summary.netSavingsPct}%)`);
+  if (report.summary.overheadTokens > 0) {
+    console.log(`Overhead:     ${formatNumber(report.summary.overheadTokens)} (${report.summary.overheadPctOfRaw}% of raw)`);
+  }
   if (report.invalidLines.length > 0) {
     console.log(`Invalid JSONL: ${report.invalidLines.join(', ')}`);
   }
@@ -86,7 +91,7 @@ const printHuman = (report) => {
 
   for (const tool of report.summary.tools) {
     console.log(
-      `  ${tool.tool.padEnd(14)} count=${formatNumber(tool.count)} raw=${formatNumber(tool.rawTokens)} final=${formatNumber(tool.compressedTokens)} saved=${formatNumber(tool.savedTokens)} (${tool.savingsPct}%)`
+      `  ${tool.tool.padEnd(14)} count=${formatNumber(tool.count)} raw=${formatNumber(tool.rawTokens)} final=${formatNumber(tool.compressedTokens)} saved=${formatNumber(tool.savedTokens)} (${tool.savingsPct}%) net=${formatNumber(tool.netSavedTokens)} (${tool.netSavingsPct}%)`
     );
   }
   

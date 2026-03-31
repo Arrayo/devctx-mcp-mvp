@@ -95,7 +95,16 @@ const ensureIsolatedSession = async ({ prompt, sessionId, startResult }) => {
   if (sessionId || !startResult?.sessionId) {
     return {
       startResult,
-      isolated: false,
+      isolated: Boolean(startResult?.isolatedSession),
+      previousSessionId: startResult?.previousSessionId ?? null,
+    };
+  }
+
+  if (startResult?.isolatedSession) {
+    return {
+      startResult,
+      isolated: true,
+      previousSessionId: startResult.previousSessionId ?? null,
     };
   }
 

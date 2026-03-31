@@ -75,6 +75,35 @@ test('smart_turn start can auto-create a planning session for a substantial new 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
 
+test('smart_turn start isolates a new session when the prompt mismatches the active session', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  await smartSummary({
+    action: 'update',
+    sessionId: 'turn-existing',
+    update: {
+      goal: 'Implement runtime repo safety enforcement for metrics',
+      status: 'in_progress',
+      currentFocus: 'repo safety enforcement',
+      nextStep: 'Finish the safety test matrix',
+    },
+  });
+
+  const result = await smartTurn({
+    phase: 'start',
+    prompt: 'Document an unrelated headless wrapper onboarding flow for new sessions',
+    ensureSession: true,
+  });
+
+  assert.strictEqual(result.found, true);
+  assert.strictEqual(result.isolatedSession, true);
+  assert.strictEqual(result.previousSessionId, 'turn-existing');
+  assert.notStrictEqual(result.sessionId, 'turn-existing');
+  assert.match(result.summary.goal.toLowerCase(), /headless wrapper onboarding flow/);
+  assert.ok(['aligned', 'resume'].includes(result.continuity.state));
+
+  await smartSummary({ action: 'reset', sessionId: 'turn-existing' });
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
 test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   await smartSummary({
     action: 'update',

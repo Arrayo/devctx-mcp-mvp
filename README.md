@@ -13,6 +13,7 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 - ~7M tokens → ~800K tokens (approximately 89% reduction)
 - 1,500+ operations tracked across development
 - Compression ratios: 3x to 46x depending on tool
+- Context overhead is tracked separately so reports can show gross and net savings
 
 **Workflow-level savings:**
 - Debugging: ~85-90% token reduction

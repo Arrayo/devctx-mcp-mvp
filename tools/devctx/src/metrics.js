@@ -68,6 +68,9 @@ export const getEntrySavingsPct = (
   return rawTokens > 0 ? Number(((savedTokens / rawTokens) * 100).toFixed(2)) : 0;
 };
 
+export const getNetSavedTokens = (savedTokens, overheadTokens = 0) =>
+  Math.max(0, Number(savedTokens ?? 0) - Math.max(0, Number(overheadTokens ?? 0)));
+
 export const MAX_METRICS_BYTES = 1024 * 1024;
 export const KEEP_LINES_AFTER_ROTATION = 500;
 
@@ -258,13 +261,25 @@ export const aggregateMetrics = (entries) => {
 
   const tools = [...byTool.values()]
     .map((item) => ({
+      constOverhead: overheadByTool.get(item.tool)?.overheadTokens ?? 0,
       ...item,
-      savingsPct: item.rawTokens > 0 ? Number(((item.savedTokens / item.rawTokens) * 100).toFixed(2)) : 0,
     }))
+    .map((item) => ({
+      ...item,
+      overheadTokens: item.constOverhead,
+      netSavedTokens: getNetSavedTokens(item.savedTokens, item.constOverhead),
+      savingsPct: item.rawTokens > 0 ? Number(((item.savedTokens / item.rawTokens) * 100).toFixed(2)) : 0,
+      netSavingsPct: item.rawTokens > 0
+        ? Number(((getNetSavedTokens(item.savedTokens, item.constOverhead) / item.rawTokens) * 100).toFixed(2))
+        : 0,
+    }))
+    .map(({ constOverhead, ...item }) => item)
     .sort((a, b) => b.savedTokens - a.savedTokens || b.count - a.count || a.tool.localeCompare(b.tool));
 
   const overheadTools = [...overheadByTool.values()]
     .sort((a, b) => b.overheadTokens - a.overheadTokens || b.count - a.count || a.tool.localeCompare(b.tool));
+
+  const netSavedTokens = getNetSavedTokens(savedTokens, overheadTokens);
 
   return {
     count: entries.length,
@@ -272,6 +287,8 @@ export const aggregateMetrics = (entries) => {
     compressedTokens,
     savedTokens,
     savingsPct: rawTokens > 0 ? Number(((savedTokens / rawTokens) * 100).toFixed(2)) : 0,
+    netSavedTokens,
+    netSavingsPct: rawTokens > 0 ? Number(((netSavedTokens / rawTokens) * 100).toFixed(2)) : 0,
     tools,
     overheadTokens,
     overheadPctOfRaw: rawTokens > 0 ? Number(((overheadTokens / rawTokens) * 100).toFixed(2)) : 0,

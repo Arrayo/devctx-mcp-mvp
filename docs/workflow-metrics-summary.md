@@ -64,12 +64,13 @@ Total: 28K → 1.2K (95.7% savings)
 1. `workflow_metrics` table in SQLite (migration v5)
 2. `workflow-tracker.js` module (detection, tracking, reporting)
 3. `report-workflow-metrics.js` script (CLI reporting)
-4. Auto-tracking in `smart_turn(start)` and `smart_turn(end)`
+4. Integration points for wrappers/hooks that want to track workflows around `smart_turn(start/end)`
 
 **No breaking changes:**
 - Opt-in via `DEVCTX_WORKFLOW_TRACKING=true`
 - Graceful degradation if disabled
 - No impact on existing tool metrics
+- The standalone `smart_turn` core does not auto-wire workflow tracking by itself
 
 ### Detection Logic
 

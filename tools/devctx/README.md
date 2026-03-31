@@ -167,6 +167,7 @@ Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 - ✅ Rules **guide** the agent (not enforce)
 - ✅ Agent can use built-in tools when appropriate
 - ✅ Token savings: 85-90% on complex tasks
+- ✅ Reports can show both gross savings and net savings after context overhead
 
 Check actual usage:
 - **Real-time feedback** - Enabled by default (disable with `export DEVCTX_SHOW_USAGE=false`)
