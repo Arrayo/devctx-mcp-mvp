@@ -1,6 +1,6 @@
 # smart-context-mcp
 
-MCP server that reduces AI agent token usage by 90% through intelligent context compression.
+MCP server that reduces AI agent token usage by up to 90% through intelligent context compression (measured on this project).
 
 [![npm version](https://img.shields.io/npm/v/smart-context-mcp.svg)](https://www.npmjs.com/package/smart-context-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -160,11 +160,15 @@ The agent *should* use devctx automatically for complex tasks because:
 
 ---
 
-## ⚠️ If the Agent Ignored devctx
+---
 
-If the agent didn't use devctx for a complex task, **paste this in your next message:**
+## 🚨 If the Agent Ignored devctx → Paste This
 
-### Short Prompt (Recommended)
+<table>
+<tr>
+<td width="100%" bgcolor="#FFF3CD">
+
+### 📋 Short Prompt (Copy & Paste)
 
 ```
 Use smart-context-mcp for this task.
@@ -172,24 +176,19 @@ Start with smart_turn(start), then use smart_context or smart_search before read
 End with smart_turn(end) if you make progress.
 ```
 
-### Ultra-Short
+### ⚡ Ultra-Short
 
 ```
 Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 ```
 
-### When to Use This
+</td>
+</tr>
+</table>
 
-- The agent read multiple large files with native `Read` tool
-- The agent used `Grep` repeatedly instead of `smart_search`
-- You see no devctx tools in the response
-- The task was clearly non-trivial (debugging, refactoring, multi-file work)
+**When to use:** Agent read large files with `Read`, used `Grep` repeatedly, or you see no devctx tools in a complex task.
 
-**Why this happens:**
-- Task seemed too simple to the agent
-- No index built yet (run `build_index` first)
-- Native tools appeared more direct
-- Rules weren't strong enough for this specific task
+**Why this happens:** Task seemed simple, no index built, native tools appeared more direct, or rules weren't strong enough.
 
 ---
 

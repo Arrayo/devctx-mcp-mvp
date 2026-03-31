@@ -1,6 +1,6 @@
 # smart-context-mcp
 
-MCP server that reduces AI agent token usage by 90% with intelligent context compression.
+MCP server that reduces AI agent token usage by up to 90% with intelligent context compression (measured on this project).
 
 [![npm version](https://badge.fury.io/js/smart-context-mcp.svg)](https://www.npmjs.com/package/smart-context-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
