@@ -55,6 +55,15 @@ CREATE TABLE workflow_metrics (
 - `autoTrackWorkflow(sessionId, sessionGoal)` - Auto-detect and start
 - `WORKFLOW_DEFINITIONS` - Workflow definitions with patterns and baselines
 
+**API notes:**
+- Completed workflows now persist net metrics inside `metadata_json.summary`
+- `getWorkflowMetrics()` includes `netMetricsCoverage` per workflow:
+  - `{ available: true, source: 'persisted' }` for workflows closed with persisted net metrics
+  - `{ available: true, source: 'derived' }` for legacy rows where net metrics can still be inferred
+  - `{ available: false, source: 'none' }` when no net metrics are available yet
+- `getWorkflowSummaryByType()` includes `netMetricsCoverage` per workflow type:
+  - `coveredWorkflows`, `totalWorkflows`, `uncoveredWorkflows`, `coveragePct`, `complete`
+
 **Workflow definitions:**
 1. **Debugging** - Pattern: `debug|error|bug|fix|fail`, Baseline: 150K tokens
 2. **Code Review** - Pattern: `review|pr|pull.?request|approve`, Baseline: 200K tokens
@@ -113,6 +122,7 @@ CREATE TABLE workflow_metrics (
 - Workflow detection from tools (3 tests)
 - Baseline calculation (6 tests)
 - Workflow definitions validation (2 tests)
+- Workflow coverage/net-metrics contract via smart_turn integration tests
 
 **Total:** 16 new tests, all passing
 

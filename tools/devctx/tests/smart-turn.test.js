@@ -161,6 +161,10 @@ test('smart_turn start and end integrate workflow tracking when enabled', { skip
     const active = await getWorkflowMetrics({ sessionId: start.sessionId, completed: false, limit: 1 });
     assert.equal(active.length, 1);
     assert.equal(active[0].workflow_type, 'debugging');
+    assert.deepEqual(active[0].netMetricsCoverage, {
+      available: false,
+      source: 'none',
+    });
 
     const end = await smartTurn({
       phase: 'end',
@@ -182,12 +186,23 @@ test('smart_turn start and end integrate workflow tracking when enabled', { skip
     assert.equal(completed.length, 1);
     assert.ok(typeof completed[0].netSavedTokens === 'number');
     assert.ok(typeof completed[0].metadata.summary?.overheadTokens === 'number');
+    assert.deepEqual(completed[0].netMetricsCoverage, {
+      available: true,
+      source: 'persisted',
+    });
 
     const byType = await getWorkflowSummaryByType();
     const debuggingSummary = byType.find((entry) => entry.workflow_type === 'debugging');
     assert.ok(debuggingSummary);
     assert.ok(debuggingSummary.net_metrics_count >= 1);
     assert.ok(typeof debuggingSummary.total_net_saved_tokens === 'number');
+    assert.deepEqual(debuggingSummary.netMetricsCoverage, {
+      coveredWorkflows: debuggingSummary.net_metrics_count,
+      totalWorkflows: debuggingSummary.count,
+      uncoveredWorkflows: debuggingSummary.count - debuggingSummary.net_metrics_count,
+      coveragePct: 100,
+      complete: true,
+    });
 
     await smartSummary({ action: 'reset', sessionId: start.sessionId });
   } finally {

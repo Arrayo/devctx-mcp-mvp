@@ -135,6 +135,13 @@ npm run report:workflows -- --type debugging
 npm run report:workflows -- --json
 ```
 
+Programmatic consumers can also inspect workflow coverage directly:
+
+- `getWorkflowMetrics()` exposes `netMetricsCoverage` per workflow row
+- `getWorkflowSummaryByType()` exposes aggregate `netMetricsCoverage` per workflow type
+
+That makes it explicit when net savings totals cover all completed workflows versus only the subset with persisted net metrics.
+
 ### Example Output
 
 ```

@@ -298,6 +298,16 @@ npm run report:workflows -- --json
 npm run report:workflows -- --summary --json
 ```
 
+`workflow-tracker` also exposes the same data programmatically:
+
+- `getWorkflowMetrics()` returns per-workflow `netMetricsCoverage`
+  - `available`: whether net metrics are present for that workflow row
+  - `source`: `persisted`, `derived`, or `none`
+- `getWorkflowSummaryByType()` returns aggregate `netMetricsCoverage`
+  - `coveredWorkflows`, `totalWorkflows`, `uncoveredWorkflows`, `coveragePct`, `complete`
+
+This matters when reading historical data: older workflows may still have gross savings but not persisted net metrics, so coverage can be partial even when the CLI prints valid totals for the covered subset.
+
 ---
 
 ## Baseline Calculation

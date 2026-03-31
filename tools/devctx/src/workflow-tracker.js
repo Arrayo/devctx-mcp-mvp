@@ -12,6 +12,21 @@ const parseJson = (value, fallback = EMPTY_OBJECT) => {
   }
 };
 
+const toRoundedPct = (covered, total) => (total > 0 ? Number(((covered / total) * 100).toFixed(2)) : 0);
+
+const buildWorkflowNetMetricsCoverage = ({ source, hasNetMetrics }) => ({
+  available: hasNetMetrics,
+  source: hasNetMetrics ? source : 'none',
+});
+
+const buildSummaryNetMetricsCoverage = ({ coveredWorkflows, totalWorkflows }) => ({
+  coveredWorkflows,
+  totalWorkflows,
+  uncoveredWorkflows: Math.max(0, totalWorkflows - coveredWorkflows),
+  coveragePct: toRoundedPct(coveredWorkflows, totalWorkflows),
+  complete: totalWorkflows > 0 && coveredWorkflows === totalWorkflows,
+});
+
 export const isWorkflowTrackingEnabled = () =>
   WORKFLOW_TRACKING_ENABLED_RE.test(process.env.DEVCTX_WORKFLOW_TRACKING ?? '');
 
@@ -338,9 +353,11 @@ export const getWorkflowMetrics = (options = {}) => {
           const summary = metadata.summary ?? EMPTY_OBJECT;
           const overheadTokens = Number(summary.overheadTokens ?? metadata.overheadTokens);
           const hasOverhead = Number.isFinite(overheadTokens);
+          const hasPersistedNetMetrics = Number.isFinite(Number(summary.netSavedTokens));
           const derivedNetSavedTokens = hasOverhead
             ? getNetSavedTokens(w.saved_tokens, overheadTokens)
             : undefined;
+          const hasNetMetrics = hasPersistedNetMetrics || hasOverhead;
 
           return {
             toolsUsed: parseJson(w.tools_used_json, []),
@@ -349,6 +366,10 @@ export const getWorkflowMetrics = (options = {}) => {
             netSavedTokens: summary.netSavedTokens ?? derivedNetSavedTokens,
             netSavingsPct: summary.netSavingsPct,
             vsBaselineNetPct: summary.vsBaselineNetPct,
+            netMetricsCoverage: buildWorkflowNetMetricsCoverage({
+              source: hasPersistedNetMetrics ? 'persisted' : 'derived',
+              hasNetMetrics,
+            }),
           };
         })(),
       }));
@@ -442,6 +463,10 @@ export const getWorkflowSummaryByType = () => {
           total_overhead_tokens: item.total_overhead_tokens,
           total_net_saved_tokens: item.total_net_saved_tokens,
           net_metrics_count: item.net_metrics_count,
+          netMetricsCoverage: buildSummaryNetMetricsCoverage({
+            coveredWorkflows: item.net_metrics_count,
+            totalWorkflows: item.count,
+          }),
           total_baseline_tokens: item.total_baseline_tokens,
           avgSavingsPct: Number((item.savingsPctSum / item.count || 0).toFixed(2)),
           avgVsBaselinePct: Number((item.vsBaselinePctSum / item.count || 0).toFixed(2)),

@@ -118,7 +118,10 @@ const printSummary = (summary) => {
   const totalSaved = summary.reduce((sum, s) => sum + s.total_saved_tokens, 0);
   const totalOverhead = summary.reduce((sum, s) => sum + (s.total_overhead_tokens || 0), 0);
   const totalNetSaved = summary.reduce((sum, s) => sum + (s.total_net_saved_tokens || 0), 0);
-  const totalNetCoverage = summary.reduce((sum, s) => sum + (s.net_metrics_count || 0), 0);
+  const totalNetCoverage = summary.reduce(
+    (sum, s) => sum + (s.netMetricsCoverage?.coveredWorkflows ?? s.net_metrics_count ?? 0),
+    0,
+  );
   const totalBaseline = summary.reduce((sum, s) => sum + s.total_baseline_tokens, 0);
   const totalSavedPct = totalRaw > 0 ? ((totalSaved / totalRaw) * 100).toFixed(2) : '0.00';
   const totalNetSavedPct = totalRaw > 0 ? ((totalNetSaved / totalRaw) * 100).toFixed(2) : '0.00';
@@ -183,10 +186,11 @@ const printSummary = (summary) => {
     console.log(`  Total Raw Tokens: ${formatNumber(s.total_raw_tokens)}`);
     console.log(`  Total Compressed Tokens: ${formatNumber(s.total_compressed_tokens)}`);
     console.log(`  Total Saved Tokens: ${formatNumber(s.total_saved_tokens)} (${s.avgSavingsPct}%)`);
-    if (s.net_metrics_count > 0) {
+    const coveredWorkflows = s.netMetricsCoverage?.coveredWorkflows ?? s.net_metrics_count ?? 0;
+    if (coveredWorkflows > 0) {
       console.log(`  Total Overhead Tokens: ${formatNumber(s.total_overhead_tokens || 0)}`);
       console.log(
-        `  Total Net Saved Tokens${s.net_metrics_count < s.count ? ` (${formatNumber(s.net_metrics_count)}/${formatNumber(s.count)} workflows)` : ''}: ${formatNumber(s.total_net_saved_tokens || 0)}`,
+        `  Total Net Saved Tokens${coveredWorkflows < s.count ? ` (${formatNumber(coveredWorkflows)}/${formatNumber(s.count)} workflows)` : ''}: ${formatNumber(s.total_net_saved_tokens || 0)}`,
       );
     }
     console.log(`  Baseline Tokens: ${formatNumber(s.total_baseline_tokens)}`);
@@ -230,6 +234,9 @@ const printWorkflows = (workflows) => {
       }
       if (w.netSavedTokens !== undefined) {
         console.log(`  Net Saved Tokens: ${formatNumber(w.netSavedTokens)}`);
+      }
+      if (w.netMetricsCoverage?.available === false) {
+        console.log('  Net Metrics Coverage: unavailable');
       }
       console.log(`  Baseline Tokens: ${formatNumber(w.baseline_tokens)}`);
       console.log(`  Savings vs Baseline: ${formatNumber(w.baseline_tokens - w.compressed_tokens)} (${w.vs_baseline_pct}%)`);
