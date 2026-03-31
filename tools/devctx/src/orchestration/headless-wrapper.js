@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { persistMetrics } from '../metrics.js';
 import { countTokens } from '../tokenCounter.js';
+import { buildOperationalContextLines } from '../client-contract.js';
 import { smartSummary } from '../tools/smart-summary.js';
 import { smartTurn } from '../tools/smart-turn.js';
 
@@ -38,69 +39,14 @@ const extractNextStep = (value) => {
   return '';
 };
 
-const buildMutationSafetyActionLines = (mutationSafety) =>
-  (mutationSafety?.recommendedActions ?? [])
-    .slice(0, 2)
-    .map((action) => `Fix: ${truncate(action, 120)}`);
-
-const buildRecommendedPathLines = (recommendedPath) => {
-  if (!recommendedPath) {
-    return [];
-  }
-
-  const lines = [];
-
-  if (Array.isArray(recommendedPath.nextTools) && recommendedPath.nextTools.length > 0) {
-    lines.push(`Next tools: ${recommendedPath.nextTools.slice(0, 3).join(' -> ')}`);
-  }
-
-  if (recommendedPath.steps?.[0]?.instruction) {
-    lines.push(`Path: ${truncate(recommendedPath.steps[0].instruction, 120)}`);
-  }
-
-  return lines;
-};
-
 const buildContextLines = (startResult) => {
-  const summary = startResult?.summary ?? {};
-  const lines = [];
-
-  if (startResult?.sessionId) {
-    lines.push(`Persisted devctx session: ${startResult.sessionId}`);
-  }
-
-  if (summary.goal) {
-    lines.push(`Goal: ${truncate(summary.goal, 120)}`);
-  }
-
-  if (summary.currentFocus) {
-    lines.push(`Focus: ${truncate(summary.currentFocus, 120)}`);
-  }
-
-  if (summary.nextStep) {
-    lines.push(`Next step: ${truncate(summary.nextStep, 120)}`);
-  }
-
-  if (startResult?.continuity?.reason) {
-    lines.push(`Context status: ${truncate(startResult.continuity.reason, 120)}`);
-  }
-
-  if (startResult?.mutationSafety?.blocked) {
-    lines.push(`Repo safety: ${truncate(startResult.mutationSafety.message, 120)}`);
-    lines.push(...buildMutationSafetyActionLines(startResult.mutationSafety));
-  }
-
-  if (startResult?.refreshedContext?.indexRefreshed) {
-    lines.push('Index refreshed for this prompt.');
-  }
-
-  if (startResult?.refreshedContext?.topFiles?.length) {
-    lines.push(`Relevant files: ${startResult.refreshedContext.topFiles.map((item) => item.file).slice(0, 2).join(', ')}`);
-  }
-
-  lines.push(...buildRecommendedPathLines(startResult?.recommendedPath));
-
-  return lines.slice(0, 8);
+  const context = buildOperationalContextLines(startResult, {
+    sessionStart: false,
+    maxLineLength: 120,
+    maxLines: 8,
+    maxChars: 560,
+  });
+  return context ? context.split('\n') : [];
 };
 
 export const buildWrappedPrompt = ({ prompt, startResult }) => {

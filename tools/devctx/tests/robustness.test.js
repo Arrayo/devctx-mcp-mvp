@@ -622,6 +622,8 @@ describe('devctx-init agent rules', () => {
     assert.match(agentsMd, /smart_turn\(end/);
     assert.match(agentsMd, /mutationSafety\.blocked/);
     assert.match(agentsMd, /recommendedActions/);
+    assert.match(agentsMd, /storageHealth\.issue/);
+    assert.match(agentsMd, /smart_doctor/);
 
     const claudeMd = await fsp.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
     assert.match(claudeMd, /devctx:start/);
@@ -629,6 +631,8 @@ describe('devctx-init agent rules', () => {
     assert.match(claudeMd, /smart_turn/);
     assert.match(claudeMd, /mutationSafety\.blocked/);
     assert.match(claudeMd, /recommendedActions/);
+    assert.match(claudeMd, /storageHealth\.issue/);
+    assert.match(claudeMd, /smart_doctor/);
 
     const claudeSettings = JSON.parse(await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'));
     assert.ok(Array.isArray(claudeSettings.hooks.SessionStart));

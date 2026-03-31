@@ -1,4 +1,5 @@
 import { persistMetrics } from '../metrics.js';
+import { buildOperationalContextLines } from '../client-contract.js';
 import { getRepoMutationSafety } from '../repo-safety.js';
 import { countTokens } from '../tokenCounter.js';
 import { smartSummary } from '../tools/smart-summary.js';
@@ -50,94 +51,13 @@ const uniq = (values) => [...new Set(values.filter((value) => typeof value === '
 const buildHookKey = ({ sessionId, agentId = null }) =>
   agentId ? `${HOOK_CLIENT}:subagent:${sessionId}:${agentId}` : `${HOOK_CLIENT}:main:${sessionId}`;
 
-const buildMutationSafetyActionLines = (mutationSafety) =>
-  (mutationSafety?.recommendedActions ?? [])
-    .slice(0, 2)
-    .map((action) => `fix: ${truncate(action, 110)}`);
-
-const buildRecommendedPathLines = (recommendedPath, { includePath = true } = {}) => {
-  if (!recommendedPath) {
-    return [];
-  }
-
-  const lines = [];
-
-  if (Array.isArray(recommendedPath.nextTools) && recommendedPath.nextTools.length > 0) {
-    lines.push(`next tools: ${recommendedPath.nextTools.slice(0, 3).join(' -> ')}`);
-  }
-
-  if (includePath && recommendedPath.steps?.[0]?.instruction) {
-    lines.push(`path: ${truncate(recommendedPath.steps[0].instruction, 110)}`);
-  }
-
-  return lines;
-};
-
 const buildAdditionalContext = ({ result, sessionStart = false }) => {
-  const lines = [];
-  const repoSafety = result?.repoSafety;
-  const mutationSafety = result?.mutationSafety;
-  const summary = result?.summary;
-  const continuityState = result?.continuity?.state;
-
-  if (result?.found && summary) {
-    const label = sessionStart ? 'resume' : continuityState ?? 'resume';
-    lines.push(`devctx ${label}: session ${result.sessionId}`);
-
-    if (summary.goal) {
-      lines.push(`goal: ${truncate(summary.goal, 110)}`);
-    }
-
-    if (summary.currentFocus) {
-      lines.push(`focus: ${truncate(summary.currentFocus, 110)}`);
-    }
-
-    if (!mutationSafety?.blocked) {
-      lines.push(...buildRecommendedPathLines(result?.recommendedPath));
-    }
-
-    if (summary.nextStep) {
-      lines.push(`next: ${truncate(summary.nextStep, 110)}`);
-    }
-  } else if (result?.continuity?.state === 'ambiguous_resume') {
-    lines.push('devctx: multiple persisted sessions matched this prompt.');
-    if (result?.recommendedSessionId) {
-      lines.push(`recommended session: ${result.recommendedSessionId}`);
-    }
-  } else if (result?.autoCreated && summary?.goal) {
-    lines.push(`devctx new task session: ${truncate(summary.goal, 110)}`);
-  }
-
-  if (mutationSafety?.blocked) {
-    const reasons = mutationSafety.blockedBy?.join(' and ') || 'blocked';
-    lines.push(`repo safety: ${mutationSafety.stateDbPath} is ${reasons}; context writes are blocked.`);
-    lines.push(...buildRecommendedPathLines(result?.recommendedPath, { includePath: false }));
-    lines.push(...buildMutationSafetyActionLines(mutationSafety));
-  } else if (repoSafety?.isTracked || repoSafety?.isStaged) {
-    const reasons = [];
-    if (repoSafety.isTracked) {
-      reasons.push('tracked');
-    }
-    if (repoSafety.isStaged) {
-      reasons.push('staged');
-    }
-    lines.push(`repo safety: .devctx/state.sqlite is ${reasons.join(' and ')}; context writes are blocked.`);
-  }
-
-  if (result?.refreshedContext?.indexRefreshed) {
-    lines.push('context refresh: project index was refreshed for this prompt.');
-  }
-
-  if (result?.refreshedContext?.topFiles?.length > 0) {
-    lines.push(`files: ${result.refreshedContext.topFiles.map((item) => item.file).slice(0, 2).join(', ')}`);
-  }
-
-  if (result?.refreshedContext?.hints?.[0]) {
-    lines.push(`hint: ${truncate(result.refreshedContext.hints[0], 110)}`);
-  }
-
-  const clipped = lines.slice(0, MAX_CONTEXT_LINES).join('\n').slice(0, MAX_CONTEXT_CHARS).trim();
-  return clipped || null;
+  return buildOperationalContextLines(result, {
+    sessionStart,
+    maxLineLength: 110,
+    maxLines: MAX_CONTEXT_LINES,
+    maxChars: MAX_CONTEXT_CHARS,
+  });
 };
 
 const buildHookContextResponse = (hookEventName, additionalContext) => {

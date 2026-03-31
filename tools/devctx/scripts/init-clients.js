@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { CLIENT_CONTRACT_RULE_LINES } from '../src/client-contract.js';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(currentFilePath);
@@ -385,10 +386,7 @@ Prefer devctx MCP for non-trivial tasks:
 - smart_turn(end, event=milestone) after meaningful progress
 
 Client contract:
-- Treat smart_turn as the task entry point for non-trivial work
-- If smart_turn returns mutationSafety.blocked = true, stop write-heavy work and surface blockedBy
-- Follow mutationSafety.recommendedActions before retrying blocked persistence or workflow steps
-- Use workflow and continuity fields from smart_turn as the current task state
+- ${CLIENT_CONTRACT_RULE_LINES.join('\n- ')}
 
 Reading cascade: outline → signatures → symbol → full (last resort)
 

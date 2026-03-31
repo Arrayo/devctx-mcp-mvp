@@ -41,7 +41,7 @@ test('headless wrapper builds an enriched prompt in dry-run mode', { skip: SKIP_
   assert.equal(result.dryRun, true);
   assert.equal(result.args[0], 'exec');
   assert.match(result.wrappedPrompt, /persisted devctx project context/i);
-  assert.match(result.wrappedPrompt, /Next tools:/i);
+  assert.match(result.wrappedPrompt, /next tools:/i);
   assert.ok(result.sessionId);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
@@ -137,9 +137,9 @@ test('headless wrapper includes repo-safety remediation in the wrapped prompt wh
       dryRun: true,
     });
 
-    assert.match(result.wrappedPrompt, /Repo safety:/i);
-    assert.match(result.wrappedPrompt, /Fix:/i);
-    assert.match(result.wrappedPrompt, /Next tools:/i);
+    assert.match(result.wrappedPrompt, /repo safety:/i);
+    assert.match(result.wrappedPrompt, /fix:/i);
+    assert.match(result.wrappedPrompt, /next tools:/i);
   } finally {
     execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: wrapperTestRoot, stdio: 'ignore' });
     await smartSummary({ action: 'reset', sessionId: 'wrapper-blocked-session' });
