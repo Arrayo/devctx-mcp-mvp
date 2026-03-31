@@ -444,6 +444,15 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     const r = cachedRange(content, startLine, endLine, fullPath, mtime);
     compressedText = r.text;
     cacheHit = r.cached;
+  } else if (mode === 'outline' && (startLine || endLine)) {
+    const lines = content.split('\n');
+    const start = Math.max(0, (startLine ?? 1) - 1);
+    const end = endLine ?? lines.length;
+    const rangeContent = lines.slice(start, end).join('\n');
+    const g = cachedGenerate(fullPath, extension, rangeContent, 'outline', mtime);
+    compressedText = g.text;
+    cacheHit = g.cached;
+    effectiveMode = 'outline';
   } else if (mode === 'symbol') {
     const sym = cachedSymbol(fullPath, content, symbol, mtime);
     compressedText = sym.text;
