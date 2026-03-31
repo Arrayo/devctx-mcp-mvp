@@ -17,6 +17,7 @@ Restart Cursor. Done.
 Optional assisted mode for long tasks:
 ```bash
 ./.devctx/bin/cursor-devctx task --prompt "your task" -- <agent-command> [args...]
+./.devctx/bin/cursor-devctx implement --prompt "implement the auth guard" -- <agent-command> [args...]
 ./.devctx/bin/cursor-devctx review --prompt "review the latest diff" -- <agent-command> [args...]
 ./.devctx/bin/cursor-devctx doctor
 ```
@@ -48,6 +49,41 @@ npm install -g smart-context-mcp
 npx smart-context-init --target .
 ```
 Restart your AI client. Done.
+
+---
+
+## `1.6.0` Task Runner
+
+`1.6.0` adds `smart-context-task`, a workflow-oriented CLI on top of the raw MCP tools.
+
+Use it when you want a more repeatable path than “agent reads rules and hopefully picks the right flow”.
+
+```bash
+smart-context-task task --prompt "inspect the auth flow and continue the bugfix"
+smart-context-task implement --prompt "add a token guard to loginHandler"
+smart-context-task continue --session-id my-session-id
+smart-context-task review --prompt "review the latest diff"
+smart-context-task doctor
+```
+
+The runner now covers:
+
+- `task`
+- `implement`
+- `continue`
+- `resume`
+- `review`
+- `debug`
+- `refactor`
+- `test`
+- `doctor`
+- `status`
+- `checkpoint`
+- `cleanup`
+
+For Cursor projects, `smart-context-init` also generates `./.devctx/bin/cursor-devctx`, which routes through the same runner/policy stack.
+
+See [Task Runner Workflows](../../docs/task-runner.md) for the full behavior and command guidance.
 
 ---
 

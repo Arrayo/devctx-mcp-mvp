@@ -15,6 +15,8 @@ smart_turn(start, userPrompt, ensureSession=true)
 
 This is **not automatic**—it's the **recommended routine** that agents should follow based on rules.
 
+In `1.6.0`, the product-layer shortcut for this routine is [Task Runner Workflows](./task-runner.md): `smart-context-task` and assisted client launchers package the same start/context/end lifecycle into named workflows.
+
 ---
 
 ## Why Start with `smart_turn(start)`?
@@ -236,6 +238,31 @@ smart_turn({ phase: 'start', userPrompt: 'Understand auth flow', ensureSession: 
 User: "What's the current Node version?"
 // Don't: smart_turn(start) → smart_shell('node --version')
 // Do: smart_shell('node --version') directly
+```
+
+---
+
+## `smart_turn` vs Task Runner
+
+Use raw `smart_turn` when:
+
+- you are calling MCP tools directly
+- you want low-level orchestration control
+- you are debugging the MCP itself
+
+Use the task runner when:
+
+- you want a repeatable workflow entrypoint
+- you want continuity-aware prompt guidance injected automatically
+- you want blocked-state routing to `smart_doctor`
+- you want workflow-level metrics and benchmark coverage
+
+Examples:
+
+```bash
+smart-context-task task --prompt "inspect the auth flow and continue the bugfix"
+smart-context-task implement --prompt "add a token guard to loginHandler"
+smart-context-task continue --session-id my-session-id
 ```
 
 ---

@@ -4,6 +4,8 @@
 
 This document provides detailed information about each client's capabilities, installation, and recommended workflows.
 
+If you want the workflow layer added in `1.6.0`, read [Task Runner Workflows](./task-runner.md) alongside this document.
+
 ---
 
 ## Compatibility Matrix (Detailed)
@@ -15,6 +17,7 @@ This document provides detailed information about each client's capabilities, in
 | **Conditional Rules** | ✅ Globs + context | ❌ No | ❌ No | ❌ No |
 | **Native Hooks** | ❌ No | ✅ SessionStart, PostToolUse, Stop | ❌ No | ❌ No |
 | **Task Checkpoints** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
+| **Task Runner / Assisted Path** | ✅ `cursor-devctx` | ⚠️ Manual `smart-context-task` | ✅ `smart-context-task` | ✅ `smart-context-task` |
 | **Auto smart_turn** | ❌ Agent decides | ⚠️ Via hooks (opt-in) | ❌ Agent decides | ❌ Agent decides |
 | **Blocked-State Remediation** | ✅ Guided via rules | ✅ Guided via hooks + rules | ✅ Guided via `AGENTS.md` | ✅ Guided via `AGENTS.md` |
 | **Node 22+ (SQLite)** | ✅ Recommended | ✅ Recommended | ✅ Recommended | ✅ Recommended |
@@ -75,11 +78,14 @@ npx smart-context-init --target . --clients cursor
 - `smart_turn` requires agent to call it (not automatic)
 - Blocked-state remediation is still guided, not enforced
 - `./.devctx/bin/cursor-devctx` provides an assisted path for long tasks using the same shared start/end wrapper contract and task-runner policy as terminal clients
+- The assisted launcher supports `task`, `implement`, `continue`, `resume`, `review`, `debug`, `refactor`, `test`, `doctor`, `status`, `checkpoint`, and `cleanup`
 
 **Best practices:**
 - Use Agent mode (not Ask mode)
 - Let agent follow workflows naturally
 - For long multi-step tasks, prefer `./.devctx/bin/cursor-devctx task --prompt "..." -- <agent-command>`
+- For implementation-heavy work, prefer `./.devctx/bin/cursor-devctx implement --prompt "..." -- <agent-command>`
+- For resumable work, prefer `./.devctx/bin/cursor-devctx continue --session-id <id> -- <agent-command>`
 - For specialized workflows, use subcommands like `review`, `debug`, `refactor`, `test`, `doctor`, `status`, `checkpoint`, or `cleanup`
 - Check metrics: `npm run report:metrics`
 - Verify profiles activate: Check `.cursor/rules/profiles-compact/`
@@ -196,6 +202,7 @@ npx smart-context-init --target . --clients claude
 - ✅ Agent rules in `AGENTS.md`
 - ✅ `smart_turn` support for session persistence
 - ✅ Generated rules surface `mutationSafety`, `blockedBy`, and `recommendedActions`
+- ✅ Global `smart-context-task` CLI provides an assisted path when rules alone are not enough
 - ✅ Lightweight (no conditional rules, no hooks)
 - ✅ Fast startup
 
@@ -224,6 +231,7 @@ npx smart-context-init --target . --clients codex
 - Use for medium-sized tasks
 - Prefer `smart_read` and `smart_search` for quick operations
 - Use `smart_turn` for multi-step tasks
+- For repeatable non-trivial flows, prefer `smart-context-task task|implement|continue|review|debug`
 - Check metrics: `npm run report:metrics`
 
 **Limitations:**
@@ -253,6 +261,7 @@ npx smart-context-init --target . --clients codex
 - ✅ Agent rules in `AGENTS.md`
 - ✅ `smart_turn` support for session persistence
 - ✅ Generated rules surface `mutationSafety`, `blockedBy`, and `recommendedActions`
+- ✅ Global `smart-context-task` CLI provides an assisted path when rules alone are not enough
 - ✅ Lightweight (no conditional rules, no hooks)
 - ✅ Fast startup
 
@@ -281,6 +290,7 @@ npx smart-context-init --target . --clients qwen
 - Use for medium-sized tasks
 - Prefer `smart_read` and `smart_search` for quick operations
 - Use `smart_turn` for multi-step tasks
+- For repeatable non-trivial flows, prefer `smart-context-task task|implement|continue|review|debug`
 - Check metrics: `npm run report:metrics`
 
 **Limitations:**
@@ -341,6 +351,7 @@ npx smart-context-init --target . --clients qwen
 - treat `mutationSafety.blocked` as a stop signal for write-heavy work
 - surface `blockedBy` and follow `recommendedActions`
 - use `workflow` / continuity fields as the current task state
+- prefer the task runner or assisted launcher when the client cannot guarantee the full lifecycle by rules alone
 
 **Key insight:** client integration is now more consistent, but still guidance-driven outside Claude hooks.
 

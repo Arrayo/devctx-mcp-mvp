@@ -29,6 +29,17 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
+## What's New in `1.6.0`
+
+`1.6.0` adds a product-layer task runner on top of the MCP tools:
+
+- `smart-context-task` for terminal and scripted workflows
+- `cursor-devctx` assisted launcher for Cursor projects
+- continuity-aware workflows for `task`, `implement`, `continue`, `resume`, `review`, `debug`, `refactor`, and `test`
+- workflow-level metrics and release-gated orchestration benchmarks
+
+If you want the practical entrypoint rather than raw MCP primitives, start with [Task Runner Workflows](./docs/task-runner.md).
+
 ## Why it exists
 
 AI agents waste tokens in three ways:
@@ -132,6 +143,8 @@ Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 
 **Important:** Agent always decides whether to use devctx. Rules increase probability, but don't guarantee it.
 
+**If you want a more repeatable path:** use the task runner or the assisted launcher instead of relying on rules alone. See [Task Runner Workflows](./docs/task-runner.md).
+
 **📖 Full setup:** [Client Compatibility](./docs/client-compatibility.md)
 
 ---
@@ -158,6 +171,15 @@ Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 Use smart_turn(start) to recover context, then [your task]
 ```
 
+For a more guided CLI path:
+
+```bash
+smart-context-task task --prompt "your task"
+smart-context-task implement --prompt "your task"
+smart-context-task continue --session-id <session-id>
+smart-context-task doctor
+```
+
 ### 3️⃣ Automatic via Rules (Not guaranteed)
 
 Agent *should* use devctx for complex tasks if rules are active:
@@ -172,7 +194,10 @@ Agent *should* use devctx for complex tasks if rules are active:
 | Scenario | Command |
 |----------|---------|
 | Start new task | `/prompt devctx-workflow` |
+| Guided terminal workflow | `smart-context-task task --prompt "..."` |
+| Guided implementation | `smart-context-task implement --prompt "..."` |
 | Continue previous task | `smart_turn(start) and continue` |
+| Continue via runner | `smart-context-task continue --session-id <id>` |
 | Force MCP usage | `/prompt use-devctx` |
 | First time in project | `/prompt devctx-preflight` |
 | Trust automatic rules | Just describe your task normally |
@@ -267,6 +292,26 @@ For **non-trivial tasks** (debugging, review, refactor, testing, architecture), 
 - ❌ Trivial tasks (read single file, simple search)
 - ❌ One-off questions (no continuity needed)
 - ❌ Quick diagnostics (no session context)
+
+### The Product Entry Point: `smart-context-task`
+
+If you want the same lifecycle packaged into named workflows, use the task runner introduced in `1.6.0`:
+
+```bash
+smart-context-task task --prompt "inspect the auth flow and continue the bugfix"
+smart-context-task implement --prompt "add a token guard to loginHandler"
+smart-context-task review --prompt "review the latest diff"
+smart-context-task doctor
+```
+
+This layer runs the same `smart_turn(start)` / context / checkpoint flow, but adds:
+
+- workflow-specific preflight (`smart_context` or `smart_search`)
+- continuity-aware prompt guidance
+- blocked-state routing to `smart_doctor`
+- measured `task_runner` quality signals
+
+For the full command set and client-specific usage, see [Task Runner Workflows](./docs/task-runner.md).
 
 ---
 
