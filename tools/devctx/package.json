@@ -55,6 +55,8 @@
     "test": "node --test --test-concurrency=1 ./tests/*.test.js",
     "verify": "node ./scripts/verify-features-direct.js",
     "benchmark": "node ./scripts/run-benchmark.js",
+    "benchmark:orchestration": "node ./evals/orchestration-benchmark.js",
+    "benchmark:orchestration:release": "node ./evals/orchestration-benchmark.js --baseline=./evals/orchestration-release-baseline.json",
     "eval": "node ./evals/harness.js",
     "eval:context": "node ./evals/harness.js --tool=context",
     "eval:both": "node ./evals/harness.js --tool=both",
@@ -62,7 +64,8 @@
     "eval:report": "node ./evals/report.js",
     "report:metrics": "node ./scripts/report-metrics.js",
     "report:workflows": "node ./scripts/report-workflow-metrics.js",
-    "report:adoption": "node ./scripts/report-adoption-metrics.js"
+    "report:adoption": "node ./scripts/report-adoption-metrics.js",
+    "prepublishOnly": "npm test && npm run benchmark:orchestration:release"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",

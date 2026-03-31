@@ -358,6 +358,53 @@ describe('metrics reporting', () => {
     assert.equal(report.summary.tools[0].tool, 'smart_context');
     assert.equal(report.summary.tools[0].count, 2);
     assert.equal(report.summary.tools[0].savedTokens, 280);
+    assert.equal(report.productQuality.turnsMeasured, 0);
+  });
+
+  it('includes product-quality signals when smart_turn quality entries are present', async () => {
+    await fsp.mkdir(path.dirname(tmpMetricsFile), { recursive: true });
+    const lines = [
+      {
+        tool: 'smart_turn',
+        action: 'start',
+        rawTokens: 0,
+        compressedTokens: 0,
+        savedTokens: 0,
+        metadata: {
+          analyticsKind: 'smart_turn_quality',
+          phase: 'start',
+          continuityState: 'aligned',
+          shouldReuseContext: true,
+          refreshedContext: true,
+          refreshedTopFiles: 2,
+        },
+        timestamp: '2026-03-26T10:00:00.000Z',
+      },
+      {
+        tool: 'smart_turn',
+        action: 'end',
+        rawTokens: 0,
+        compressedTokens: 0,
+        savedTokens: 0,
+        metadata: {
+          analyticsKind: 'smart_turn_quality',
+          phase: 'end',
+          checkpointPersisted: true,
+          checkpointSkipped: false,
+          mutationBlocked: false,
+        },
+        timestamp: '2026-03-26T10:05:00.000Z',
+      },
+    ];
+    await fsp.writeFile(tmpMetricsFile, `${lines.map((line) => JSON.stringify(line)).join('\n')}\n`, 'utf8');
+
+    const { createReport } = await import('../scripts/report-metrics.js');
+    const report = await createReport({ file: tmpMetricsFile, json: true, tool: null });
+
+    assert.equal(report.productQuality.turnsMeasured, 2);
+    assert.equal(report.productQuality.continuityRecovery.alignedStarts, 1);
+    assert.equal(report.productQuality.contextRefresh.refreshedWithTopFiles, 1);
+    assert.equal(report.productQuality.checkpointing.persistedEnds, 1);
   });
 
   it('reports smart_summary metrics when entries use finalTokens', async () => {
@@ -571,12 +618,17 @@ describe('devctx-init agent rules', () => {
     assert.match(agentsMd, /devctx:start/);
     assert.match(agentsMd, /smart_read/);
     assert.match(agentsMd, /smart_turn/);
+    assert.match(agentsMd, /ensureSession=true/);
     assert.match(agentsMd, /smart_turn\(end/);
+    assert.match(agentsMd, /mutationSafety\.blocked/);
+    assert.match(agentsMd, /recommendedActions/);
 
     const claudeMd = await fsp.readFile(path.join(tmpDir, 'CLAUDE.md'), 'utf8');
     assert.match(claudeMd, /devctx:start/);
     assert.match(claudeMd, /smart_search/);
     assert.match(claudeMd, /smart_turn/);
+    assert.match(claudeMd, /mutationSafety\.blocked/);
+    assert.match(claudeMd, /recommendedActions/);
 
     const claudeSettings = JSON.parse(await fsp.readFile(path.join(tmpDir, '.claude', 'settings.json'), 'utf8'));
     assert.ok(Array.isArray(claudeSettings.hooks.SessionStart));

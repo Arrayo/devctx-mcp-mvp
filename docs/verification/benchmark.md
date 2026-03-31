@@ -12,9 +12,12 @@ npm install
 npm run benchmark
 
 # Run individual benchmarks
+npm run benchmark:orchestration
+npm run benchmark:orchestration:release
 npm run eval              # Synthetic corpus
 npm run eval:self         # Real project (this repo)
 npm run verify            # Feature verification
+npm run report:metrics    # Production metrics + product-quality signals
 ```
 
 ## What We Measure
@@ -58,71 +61,29 @@ Savings % = (Raw Tokens - Compressed Tokens) / Raw Tokens × 100
 
 ## Benchmark Suites
 
-### Suite 1: Synthetic Corpus
+### Suite 1: Unit Tests
 
-**Location:** `tools/devctx/evals/corpus/tasks.json`
+**Location:** `tools/devctx/tests/*.test.js`
 
-**Description:** 20 predefined search tasks with known expected results
+**Description:** Node test suite for core tools, orchestration contracts, repo safety, and regressions.
 
-**Purpose:** Consistent baseline for regression testing
-
-**Run:**
-```bash
-cd tools/devctx
-npm run eval
-```
-
-**Expected output:**
-```
-Evaluation Results:
-  Tasks: 20
-  Pass rate: 95%
-  Avg precision@5: 0.85
-  Avg recall: 0.92
-  Avg tokens saved: 87%
-```
-
-**What it tests:**
-- Search accuracy (intent-aware ranking)
-- Token compression ratios
-- Index quality
-- Graph expansion
-
----
-
-### Suite 2: Real Project (Self-Eval)
-
-**Location:** This repository
-
-**Description:** Evaluate against the actual development of this MCP
-
-**Purpose:** Real-world validation with production data
+**Purpose:** Catch functional regressions before higher-level evaluation runs.
 
 **Run:**
 ```bash
 cd tools/devctx
-npm run eval:self
-```
-
-**Expected output:**
-```
-Self-Evaluation Results:
-  Tasks: 15
-  Pass rate: 93%
-  Avg precision@5: 0.88
-  Avg recall: 0.94
-  Real project: devctx-mcp-mvp
+npm test
 ```
 
 **What it tests:**
-- Real codebase complexity
-- Multi-file context
-- Cross-module dependencies
-- Production-like scenarios
+- Tool contracts and edge cases
+- Repo safety and SQLite suppression
+- `smart_turn` orchestration behavior
+- Regression coverage for docs/generators/reporting
 
 ---
 
-### Suite 3: Feature Verification
+### Suite 2: Feature Verification
 
 **Location:** `tools/devctx/scripts/verify-features-direct.js`
 
@@ -162,11 +123,116 @@ Resumen:
 
 ---
 
-### Suite 4: Production Metrics
+### Suite 3: Synthetic Corpus
 
-**Location:** `.devctx/state.sqlite` (accumulated during real use)
+**Location:** `tools/devctx/evals/corpus/tasks.json`
 
-**Description:** Actual token savings from production usage
+**Description:** 20 predefined search tasks with known expected results
+
+**Purpose:** Consistent baseline for regression testing
+
+**Run:**
+```bash
+cd tools/devctx
+npm run eval
+```
+
+**Expected output:**
+```
+Evaluation Results:
+  Tasks: 20
+  Pass rate: 95%
+  Avg precision@5: 0.85
+  Avg recall: 0.92
+  Avg tokens saved: 87%
+```
+
+**What it tests:**
+- Search accuracy (intent-aware ranking)
+- Token compression ratios
+- Index quality
+- Graph expansion
+
+---
+
+### Suite 4: Real Project (Self-Eval)
+
+**Location:** This repository
+
+**Description:** Evaluate against the actual development of this MCP
+
+**Purpose:** Real-world validation with production data
+
+**Run:**
+```bash
+cd tools/devctx
+npm run eval:self
+```
+
+**Expected output:**
+```
+Self-Evaluation Results:
+  Tasks: 15
+  Pass rate: 93%
+  Avg precision@5: 0.88
+  Avg recall: 0.94
+  Real project: devctx-mcp-mvp
+```
+
+**What it tests:**
+- Real codebase complexity
+- Multi-file context
+- Cross-module dependencies
+- Production-like scenarios
+
+---
+
+### Suite 5: Orchestration Regression
+
+**Location:** `tools/devctx/evals/orchestration-benchmark.js`
+
+**Description:** Declarative scenario suite that exercises `smart_turn`, `smart_metrics`, `recommendedPath`, `mutationSafety`, and checkpoint behavior in isolated temp repos.
+
+**Purpose:** Detect regressions in continuity recovery, blocked-state remediation, context-refresh signaling, and persisted checkpoint behavior before release.
+
+**Run:**
+```bash
+cd tools/devctx
+npm run benchmark:orchestration
+```
+
+**Release gate run:**
+```bash
+cd tools/devctx
+npm run benchmark:orchestration:release
+```
+
+**Scenario coverage:**
+- aligned context reuse
+- fresh-context refresh with top-file signals
+- blocked-state remediation when `.devctx/state.sqlite` is staged
+- skipped checkpoint when no real milestone exists
+- persisted checkpoint after a milestone
+
+**Regression gates:**
+- scenario pass rate must remain at 100%
+- net saved tokens must stay above the declared floor
+- continuity alignment, blocked remediation, refresh top-file signaling, and checkpoint persistence must stay above configured thresholds
+- release baseline must still match the required scenario set and minimum floors in `evals/orchestration-release-baseline.json`
+
+**What it tests:**
+- `smart_turn(start/end)` orchestration quality
+- product-quality metrics emitted into `smart_metrics`
+- net-savings reporting under realistic multi-turn flows
+- repeatability across isolated repositories
+
+---
+
+### Production Metrics Report
+
+**Location:** `.devctx/state.sqlite` or explicit metrics JSONL
+
+**Description:** Actual token savings and measured orchestration-quality signals from real usage
 
 **Purpose:** Validate real-world impact
 
@@ -199,6 +265,7 @@ By tool:
 - Actual token savings
 - Tool adoption rates
 - Compression ratios per tool
+- Measured orchestration-quality signals from `smart_turn`
 
 **Note:** `smart_context` shows 0% savings because it generates new context (doesn't compress existing). Its value is in preventing unnecessary reads.
 
@@ -376,15 +443,13 @@ smart_read({ filePath: "src/middleware/auth.js", mode: "outline" })
 
 ### CI Pipeline
 
-The benchmark runs automatically on every commit:
+The release gate runs automatically in CI on Node 22 and also blocks `npm publish`:
 
 ```yaml
-# .github/workflows/benchmark.yml
-- name: Run benchmark
+# .github/workflows/ci.yml
+- name: Orchestration Release Gate
   run: |
-    npm test
-    npm run verify
-    npm run eval
+    npm run benchmark:orchestration:release
 ```
 
 ### Regression Detection
@@ -393,6 +458,7 @@ If metrics drop below thresholds:
 - Token savings < 70%
 - Precision@5 < 0.75
 - Recall < 0.80
+- Orchestration release baseline checks fail
 
 The CI fails and requires investigation.
 

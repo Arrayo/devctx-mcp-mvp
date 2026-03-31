@@ -62,6 +62,9 @@ test('smart_turn start reuses aligned persisted context', { skip: SKIP_SQLITE_TE
   assert.strictEqual(result.continuity.shouldReuseContext, true);
   assert.ok(result.summary.goal.includes('repo safety'));
   assert.equal(result.refreshedContext, undefined);
+  assert.equal(result.recommendedPath.mode, 'guided_context');
+  assert.deepEqual(result.recommendedPath.nextTools, ['smart_context', 'smart_read', 'smart_turn']);
+  assert.match(result.recommendedPath.steps[0].instruction, /smart_context/i);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-aligned' });
 });
@@ -112,6 +115,9 @@ test('smart_turn start refreshes lightweight context for the new prompt', { skip
   assert.ok(result.refreshedContext);
   assert.ok(Array.isArray(result.refreshedContext.topFiles));
   assert.ok(result.refreshedContext.topFiles.some((item) => item.file.includes('src/auth.js')));
+  assert.equal(result.recommendedPath.mode, 'guided_refresh');
+  assert.deepEqual(result.recommendedPath.nextTools, ['smart_read', 'smart_turn']);
+  assert.match(result.recommendedPath.steps[0].instruction, /refreshedContext\.topFiles/i);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
@@ -253,6 +259,9 @@ test('smart_turn reports workflow tracking blocked when state sqlite is staged',
         workflowType: null,
         autoTracked: false,
       });
+      assert.equal(result.recommendedPath.mode, 'blocked_guided');
+      assert.equal(result.recommendedPath.nextTools[0], 'repo_safety');
+      assert.match(result.recommendedPath.steps[0].instruction, /recommendedActions/i);
 
       const active = await getWorkflowMetrics({ sessionId: 'turn-workflow-blocked', completed: false, limit: 1 });
       assert.equal(active.length, 0);
@@ -317,6 +326,8 @@ test('smart_turn end exposes mutationSafety when checkpoint writes are blocked b
       message: 'Project-local context writes are blocked until git hygiene is fixed for .devctx/state.sqlite.',
     });
     assert.equal(result.message, result.mutationSafety.message);
+    assert.equal(result.recommendedPath.mode, 'blocked_guided');
+    assert.equal(result.recommendedPath.nextTools[0], 'repo_safety');
   } finally {
     execFileSync('git', ['rm', '--cached', '-f', '.devctx/state.sqlite'], { cwd: turnTestRoot, stdio: 'ignore' });
     await smartSummary({ action: 'reset', sessionId: 'turn-end-blocked' });
@@ -344,6 +355,8 @@ test('smart_turn end does not close workflow when checkpoint is skipped', { skip
 
     assert.equal(end.checkpoint.skipped, true);
     assert.equal(end.workflow, undefined);
+    assert.equal(end.recommendedPath.mode, 'continue_until_milestone');
+    assert.deepEqual(end.recommendedPath.nextTools, ['smart_turn']);
 
     const active = await getWorkflowMetrics({ sessionId: start.sessionId, completed: false, limit: 1 });
     assert.equal(active.length, 1);
@@ -411,6 +424,9 @@ test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_
   assert.strictEqual(result.checkpoint.checkpoint.event, 'milestone');
   assert.strictEqual(result.checkpoint.checkpoint.shouldPersist, true);
   assert.ok(result.checkpoint.summary.recentCompleted.includes('Implemented smart_turn orchestration flow'));
+  assert.equal(result.recommendedPath.mode, 'checkpointed');
+  assert.deepEqual(result.recommendedPath.nextTools, ['smart_turn']);
+  assert.match(result.recommendedPath.steps[0].instruction, /restart with smart_turn\(start/i);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-end' });
 });

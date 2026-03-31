@@ -375,15 +375,20 @@ const updatePreCommitHook = (targetDir, dryRun) => {
 // Agent rules — instruct agents to prefer devctx tools over built-in ones
 // ---------------------------------------------------------------------------
 
-const agentRuleBody = `**First time in project?** Run build_index to enable search/context quality.
+const agentRuleBody = `**First time in project?** Run build_index(incremental=true) to enable search/context quality.
 
 Prefer devctx MCP for non-trivial tasks:
-- smart_read(outline|signatures|symbol) instead of Read → 90% savings
-- smart_search(intent=...) instead of Grep → ranked results
-- smart_context instead of multiple reads → one-call builder
-- smart_shell instead of Shell → safe diagnostics
+- smart_turn(start, userPrompt, ensureSession=true) before multi-step work
+- smart_context(...) or smart_search(intent=...) to build context cheaply
+- smart_read(outline|signatures|symbol) before full reads
+- smart_shell instead of Shell for safe diagnostics
+- smart_turn(end, event=milestone) after meaningful progress
 
-For non-trivial tasks: smart_turn(start) → [work with devctx tools] → smart_turn(end)
+Client contract:
+- Treat smart_turn as the task entry point for non-trivial work
+- If smart_turn returns mutationSafety.blocked = true, stop write-heavy work and surface blockedBy
+- Follow mutationSafety.recommendedActions before retrying blocked persistence or workflow steps
+- Use workflow and continuity fields from smart_turn as the current task state
 
 Reading cascade: outline → signatures → symbol → full (last resort)
 
@@ -393,7 +398,7 @@ Detailed workflows: .cursor/rules/profiles-compact/ (debugging, code-review, ref
 
 If you didn't use devctx tools in a non-trivial programming task, add at the end:
 
-**Note:** devctx not used because: [task too simple | MCP unavailable | index not built | already had sufficient context | native tool more direct for this case]. To use devctx next time: "Use smart-context-mcp: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)"`;
+**Note:** devctx not used because: [task too simple | MCP unavailable | index not built | already had sufficient context | native tool more direct for this case]. To use devctx next time: "Use smart-context-mcp: smart_turn(start, userPrompt, ensureSession=true) → smart_context/smart_search → smart_read → smart_turn(end, event=milestone)"`;
 
 const cursorRuleContent = `---
 description: Prefer devctx MCP tools for non-trivial tasks

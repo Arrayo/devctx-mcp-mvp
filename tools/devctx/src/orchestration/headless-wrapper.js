@@ -43,6 +43,24 @@ const buildMutationSafetyActionLines = (mutationSafety) =>
     .slice(0, 2)
     .map((action) => `Fix: ${truncate(action, 120)}`);
 
+const buildRecommendedPathLines = (recommendedPath) => {
+  if (!recommendedPath) {
+    return [];
+  }
+
+  const lines = [];
+
+  if (Array.isArray(recommendedPath.nextTools) && recommendedPath.nextTools.length > 0) {
+    lines.push(`Next tools: ${recommendedPath.nextTools.slice(0, 3).join(' -> ')}`);
+  }
+
+  if (recommendedPath.steps?.[0]?.instruction) {
+    lines.push(`Path: ${truncate(recommendedPath.steps[0].instruction, 120)}`);
+  }
+
+  return lines;
+};
+
 const buildContextLines = (startResult) => {
   const summary = startResult?.summary ?? {};
   const lines = [];
@@ -80,7 +98,9 @@ const buildContextLines = (startResult) => {
     lines.push(`Relevant files: ${startResult.refreshedContext.topFiles.map((item) => item.file).slice(0, 2).join(', ')}`);
   }
 
-  return lines.slice(0, 6);
+  lines.push(...buildRecommendedPathLines(startResult?.recommendedPath));
+
+  return lines.slice(0, 8);
 };
 
 export const buildWrappedPrompt = ({ prompt, startResult }) => {

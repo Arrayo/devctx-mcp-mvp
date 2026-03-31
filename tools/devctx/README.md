@@ -169,12 +169,15 @@ Use devctx: smart_turn(start) → smart_context → smart_turn(end)
 - ✅ Token savings: 85-90% on complex tasks
 - ✅ Reports can show both gross savings and net savings after context overhead
 - ✅ Workflow JSON/reporting now exposes net-metrics coverage, so historical rows without persisted overhead are explicit
+- ✅ `smart_metrics` now exposes measured orchestration-quality signals from `smart_turn` (continuity recovery, blocked-state remediation coverage, context-refresh signals)
 - ✅ If `.devctx/state.sqlite` is tracked or staged, runtime SQLite mutations pause across checkpoints, workflow tracking, hook state, and pattern learning
 
 Check actual usage:
 - **Real-time feedback** - Enabled by default (disable with `export DEVCTX_SHOW_USAGE=false`)
 - `npm run report:metrics` - Tool-level savings + adoption analysis
 - `npm run report:workflows` - Workflow-level savings (requires `DEVCTX_WORKFLOW_TRACKING=true`)
+- `npm run benchmark:orchestration` - Repeatable orchestration regression suite for continuity, refresh, blocked-state remediation, and checkpoint quality
+- `npm run benchmark:orchestration:release` - Same suite with a checked-in release baseline, used by CI and `prepublishOnly`
 
 ## What it does
 

@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "thresholds": {
+    "minScenarioPassRatePct": 100,
+    "minNetSavedTokens": 150,
+    "minContinuityAlignmentRatePct": 20,
+    "minBlockedRemediationCoveragePct": 100,
+    "minRefreshTopFileSignalRatePct": 100,
+    "minCheckpointPersistenceRatePct": 50
+  },
+  "scenarios": [
+    {
+      "id": "aligned-resume",
+      "description": "Reuses aligned persisted context and keeps the flow on compressed reads",
+      "seedSession": {
+        "sessionId": "bench-aligned",
+        "update": {
+          "goal": "Finish the auth metrics repo safety tests",
+          "status": "in_progress",
+          "currentFocus": "auth metrics repo safety",
+          "nextStep": "Inspect loginHandler and keep runtime enforcement in place"
+        }
+      },
+      "start": {
+        "sessionId": "bench-aligned",
+        "prompt": "Finish the auth metrics repo safety tests and keep runtime enforcement in place",
+        "ensureSession": false
+      },
+      "actions": [
+        {
+          "type": "smart_read",
+          "filePath": "src/auth.js",
+          "mode": "outline"
+        }
+      ],
+      "expect": {
+        "continuityState": "aligned",
+        "shouldReuseContext": true,
+        "mutationBlocked": false,
+        "recommendedPathMode": "guided_context"
+      }
+    },
+    {
+      "id": "context-refresh",
+      "description": "Creates a meaningful start that refreshes context and surfaces top files",
+      "start": {
+        "prompt": "Fix the token error in loginHandler and continue the auth debugging flow",
+        "ensureSession": true
+      },
+      "actions": [
+        {
+          "type": "smart_context",
+          "task": "Fix the token error in loginHandler and continue the auth debugging flow"
+        }
+      ],
+      "expect": {
+        "refreshedContext": true,
+        "refreshedTopFilesMin": 1,
+        "recommendedPathMode": "guided_refresh"
+      }
+    },
+    {
+      "id": "blocked-remediation",
+      "description": "Stages state.sqlite and verifies blocked-state remediation is surfaced",
+      "seedSession": {
+        "sessionId": "bench-blocked",
+        "update": {
+          "goal": "Debug blocked workflow tracking",
+          "status": "in_progress",
+          "currentFocus": "Repo safety enforcement"
+        }
+      },
+      "stageStateDb": true,
+      "start": {
+        "sessionId": "bench-blocked",
+        "prompt": "Continue the blocked debugging workflow safely",
+        "ensureSession": false
+      },
+      "actions": [
+        {
+          "type": "smart_search",
+          "query": "loginHandler",
+          "cwd": ".",
+          "intent": "debug"
+        }
+      ],
+      "expect": {
+        "mutationBlocked": true,
+        "blockedByIncludes": ["tracked", "staged"],
+        "recommendedPathMode": "blocked_guided"
+      }
+    },
+    {
+      "id": "skipped-checkpoint",
+      "description": "Keeps file_change checkpoints weak so they are skipped until a real milestone exists",
+      "start": {
+        "prompt": "Inspect auth implementation details and keep working until a real milestone exists",
+        "ensureSession": true
+      },
+      "actions": [
+        {
+          "type": "smart_read",
+          "filePath": "src/auth.js",
+          "mode": "outline"
+        },
+        {
+          "type": "smart_turn_end",
+          "event": "file_change",
+          "update": {
+            "touchedFiles": ["src/auth.js"]
+          }
+        }
+      ],
+      "expect": {
+        "checkpointSkipped": true,
+        "endRecommendedPathMode": "continue_until_milestone"
+      }
+    },
+    {
+      "id": "persisted-checkpoint",
+      "description": "Persists a milestone checkpoint after real progress",
+      "start": {
+        "prompt": "Fix the login error in the auth handler and checkpoint the first milestone safely",
+        "ensureSession": true
+      },
+      "actions": [
+        {
+          "type": "smart_search",
+          "query": "loginHandler",
+          "cwd": ".",
+          "intent": "debug"
+        },
+        {
+          "type": "smart_read",
+          "filePath": "src/auth.js",
+          "mode": "outline"
+        },
+        {
+          "type": "smart_turn_end",
+          "event": "milestone",
+          "update": {
+            "completed": ["Fixed the login error"],
+            "nextStep": "Run the regression tests"
+          }
+        }
+      ],
+      "expect": {
+        "checkpointPersisted": true,
+        "endRecommendedPathMode": "checkpointed"
+      }
+    }
+  ]
+}

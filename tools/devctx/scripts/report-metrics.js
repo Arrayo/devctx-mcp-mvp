@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { smartMetrics } from '../src/tools/smart-metrics.js';
 import { formatAdoptionReport } from '../src/analytics/adoption.js';
+import { formatProductQualityReport } from '../src/analytics/product-quality.js';
 
 const requireValue = (argv, index, flag) => {
   const value = argv[index + 1];
@@ -61,6 +62,7 @@ export const createReport = async (options) => {
     invalidLines: result.invalidLines,
     summary: result.summary,
     adoption: result.adoption,
+    productQuality: result.productQuality,
   };
 };
 
@@ -97,6 +99,10 @@ const printHuman = (report) => {
   
   if (report.adoption) {
     console.log(formatAdoptionReport(report.adoption));
+  }
+
+  if (report.productQuality?.turnsMeasured > 0) {
+    console.log(formatProductQualityReport(report.productQuality));
   }
 };
 

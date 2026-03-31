@@ -363,7 +363,7 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - Token usage unchanged
 - No harm done (MCP is passive)
 
-**You can check:** `npm run report:metrics` shows actual tool usage.
+**You can check:** `npm run report:metrics` shows actual tool usage and measured `smart_turn` quality signals.
 
 ### What "Better Context" Means
 
@@ -1252,9 +1252,12 @@ Runs all verification suites:
 - 14 feature verifications
 - Synthetic corpus evaluation
 - Real project evaluation
+- Orchestration regression benchmark
 - Production metrics report
 
-Takes 2-3 minutes. See [Benchmark Documentation](./docs/verification/benchmark.md) for details.
+Takes 3-4 minutes. See [Benchmark Documentation](./docs/verification/benchmark.md) for details.
+
+Release gating for orchestration quality is also available with `npm run benchmark:orchestration:release`, and `npm publish` now blocks on that gate via `prepublishOnly`.
 
 ### Check it's working
 

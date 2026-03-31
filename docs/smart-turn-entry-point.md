@@ -53,6 +53,7 @@ Agent: "Ah, I was checking validateToken() in src/auth.js. Let me continue there
 - ✅ Next step to take
 - ✅ Blockers and unresolved questions
 - ✅ A lightweight refreshed context preview for the current prompt when the task is meaningful
+- ✅ A normalized `recommendedPath` that tells clients which devctx tools should come next
 
 **What does NOT get recovered:**
 - ❌ Full conversation transcript
@@ -72,6 +73,7 @@ Agent: "Ah, I was checking validateToken() in src/auth.js. Let me continue there
 - What's the **current status**?
 - What's the **next step**?
 - When `ensureSession=true`, whether the current prompt is mismatched enough to require a **fresh isolated session**
+- What the **next recommended devctx actions** are for this exact start state
 
 **Example:**
 ```javascript
@@ -88,6 +90,22 @@ smart_turn({ phase: 'start', userPrompt: 'Document the wrapper onboarding flow',
 // → Returns: Creates a fresh planning session instead of reusing unrelated task state
 ```
 
+**Normalized guidance example:**
+```javascript
+smart_turn({ phase: 'start', prompt: 'Fix the token error in loginHandler', ensureSession: true })
+// → Returns:
+// {
+//   recommendedPath: {
+//     mode: 'guided_refresh',
+//     nextTools: ['smart_read', 'smart_turn'],
+//     steps: [
+//       { tool: 'smart_read', instruction: 'Start from refreshedContext.topFiles...' },
+//       { tool: 'smart_turn', instruction: 'Checkpoint with smart_turn(end, event=milestone)...' }
+//     ]
+//   }
+// }
+```
+
 ---
 
 ### 3. Repository Safety Check
@@ -98,7 +116,9 @@ smart_turn({ phase: 'start', userPrompt: 'Document the wrapper onboarding flow',
 - Repo is in clean state
 - If repo safety fails, context mutations stay blocked across checkpoints, workflow tracking, and hook turn state
 - `smart_turn(start/end)` now exposes `mutationSafety = { blocked, blockedBy, stateDbPath, recommendedActions, message }`
+- `smart_turn(start/end)` now also exposes `recommendedPath = { mode, nextTools, steps, ... }`
 - Claude hooks and headless wrappers can surface `recommendedActions` directly in injected context so the agent sees concrete remediation steps
+- Claude hooks and headless wrappers can also surface `recommendedPath.nextTools` and the first recommended step directly in their injected context
 
 **Example:**
 ```javascript

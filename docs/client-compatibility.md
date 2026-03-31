@@ -16,6 +16,7 @@ This document provides detailed information about each client's capabilities, in
 | **Native Hooks** | ❌ No | ✅ SessionStart, PostToolUse, Stop | ❌ No | ❌ No |
 | **Task Checkpoints** | ✅ `smart_turn` | ✅ `smart_turn` + hooks | ✅ `smart_turn` | ✅ `smart_turn` |
 | **Auto smart_turn** | ❌ Agent decides | ⚠️ Via hooks (opt-in) | ❌ Agent decides | ❌ Agent decides |
+| **Blocked-State Remediation** | ✅ Guided via rules | ✅ Guided via hooks + rules | ✅ Guided via `AGENTS.md` | ✅ Guided via `AGENTS.md` |
 | **Node 22+ (SQLite)** | ✅ Recommended | ✅ Recommended | ✅ Recommended | ✅ Recommended |
 | **Node 18-20 Fallback** | ⚠️ Metrics only | ⚠️ Metrics only | ⚠️ Metrics only | ⚠️ Metrics only |
 
@@ -49,6 +50,7 @@ This document provides detailed information about each client's capabilities, in
 - ✅ Agent sees base rule + profile when relevant
 - ✅ Low fixed context cost (150 tokens base + 120 tokens profile when needed)
 - ✅ Full `smart_turn` support for session persistence
+- ✅ Generated rules now surface `mutationSafety` / `recommendedActions`
 
 **Installation:**
 ```bash
@@ -70,6 +72,7 @@ npx smart-context-init --target . --clients cursor
 - Agent decides when to use devctx tools
 - Conditional profiles activate based on file globs
 - `smart_turn` requires agent to call it (not automatic)
+- Blocked-state remediation is still guided, not enforced
 
 **Best practices:**
 - Use Agent mode (not Ask mode)
@@ -101,6 +104,7 @@ npx smart-context-init --target . --clients cursor
 - ✅ Can auto-checkpoint after significant tool use
 - ✅ Full `smart_turn` support for session persistence
 - ✅ Agent rules in `CLAUDE.md`
+- ✅ Hooks and rules can surface `mutationSafety.recommendedActions`
 
 **Installation:**
 ```bash
@@ -187,6 +191,7 @@ npx smart-context-init --target . --clients claude
 - ✅ Full MCP support
 - ✅ Agent rules in `AGENTS.md`
 - ✅ `smart_turn` support for session persistence
+- ✅ Generated rules surface `mutationSafety`, `blockedBy`, and `recommendedActions`
 - ✅ Lightweight (no conditional rules, no hooks)
 - ✅ Fast startup
 
@@ -209,6 +214,7 @@ npx smart-context-init --target . --clients codex
 - Agent decides when to use devctx tools
 - No conditional rules (all rules always visible)
 - No hooks (agent must call `smart_turn` manually)
+- Generated rules now tell the agent how to react to blocked persistence/remediation states
 
 **Best practices:**
 - Use for medium-sized tasks
@@ -219,7 +225,7 @@ npx smart-context-init --target . --clients codex
 **Limitations:**
 - No conditional rules (all rules always active)
 - No hooks (can't auto-trigger `smart_turn`)
-- Agent must decide to use `smart_turn` based on rules
+- Agent must still decide to use `smart_turn` based on rules
 
 ---
 
@@ -242,6 +248,7 @@ npx smart-context-init --target . --clients codex
 - ✅ Full MCP support
 - ✅ Agent rules in `AGENTS.md`
 - ✅ `smart_turn` support for session persistence
+- ✅ Generated rules surface `mutationSafety`, `blockedBy`, and `recommendedActions`
 - ✅ Lightweight (no conditional rules, no hooks)
 - ✅ Fast startup
 
@@ -264,6 +271,7 @@ npx smart-context-init --target . --clients qwen
 - Agent decides when to use devctx tools
 - No conditional rules (all rules always visible)
 - No hooks (agent must call `smart_turn` manually)
+- Generated rules now tell the agent how to react to blocked persistence/remediation states
 
 **Best practices:**
 - Use for medium-sized tasks
@@ -274,7 +282,7 @@ npx smart-context-init --target . --clients qwen
 **Limitations:**
 - No conditional rules (all rules always active)
 - No hooks (can't auto-trigger `smart_turn`)
-- Agent must decide to use `smart_turn` based on rules
+- Agent must still decide to use `smart_turn` based on rules
 
 ---
 
@@ -314,6 +322,23 @@ npx smart-context-init --target . --clients qwen
 - User prompts verbatim
 
 **Key insight:** Claude Desktop can auto-trigger `smart_turn` via hooks (closest to automatic).
+
+### Blocked-State Remediation
+
+| Client | `mutationSafety` surfacing | `recommendedActions` guidance | Enforcement |
+|--------|----------------------------|-------------------------------|-------------|
+| Cursor | ✅ Via generated rules | ✅ Via generated rules | ❌ Agent-mediated |
+| Claude Desktop | ✅ Via hooks + `CLAUDE.md` | ✅ Via hooks + `CLAUDE.md` | ❌ Agent-mediated |
+| Codex CLI | ✅ Via `AGENTS.md` | ✅ Via `AGENTS.md` | ❌ Agent-mediated |
+| Qwen Code | ✅ Via `AGENTS.md` | ✅ Via `AGENTS.md` | ❌ Agent-mediated |
+
+**What the generated guidance now standardizes:**
+- start non-trivial tasks with `smart_turn(start, userPrompt, ensureSession=true)`
+- treat `mutationSafety.blocked` as a stop signal for write-heavy work
+- surface `blockedBy` and follow `recommendedActions`
+- use `workflow` / continuity fields as the current task state
+
+**Key insight:** client integration is now more consistent, but still guidance-driven outside Claude hooks.
 
 ---
 
@@ -493,6 +518,7 @@ npm run report:metrics
 - ✅ Full MCP support
 - ✅ Agent rules in `AGENTS.md`
 - ✅ Full `smart_turn` support
+- ✅ Surface blocked-state remediation in generated rules
 - ✅ Lightweight and fast
 
 **Cannot do:**
@@ -508,6 +534,7 @@ npm run report:metrics
 - ✅ Full MCP support
 - ✅ Agent rules in `AGENTS.md`
 - ✅ Full `smart_turn` support
+- ✅ Surface blocked-state remediation in generated rules
 - ✅ Lightweight and fast
 
 **Cannot do:**

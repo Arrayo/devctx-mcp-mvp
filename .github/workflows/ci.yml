@@ -32,3 +32,6 @@ jobs:
       - name: Audit
         if: matrix.node-version == 22
         run: npm audit --audit-level=high || true
+      - name: Orchestration Release Gate
+        if: matrix.node-version == 22
+        run: npm run benchmark:orchestration:release

@@ -43,6 +43,7 @@ test('claude UserPromptSubmit hook rehydrates context and tracks the turn in SQL
 
   assert.ok(response?.hookSpecificOutput?.additionalContext);
   assert.match(response.hookSpecificOutput.additionalContext, /devctx/i);
+  assert.match(response.hookSpecificOutput.additionalContext, /next tools:/i);
 
   const state = await getHookTurnState({
     hookKey: 'claude:main:claude-hook-user-prompt',
@@ -78,6 +79,7 @@ test('claude UserPromptSubmit hook does not persist hook state when repo safety 
 
     assert.match(response?.hookSpecificOutput?.additionalContext ?? '', /context writes are blocked/i);
     assert.match(response?.hookSpecificOutput?.additionalContext ?? '', /fix: /i);
+    assert.match(response?.hookSpecificOutput?.additionalContext ?? '', /next tools:/i);
 
     const state = await getHookTurnState({
       hookKey: 'claude:main:claude-hook-blocked',

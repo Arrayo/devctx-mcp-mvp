@@ -14,7 +14,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
 console.log('🚀 Running comprehensive benchmark...\n');
-console.log('This will take 2-3 minutes.\n');
+console.log('This will take 3-4 minutes.\n');
 
 const results = {
   timestamp: new Date().toISOString(),
@@ -89,6 +89,13 @@ const suite4 = runCommand(
   'Suite 4: Self-Evaluation (Real Project)',
   'node',
   ['./evals/harness.js', '--root=../..', '--corpus=./evals/corpus/self-tasks.json']
+);
+
+// Suite 5: Orchestration Regression Benchmark
+const suite5 = runCommand(
+  'Suite 5: Orchestration Regression Benchmark',
+  'node',
+  ['./evals/orchestration-benchmark.js', '--baseline=./evals/orchestration-release-baseline.json']
 );
 
 // Generate summary

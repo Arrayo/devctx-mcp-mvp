@@ -6,6 +6,8 @@ import {
   getActiveWorkflowForSession,
   isWorkflowTrackingEnabled,
 } from '../workflow-tracker.js';
+import { persistMetrics } from '../metrics.js';
+import { PRODUCT_QUALITY_ANALYTICS_KIND } from '../analytics/product-quality.js';
 import { smartContext } from './smart-context.js';
 import { smartMetrics } from './smart-metrics.js';
 import { smartSummary } from './smart-summary.js';
@@ -122,6 +124,12 @@ const buildMutationSafety = (repoSafety) => {
       : `Project-local context writes are allowed for ${stateDbPath}.`,
   };
 };
+
+const buildRecommendedStep = (tool, instruction, priority = 'recommended') => ({
+  tool,
+  instruction,
+  priority,
+});
 
 const classifyContinuity = ({ prompt, summaryResult }) => {
   if (!summaryResult?.found) {
@@ -274,6 +282,169 @@ const shouldRefreshContext = ({ prompt, ensureSession, summaryResult, continuity
     || ['possible_shift', 'context_mismatch'].includes(continuity?.state)
   );
 
+const buildStartRecommendedPath = ({
+  prompt,
+  ensureSession,
+  summaryResult,
+  continuity,
+  refreshedContext,
+  mutationSafety,
+  autoCreated,
+  isolatedSession,
+}) => {
+  const nextTools = [];
+  const steps = [];
+
+  if (mutationSafety?.blocked) {
+    nextTools.push('repo_safety', 'smart_search', 'smart_read');
+    steps.push(buildRecommendedStep(
+      'repo_safety',
+      'Pause persisted-write workflows, surface blockedBy, and follow recommendedActions before retrying checkpoints or workflow tracking.',
+      'required',
+    ));
+    steps.push(buildRecommendedStep(
+      'smart_search',
+      'Continue with read-only exploration until repo safety is fixed.',
+      'recommended',
+    ));
+  } else if (refreshedContext?.topFiles?.length) {
+    nextTools.push('smart_read', 'smart_turn');
+    steps.push(buildRecommendedStep(
+      'smart_read',
+      'Start from refreshedContext.topFiles with smart_read(outline|signatures|symbol) before any full reads.',
+    ));
+  } else if (hasMeaningfulPrompt(prompt)) {
+    nextTools.push('smart_context', 'smart_read', 'smart_turn');
+    steps.push(buildRecommendedStep(
+      'smart_context',
+      'Build focused multi-file context with smart_context(...) or smart_search(intent=...) before opening more files.',
+    ));
+    steps.push(buildRecommendedStep(
+      'smart_read',
+      'Use smart_read(outline|signatures|symbol) as the default follow-up read path.',
+    ));
+  } else {
+    nextTools.push('smart_search', 'smart_read');
+    steps.push(buildRecommendedStep(
+      'smart_search',
+      'Stay lightweight: only use devctx search/read if the task grows beyond a trivial lookup.',
+    ));
+  }
+
+  if (summaryResult?.ambiguous && summaryResult?.recommendedSessionId) {
+    nextTools.unshift('smart_turn');
+    steps.unshift(buildRecommendedStep(
+      'smart_turn',
+      `Reuse or pass sessionId=${summaryResult.recommendedSessionId} if you want to resume the recommended persisted session explicitly.`,
+      'required',
+    ));
+  }
+
+  if (!mutationSafety?.blocked) {
+    nextTools.push('smart_turn');
+    steps.push(buildRecommendedStep(
+      'smart_turn',
+      'Checkpoint with smart_turn(end, event=milestone) after the first meaningful progress point.',
+    ));
+  }
+
+  return {
+    phase: 'start',
+    mode: mutationSafety?.blocked
+      ? 'blocked_guided'
+      : refreshedContext
+        ? 'guided_refresh'
+        : hasMeaningfulPrompt(prompt)
+          ? 'guided_context'
+          : 'lightweight',
+    contextSource: refreshedContext
+      ? 'refreshed_context'
+      : continuity?.shouldReuseContext
+        ? 'persisted_summary'
+        : 'direct_prompt',
+    continuityState: continuity?.state ?? null,
+    ensureSessionRecommended: Boolean(hasMeaningfulPrompt(prompt) && (ensureSession || !summaryResult?.found)),
+    autoCreated,
+    isolatedSession,
+    nextTools: [...new Set(nextTools)],
+    steps,
+  };
+};
+
+const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow }) => {
+  const nextTools = [];
+  const steps = [];
+
+  if (mutationSafety?.blocked) {
+    nextTools.push('repo_safety', 'smart_search', 'smart_read');
+    steps.push(buildRecommendedStep(
+      'repo_safety',
+      'Fix repo safety before expecting checkpoints, workflow tracking, or hook state writes to persist.',
+      'required',
+    ));
+  } else if (checkpoint?.skipped) {
+    nextTools.push('smart_turn');
+    steps.push(buildRecommendedStep(
+      'smart_turn',
+      'No durable checkpoint was written; keep working and call smart_turn(end, event=milestone) once you have a concrete milestone or next step.',
+      'required',
+    ));
+  } else {
+    nextTools.push('smart_turn');
+    steps.push(buildRecommendedStep(
+      'smart_turn',
+      'On the next substantial prompt, restart with smart_turn(start, prompt, ensureSession=true) to reuse this checkpoint cleanly.',
+    ));
+  }
+
+  if (workflow?.ended) {
+    nextTools.push('smart_turn');
+    steps.push(buildRecommendedStep(
+      'smart_turn',
+      'This workflow is closed; start a fresh turn for the next substantial task boundary.',
+    ));
+  }
+
+  return {
+    phase: 'end',
+    mode: mutationSafety?.blocked
+      ? 'blocked_guided'
+      : checkpoint?.skipped
+        ? 'continue_until_milestone'
+        : 'checkpointed',
+    checkpointEvent: event,
+    nextTools: [...new Set(nextTools)],
+    steps,
+  };
+};
+
+const persistSmartTurnQualityMetrics = async ({
+  phase,
+  sessionId,
+  target,
+  action,
+  latencyMs,
+  metadata,
+}) => {
+  await persistMetrics({
+    tool: 'smart_turn',
+    action,
+    sessionId,
+    target,
+    rawTokens: 0,
+    compressedTokens: 0,
+    savedTokens: 0,
+    savingsPct: 0,
+    latencyMs,
+    metadata: {
+      analyticsKind: PRODUCT_QUALITY_ANALYTICS_KIND,
+      phase,
+      ...metadata,
+    },
+    timestamp: new Date().toISOString(),
+  });
+};
+
 const startTurn = async ({
   sessionId,
   prompt,
@@ -283,6 +454,7 @@ const startTurn = async ({
   metricsWindow = '7d',
   latestMetrics = 5,
 } = {}) => {
+  const startTime = Date.now();
   let summaryResult = await smartSummary({
     action: 'get',
     sessionId,
@@ -379,6 +551,43 @@ const startTurn = async ({
       })
     : null;
 
+  const recommendedPath = buildStartRecommendedPath({
+    prompt,
+    ensureSession,
+    summaryResult,
+    continuity,
+    refreshedContext,
+    mutationSafety,
+    autoCreated,
+    isolatedSession,
+  });
+
+  await persistSmartTurnQualityMetrics({
+    phase: 'start',
+    sessionId: effectiveSessionId ?? null,
+    target: truncate(prompt, 120) || 'smart_turn:start',
+    action: 'start',
+    latencyMs: Date.now() - startTime,
+    metadata: {
+      continuityState: continuity?.state ?? null,
+      shouldReuseContext: Boolean(continuity?.shouldReuseContext),
+      sessionFound: Boolean(summaryResult.found),
+      ambiguousResume: Boolean(summaryResult.ambiguous),
+      autoCreated,
+      isolatedSession,
+      previousSessionId,
+      mutationBlocked: Boolean(mutationSafety?.blocked),
+      blockedBy: mutationSafety?.blockedBy ?? [],
+      recommendedActionsCount: mutationSafety?.recommendedActions?.length ?? 0,
+      refreshedContext: Boolean(refreshedContext),
+      refreshedTopFiles: refreshedContext?.topFiles?.length ?? 0,
+      indexRefreshed: Boolean(refreshedContext?.indexRefreshed),
+      recommendedPathMode: recommendedPath.mode,
+      nextToolsCount: recommendedPath.nextTools.length,
+      workflowEnabled: Boolean(workflow?.enabled),
+      workflowAutoTracked: Boolean(workflow?.autoTracked),
+    },
+  });
 
   return {
     phase: 'start',
@@ -398,6 +607,7 @@ const startTurn = async ({
     ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
     ...(summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
+    recommendedPath,
     message: mutationSafety?.blocked
       ? mutationSafety.message
       : summaryResult.found
@@ -418,6 +628,7 @@ const endTurn = async ({
   metricsWindow = '7d',
   latestMetrics = 5,
 } = {}) => {
+  const startTime = Date.now();
   const checkpoint = await smartSummary({
     action: 'checkpoint',
     sessionId,
@@ -469,6 +680,34 @@ const endTurn = async ({
       })
     : null;
 
+  const recommendedPath = buildEndRecommendedPath({
+    event,
+    checkpoint,
+    mutationSafety,
+    workflow,
+  });
+
+  await persistSmartTurnQualityMetrics({
+    phase: 'end',
+    sessionId: checkpoint.sessionId ?? sessionId ?? null,
+    target: event,
+    action: 'end',
+    latencyMs: Date.now() - startTime,
+    metadata: {
+      event,
+      checkpointSkipped: Boolean(checkpoint.skipped),
+      checkpointPersisted: !checkpoint.skipped && !checkpoint.blocked,
+      mutationBlocked: Boolean(mutationSafety?.blocked),
+      blockedBy: mutationSafety?.blockedBy ?? [],
+      recommendedActionsCount: mutationSafety?.recommendedActions?.length ?? 0,
+      recommendedPathMode: recommendedPath.mode,
+      workflowEnabled: Boolean(workflow?.enabled),
+      workflowEnded: Boolean(workflow?.ended),
+      checkpointScore: checkpoint.checkpoint?.score ?? null,
+      checkpointThreshold: checkpoint.checkpoint?.threshold ?? null,
+    },
+  });
+
   return {
     phase: 'end',
     sessionId: checkpoint.sessionId ?? sessionId ?? null,
@@ -478,6 +717,7 @@ const endTurn = async ({
     repoSafety: checkpoint.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(checkpoint.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
+    recommendedPath,
     message: mutationSafety?.blocked ? mutationSafety.message : checkpoint.message,
   };
 };

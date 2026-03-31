@@ -15,6 +15,7 @@ import {
   resolveMetricsInput,
 } from '../metrics.js';
 import { analyzeAdoption } from '../analytics/adoption.js';
+import { analyzeProductQuality } from '../analytics/product-quality.js';
 
 const WINDOW_MS = {
   '24h': 24 * 60 * 60 * 1000,
@@ -202,6 +203,7 @@ export const smartMetrics = async ({
       invalidLines,
       summary: aggregateMetrics(filteredEntries),
       adoption,
+      productQuality: analyzeProductQuality(filteredEntries),
       latestEntries: buildLatestEntries(filteredEntries, latest),
     };
   }
@@ -237,6 +239,7 @@ export const smartMetrics = async ({
     invalidLines,
     summary: aggregateMetrics(entries),
     adoption,
+    productQuality: analyzeProductQuality(entries),
     latestEntries: buildLatestEntries(entries, latest),
   };
 };

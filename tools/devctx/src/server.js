@@ -469,7 +469,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_turn',
-    'Orchestrate start/end of a meaningful agent turn so context usage becomes almost mandatory with low token overhead. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary and can optionally include compact metrics. Use this instead of manually chaining `smart_summary(get)` and `smart_summary(checkpoint)` when you want a single context-first turn workflow.',
+    'Orchestrate start/end of a meaningful agent turn so context usage becomes almost mandatory with low token overhead. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, returns `recommendedPath` guidance for the next safe devctx actions, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary, returns follow-up `recommendedPath` guidance, and can optionally include compact metrics. Both phases expose `mutationSafety` when repo-safety blocks persisted writes. Use this instead of manually chaining `smart_summary(get)` and `smart_summary(checkpoint)` when you want a single context-first turn workflow.',
     {
       phase: z.enum(['start', 'end']),
       sessionId: z.string().optional(),
@@ -513,7 +513,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_metrics',
-    'Inspect token metrics recorded in project-local SQLite storage by default. Returns aggregated totals, per-tool savings, and recent entries. Supports time windows (`24h`, `7d`, `30d`, `all`), optional tool filtering, and optional session filtering (`sessionId: "active"` resolves the current active session automatically). Pass `file` to inspect a legacy/custom JSONL file explicitly. When `.devctx/state.sqlite` is tracked or staged, reads fall back to a temporary read-only snapshot and report `sideEffectsSuppressed`; metrics writes from other tools are skipped until git hygiene is fixed.',
+    'Inspect token metrics recorded in project-local SQLite storage by default. Returns aggregated totals, per-tool savings, recent entries, adoption analysis, and `productQuality` signals measured from `smart_turn` orchestration events (continuity recovery, blocked-state remediation coverage, context-refresh signals, checkpoint persistence). Supports time windows (`24h`, `7d`, `30d`, `all`), optional tool filtering, and optional session filtering (`sessionId: "active"` resolves the current active session automatically). Pass `file` to inspect a legacy/custom JSONL file explicitly. When `.devctx/state.sqlite` is tracked or staged, reads fall back to a temporary read-only snapshot and report `sideEffectsSuppressed`; metrics writes from other tools are skipped until git hygiene is fixed.',
     {
       file: z.string().optional(),
       tool: z.string().optional(),

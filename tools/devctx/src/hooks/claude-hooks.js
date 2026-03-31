@@ -12,7 +12,7 @@ import {
 const HOOK_CLIENT = 'claude';
 const START_MAX_TOKENS = 350;
 const STOP_MAX_TOKENS = 300;
-const MAX_CONTEXT_LINES = 5;
+const MAX_CONTEXT_LINES = 7;
 const MAX_CONTEXT_CHARS = 420;
 const MAX_PROMPT_PREVIEW = 160;
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
@@ -55,6 +55,24 @@ const buildMutationSafetyActionLines = (mutationSafety) =>
     .slice(0, 2)
     .map((action) => `fix: ${truncate(action, 110)}`);
 
+const buildRecommendedPathLines = (recommendedPath, { includePath = true } = {}) => {
+  if (!recommendedPath) {
+    return [];
+  }
+
+  const lines = [];
+
+  if (Array.isArray(recommendedPath.nextTools) && recommendedPath.nextTools.length > 0) {
+    lines.push(`next tools: ${recommendedPath.nextTools.slice(0, 3).join(' -> ')}`);
+  }
+
+  if (includePath && recommendedPath.steps?.[0]?.instruction) {
+    lines.push(`path: ${truncate(recommendedPath.steps[0].instruction, 110)}`);
+  }
+
+  return lines;
+};
+
 const buildAdditionalContext = ({ result, sessionStart = false }) => {
   const lines = [];
   const repoSafety = result?.repoSafety;
@@ -74,6 +92,10 @@ const buildAdditionalContext = ({ result, sessionStart = false }) => {
       lines.push(`focus: ${truncate(summary.currentFocus, 110)}`);
     }
 
+    if (!mutationSafety?.blocked) {
+      lines.push(...buildRecommendedPathLines(result?.recommendedPath));
+    }
+
     if (summary.nextStep) {
       lines.push(`next: ${truncate(summary.nextStep, 110)}`);
     }
@@ -89,6 +111,7 @@ const buildAdditionalContext = ({ result, sessionStart = false }) => {
   if (mutationSafety?.blocked) {
     const reasons = mutationSafety.blockedBy?.join(' and ') || 'blocked';
     lines.push(`repo safety: ${mutationSafety.stateDbPath} is ${reasons}; context writes are blocked.`);
+    lines.push(...buildRecommendedPathLines(result?.recommendedPath, { includePath: false }));
     lines.push(...buildMutationSafetyActionLines(mutationSafety));
   } else if (repoSafety?.isTracked || repoSafety?.isStaged) {
     const reasons = [];

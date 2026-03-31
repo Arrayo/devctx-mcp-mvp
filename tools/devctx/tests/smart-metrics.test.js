@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { persistMetrics } from '../src/metrics.js';
 import { smartMetrics } from '../src/tools/smart-metrics.js';
+import { smartTurn } from '../src/tools/smart-turn.js';
 import { withStateDb } from '../src/storage/sqlite.js';
 import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 
@@ -119,6 +120,48 @@ test('smart_metrics - uses SQLite storage by default when no metrics file overri
     assert.strictEqual(result.summary.savedTokens, 125);
     assert.ok(result.storagePath.endsWith(path.join('.devctx', 'state.sqlite')));
     assert.ok(result.latestEntries.every((entry) => entry.sessionId === 'sqlite-session'));
+  } finally {
+    setProjectRoot(previousProjectRoot);
+    if (previousMetricsFile === undefined) {
+      delete process.env.DEVCTX_METRICS_FILE;
+    } else {
+      process.env.DEVCTX_METRICS_FILE = previousMetricsFile;
+    }
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_metrics - includes smart_turn product-quality signals emitted from real start/end turns', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-smart-turn-'));
+  const previousProjectRoot = projectRoot;
+  const previousMetricsFile = process.env.DEVCTX_METRICS_FILE;
+
+  try {
+    setProjectRoot(tmpRoot);
+    delete process.env.DEVCTX_METRICS_FILE;
+    execFileSync('git', ['init'], { cwd: tmpRoot, stdio: 'ignore' });
+
+    const start = await smartTurn({
+      phase: 'start',
+      prompt: 'Fix the login error in the auth handler and checkpoint the first milestone safely',
+      ensureSession: true,
+    });
+
+    await smartTurn({
+      phase: 'end',
+      sessionId: start.sessionId,
+      event: 'milestone',
+      update: {
+        completed: ['Fixed the login error'],
+        nextStep: 'Run the regression tests',
+      },
+    });
+
+    const result = await smartMetrics({ window: 'all', latest: 10, sessionId: start.sessionId });
+    assert.ok(result.summary.tools.some((entry) => entry.tool === 'smart_turn'));
+    assert.equal(result.productQuality.turnsMeasured, 2);
+    assert.equal(result.productQuality.continuityRecovery.startsMeasured, 1);
+    assert.equal(result.productQuality.checkpointing.persistedEnds, 1);
   } finally {
     setProjectRoot(previousProjectRoot);
     if (previousMetricsFile === undefined) {
@@ -255,6 +298,115 @@ test('smart_metrics - reports context overhead from hook and wrapper metrics met
     } else {
       process.env.DEVCTX_METRICS_FILE = previousMetricsFile;
     }
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_metrics - reports product-quality signals from smart_turn quality metadata', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-quality-'));
+  const metricsFile = path.join(tmpRoot, '.devctx', 'metrics.jsonl');
+
+  try {
+    fs.mkdirSync(path.dirname(metricsFile), { recursive: true });
+    fs.writeFileSync(
+      metricsFile,
+      [
+        {
+          tool: 'smart_turn',
+          action: 'start',
+          sessionId: 'quality-session',
+          rawTokens: 0,
+          compressedTokens: 0,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'smart_turn_quality',
+            phase: 'start',
+            continuityState: 'aligned',
+            shouldReuseContext: true,
+            isolatedSession: false,
+            mutationBlocked: false,
+            recommendedActionsCount: 0,
+            refreshedContext: true,
+            refreshedTopFiles: 2,
+            indexRefreshed: true,
+          },
+          timestamp: '2026-03-28T09:00:00.000Z',
+        },
+        {
+          tool: 'smart_turn',
+          action: 'start',
+          sessionId: 'quality-session',
+          rawTokens: 0,
+          compressedTokens: 0,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'smart_turn_quality',
+            phase: 'start',
+            continuityState: 'context_mismatch',
+            shouldReuseContext: false,
+            isolatedSession: true,
+            mutationBlocked: true,
+            recommendedActionsCount: 2,
+            refreshedContext: false,
+            refreshedTopFiles: 0,
+            indexRefreshed: false,
+          },
+          timestamp: '2026-03-28T10:00:00.000Z',
+        },
+        {
+          tool: 'smart_turn',
+          action: 'end',
+          sessionId: 'quality-session',
+          rawTokens: 0,
+          compressedTokens: 0,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'smart_turn_quality',
+            phase: 'end',
+            event: 'milestone',
+            checkpointSkipped: false,
+            checkpointPersisted: true,
+            mutationBlocked: false,
+            recommendedActionsCount: 0,
+          },
+          timestamp: '2026-03-28T11:00:00.000Z',
+        },
+        {
+          tool: 'smart_turn',
+          action: 'end',
+          sessionId: 'quality-session',
+          rawTokens: 0,
+          compressedTokens: 0,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'smart_turn_quality',
+            phase: 'end',
+            event: 'file_change',
+            checkpointSkipped: true,
+            checkpointPersisted: false,
+            mutationBlocked: true,
+            recommendedActionsCount: 1,
+          },
+          timestamp: '2026-03-28T12:00:00.000Z',
+        },
+      ].map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+      'utf8',
+    );
+
+    const result = await smartMetrics({ file: metricsFile, tool: 'smart_turn', window: 'all', latest: 10 });
+
+    assert.strictEqual(result.summary.count, 4);
+    assert.strictEqual(result.productQuality.turnsMeasured, 4);
+    assert.strictEqual(result.productQuality.continuityRecovery.startsMeasured, 2);
+    assert.strictEqual(result.productQuality.continuityRecovery.alignedStarts, 1);
+    assert.strictEqual(result.productQuality.continuityRecovery.reusableStarts, 1);
+    assert.strictEqual(result.productQuality.blockedState.turnsBlocked, 2);
+    assert.strictEqual(result.productQuality.blockedState.blockedWithRecommendedActions, 2);
+    assert.strictEqual(result.productQuality.contextRefresh.refreshedStarts, 1);
+    assert.strictEqual(result.productQuality.contextRefresh.refreshedWithTopFiles, 1);
+    assert.strictEqual(result.productQuality.checkpointing.persistedEnds, 1);
+    assert.strictEqual(result.productQuality.checkpointing.skippedEnds, 1);
+  } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
