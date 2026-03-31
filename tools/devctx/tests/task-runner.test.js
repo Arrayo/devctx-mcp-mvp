@@ -1,16 +1,20 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runTaskRunner } from '../src/task-runner.js';
+import { initializeStateDb } from '../src/storage/sqlite.js';
 import { smartSummary } from '../src/tools/smart-summary.js';
 import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
 import { buildIndex, persistIndex } from '../src/index.js';
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const originalProjectRoot = projectRoot;
 let taskRunnerRoot = null;
@@ -35,6 +39,29 @@ after(() => {
   }
 });
 
+const waitForLockReady = async ({ child, signalPath }) => {
+  let stderr = '';
+
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (fs.existsSync(signalPath)) {
+      return;
+    }
+
+    const exitCode = child.exitCode;
+    if (exitCode !== null) {
+      throw new Error(`lock holder exited before signaling readiness (code ${exitCode}): ${stderr || 'no stderr'}`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+
+  throw new Error(`lock holder did not signal readiness before timeout: ${stderr || 'no stderr'}`);
+};
+
 test('task runner review command uses workflow prompt and wrapper in dry-run mode', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const result = await runTaskRunner({
     commandName: 'review',
@@ -49,6 +76,7 @@ test('task runner review command uses workflow prompt and wrapper in dry-run mod
   assert.equal(result.workflowPolicy.policyMode, 'review_guided');
   assert.equal(result.workflowPolicy.preflight.tool, 'smart_context');
   assert.ok(Array.isArray(result.workflowPolicy.preflight.topFiles));
+  assert.doesNotMatch(result.prompt, /\[object Object\]/);
   assert.match(result.wrappedPrompt, /next tools:/i);
   assert.ok(result.sessionId);
 
@@ -134,6 +162,71 @@ test('task runner continue command reuses persisted next-step guidance when resu
   assert.match(result.prompt, /loginHandler/i);
 
   await smartSummary({ action: 'reset', sessionId: 'task-runner-continue' });
+});
+
+test('task runner review dry-run tolerates transient SQLite locks', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const filePath = path.join(taskRunnerRoot, '.devctx', 'state.sqlite');
+  const lockHolderScript = path.join(taskRunnerRoot, 'lock-holder.mjs');
+  const lockSignalPath = path.join(taskRunnerRoot, '.devctx', 'lock-holder.ready');
+  const sqliteModulePath = path.resolve(__dirname, '..', 'src', 'storage', 'sqlite.js').replace(/\\/g, '\\\\');
+
+  fs.writeFileSync(lockHolderScript, `
+    import { openStateDb } from '${sqliteModulePath}';
+    import fs from 'node:fs';
+
+    const [filePath, holdMs, signalPath] = process.argv.slice(2);
+    const db = await openStateDb({ filePath });
+    db.exec('BEGIN IMMEDIATE');
+    db.prepare("INSERT INTO meta(key, value) VALUES('lock_probe', 'held') ON CONFLICT(key) DO UPDATE SET value = 'held'").run();
+    fs.writeFileSync(signalPath, 'locked\\n', 'utf8');
+    setTimeout(() => {
+      try {
+        db.exec('COMMIT');
+      } finally {
+        try {
+          fs.unlinkSync(signalPath);
+        } catch {}
+        db.close();
+        process.exit(0);
+      }
+    }, Number(holdMs) || 250);
+  `, 'utf8');
+
+  await initializeStateDb({ filePath });
+
+  const child = spawn(process.execPath, [lockHolderScript, filePath, '250', lockSignalPath], {
+    cwd: taskRunnerRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  try {
+    await waitForLockReady({ child, signalPath: lockSignalPath });
+
+    const result = await runTaskRunner({
+      commandName: 'review',
+      client: 'cursor',
+      prompt: 'Review the auth changes while another short-lived writer is active',
+      dryRun: true,
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.command, 'review');
+
+    if (child.exitCode === null) {
+      await once(child, 'exit');
+    }
+    await smartSummary({ action: 'reset', sessionId: result.sessionId });
+  } finally {
+    try {
+      child.kill('SIGTERM');
+    } catch {}
+    try {
+      fs.unlinkSync(lockSignalPath);
+    } catch {}
+    try {
+      fs.unlinkSync(lockHolderScript);
+    } catch {}
+  }
 });
 
 test('task runner pauses workflow execution and runs doctor when repo safety blocks persistence', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {

@@ -2,12 +2,16 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { projectRoot } from '../utils/runtime-config.js';
 
 export const STATE_DB_FILENAME = 'state.sqlite';
 export const SQLITE_SCHEMA_VERSION = 5;
 export const ACTIVE_SESSION_SCOPE = 'project';
 export const STATE_DB_SOFT_MAX_BYTES = 32 * 1024 * 1024;
+const STATE_DB_BUSY_TIMEOUT_MS = 1000;
+const STATE_DB_LOCK_RETRY_ATTEMPTS = 3;
+const STATE_DB_LOCK_RETRY_DELAY_MS = 75;
 export const EXPECTED_TABLES = [
   'active_session',
   'context_access',
@@ -444,7 +448,32 @@ export const getMeta = (db, key) => {
 const getSchemaVersion = (db) => Number(getMeta(db, 'schema_version') ?? 0);
 const VALID_STATUSES = new Set(['planning', 'in_progress', 'blocked', 'completed']);
 
-const applyPragmas = (db) => {
+const isStateDbLockError = (error) =>
+  /database is locked|database table is locked|SQLITE_BUSY|SQLITE_LOCKED/i.test(String(error?.message ?? error ?? ''));
+
+const withStateDbLockRetry = async (operation) => {
+  for (let attempt = 1; attempt <= STATE_DB_LOCK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isStateDbLockError(error) || attempt === STATE_DB_LOCK_RETRY_ATTEMPTS) {
+        throw error;
+      }
+
+      await delay(STATE_DB_LOCK_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  throw new Error('SQLite lock retry exhausted unexpectedly.');
+};
+
+const applyPragmas = (db, { readOnly = false } = {}) => {
+  db.exec(`PRAGMA busy_timeout = ${STATE_DB_BUSY_TIMEOUT_MS}`);
+
+  if (readOnly) {
+    return;
+  }
+
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA synchronous = NORMAL');
@@ -505,17 +534,28 @@ export const listStateTables = (db) =>
 
 export const openStateDb = async ({ filePath = getStateDbPath(), readOnly = false } = {}) => {
   try {
-    const { DatabaseSync } = await loadSqliteModule();
-    if (!readOnly) {
-      ensureStateDir(filePath);
-    }
+    return await withStateDbLockRetry(async () => {
+      const { DatabaseSync } = await loadSqliteModule();
+      if (!readOnly) {
+        ensureStateDir(filePath);
+      }
 
-    const db = new DatabaseSync(filePath, readOnly ? { readOnly: true } : {});
-    if (!readOnly) {
-      applyPragmas(db);
-      runStateMigrations(db);
-    }
-    return db;
+      let db = null;
+
+      try {
+        db = new DatabaseSync(filePath, readOnly ? { readOnly: true } : {});
+        applyPragmas(db, { readOnly });
+        if (!readOnly) {
+          runStateMigrations(db);
+        }
+        return db;
+      } catch (error) {
+        try {
+          db?.close();
+        } catch {}
+        throw error;
+      }
+    });
   } catch (error) {
     throw enrichStateDbError(error, { filePath, readOnly });
   }

@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { persistMetrics } from './metrics.js';
 import { countTokens } from './tokenCounter.js';
 import { TASK_RUNNER_QUALITY_ANALYTICS_KIND } from './analytics/product-quality.js';
@@ -22,6 +23,8 @@ import {
 
 const START_MAX_TOKENS = 350;
 const END_MAX_TOKENS = 350;
+const RUNNER_LOCK_RETRY_ATTEMPTS = 3;
+const RUNNER_LOCK_RETRY_DELAY_MS = 100;
 
 const normalizeWhitespace = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 const truncate = (value, maxLength = 160) => {
@@ -39,6 +42,13 @@ const truncate = (value, maxLength = 160) => {
 
 const asArray = (value) => Array.isArray(value) ? value : [];
 const uniqueCompact = (values) => [...new Set(asArray(values).map((value) => normalizeWhitespace(value)).filter(Boolean))];
+const extractContextTopFiles = (topFiles) => uniqueCompact(asArray(topFiles).map((item) => {
+  if (typeof item === 'string') {
+    return item;
+  }
+
+  return item?.file ?? item?.path ?? '';
+})).slice(0, 3);
 
 const extractPreflightTopFiles = (preflightResult) => {
   if (!preflightResult) {
@@ -50,12 +60,7 @@ const extractPreflightTopFiles = (preflightResult) => {
   }
 
   if (preflightResult.tool === 'smart_search') {
-    return uniqueCompact(asArray(preflightResult.result?.topFiles).map((item) => {
-      if (typeof item === 'string') {
-        return item;
-      }
-      return item?.file ?? item?.path ?? '';
-    })).slice(0, 3);
+    return extractContextTopFiles(preflightResult.result?.topFiles);
   }
 
   return [];
@@ -100,7 +105,7 @@ const buildPreflightTask = ({ workflowProfile, prompt, startResult }) => {
   const normalizedPrompt = normalizeWhitespace(prompt);
   const persistedNextStep = normalizeWhitespace(startResult?.summary?.nextStep);
   const currentFocus = normalizeWhitespace(startResult?.summary?.currentFocus);
-  const refreshedTopFiles = uniqueCompact(startResult?.refreshedContext?.topFiles).slice(0, 3);
+  const refreshedTopFiles = extractContextTopFiles(startResult?.refreshedContext?.topFiles);
 
   if (workflowProfile.commandName === 'continue' || workflowProfile.commandName === 'resume') {
     if (persistedNextStep) {
@@ -178,7 +183,7 @@ const buildContinuityGuidance = ({ startResult }) => {
   ];
   const nextStep = normalizeWhitespace(startResult?.summary?.nextStep);
   const currentFocus = normalizeWhitespace(startResult?.summary?.currentFocus);
-  const refreshedTopFiles = uniqueCompact(startResult?.refreshedContext?.topFiles).slice(0, 3);
+  const refreshedTopFiles = extractContextTopFiles(startResult?.refreshedContext?.topFiles);
   const recommendedNextTools = asArray(startResult?.recommendedPath?.nextTools)
     .map((tool) => normalizeWhitespace(tool))
     .filter(Boolean)
@@ -252,6 +257,29 @@ const buildWorkflowPolicyPayload = ({ commandName, workflowProfile, preflightSum
   checkpointStrategy: workflowProfile.checkpointStrategy,
   preflight: preflightSummary,
 });
+
+const isRetriableLockError = (error) => {
+  const issue = error?.storageHealth?.issue ?? error?.cause?.storageHealth?.issue ?? null;
+  const retriable = error?.storageHealth?.retriable ?? error?.cause?.storageHealth?.retriable ?? false;
+  const message = String(error?.message ?? error?.cause?.message ?? error ?? '');
+  return retriable || issue === 'locked' || /database is locked|database table is locked|SQLITE_BUSY|SQLITE_LOCKED/i.test(message);
+};
+
+const withRunnerLockRetry = async (operation) => {
+  for (let attempt = 1; attempt <= RUNNER_LOCK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isRetriableLockError(error) || attempt === RUNNER_LOCK_RETRY_ATTEMPTS) {
+        throw error;
+      }
+
+      await delay(RUNNER_LOCK_RETRY_DELAY_MS * attempt);
+    }
+  }
+
+  throw new Error('Task runner lock retry exhausted unexpectedly.');
+};
 
 const recordRunnerMetrics = async ({
   commandName,
@@ -330,13 +358,13 @@ const runWorkflowCommand = async ({
   });
   const workflowProfile = buildWorkflowPolicyProfile({ commandName });
 
-  const start = await smartTurn({
+  const start = await withRunnerLockRetry(() => smartTurn({
     phase: 'start',
     sessionId,
     prompt: requestedPrompt,
     ensureSession: true,
     maxTokens: START_MAX_TOKENS,
-  });
+  }));
 
   const gate = evaluateRunnerGate({ startResult: start });
   let preflightSummary = null;
@@ -363,7 +391,7 @@ const runWorkflowCommand = async ({
   });
 
   if (gate.requiresDoctor && !allowDegraded) {
-    const doctor = await smartDoctor();
+    const doctor = await withRunnerLockRetry(() => smartDoctor());
     const blockedResult = buildRunnerBlockedResult({
       commandName,
       client,
@@ -423,7 +451,7 @@ const runWorkflowCommand = async ({
 };
 
 const runDoctorCommand = async ({ verifyIntegrity = true, client }) => {
-  const result = await smartDoctor({ verifyIntegrity });
+  const result = await withRunnerLockRetry(() => smartDoctor({ verifyIntegrity }));
   await recordRunnerMetrics({
     commandName: 'doctor',
     client,
@@ -436,7 +464,7 @@ const runDoctorCommand = async ({ verifyIntegrity = true, client }) => {
 };
 
 const runStatusCommand = async ({ format = 'compact', maxItems = 10, client }) => {
-  const result = await smartStatus({ format, maxItems });
+  const result = await withRunnerLockRetry(() => smartStatus({ format, maxItems }));
   await recordRunnerMetrics({
     commandName: 'status',
     client,
@@ -451,13 +479,13 @@ const runCheckpointCommand = async ({
   event = 'milestone',
   update = {},
 }) => {
-  const result = await smartTurn({
+  const result = await withRunnerLockRetry(() => smartTurn({
     phase: 'end',
     sessionId,
     event,
     update,
     maxTokens: END_MAX_TOKENS,
-  });
+  }));
   await recordRunnerMetrics({
     commandName: 'checkpoint',
     client,
