@@ -1106,8 +1106,37 @@ export const smartSummary = async ({
   keepLatestMetrics,
   vacuum,
   apply,
+  goal,
+  status,
+  nextStep,
+  currentFocus,
+  whyBlocked,
+  pinnedContext,
+  unresolvedQuestions,
+  blockers,
+  completed,
+  decisions,
+  touchedFiles,
 } = {}) => {
   const startTime = Date.now();
+  
+  if (!update && (goal || status || nextStep || currentFocus || whyBlocked || 
+      pinnedContext || unresolvedQuestions || blockers || completed || decisions || touchedFiles)) {
+    update = {
+      goal,
+      status,
+      nextStep,
+      currentFocus,
+      whyBlocked,
+      pinnedContext,
+      unresolvedQuestions,
+      blockers,
+      completed,
+      decisions,
+      touchedFiles,
+    };
+  }
+  
   const mutationSafety = getMutationSafetyPolicy();
   const shouldBlockWrites = SUMMARY_WRITE_ACTIONS.has(action) && mutationSafety.shouldBlock;
   const allowReadSideEffects = !mutationSafety.shouldBlock;

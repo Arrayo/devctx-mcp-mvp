@@ -10,6 +10,7 @@ import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
+import { smartEdit } from './tools/smart-edit.js';
 import { smartMetrics } from './tools/smart-metrics.js';
 import { smartTurn } from './tools/smart-turn.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
@@ -403,8 +404,19 @@ This ensures optimal performance and context recovery.`,
       keepLatestMetrics: z.number().int().min(0).max(100000).optional(),
       vacuum: z.boolean().optional(),
       apply: z.boolean().optional(),
+      goal: z.string().optional(),
+      status: z.enum(['planning', 'in_progress', 'blocked', 'completed']).optional(),
+      pinnedContext: z.array(z.string()).optional(),
+      unresolvedQuestions: z.array(z.string()).optional(),
+      currentFocus: z.string().optional(),
+      whyBlocked: z.string().optional(),
+      completed: z.array(z.string()).optional(),
+      decisions: z.array(z.string()).optional(),
+      blockers: z.array(z.string()).optional(),
+      nextStep: z.string().optional(),
+      touchedFiles: z.array(z.string()).optional(),
     },
-    async ({ action, sessionId, update, event, force, maxTokens, retentionDays, keepLatestEventsPerSession, keepLatestMetrics, vacuum, apply }) =>
+    async ({ action, sessionId, update, event, force, maxTokens, retentionDays, keepLatestEventsPerSession, keepLatestMetrics, vacuum, apply, goal, status, pinnedContext, unresolvedQuestions, currentFocus, whyBlocked, completed, decisions, blockers, nextStep, touchedFiles }) =>
       asTextResult(await smartSummary({
         action,
         sessionId,
@@ -417,6 +429,17 @@ This ensures optimal performance and context recovery.`,
         keepLatestMetrics,
         vacuum,
         apply,
+        goal,
+        status,
+        pinnedContext,
+        unresolvedQuestions,
+        currentFocus,
+        whyBlocked,
+        completed,
+        decisions,
+        blockers,
+        nextStep,
+        touchedFiles,
       })),
   );
 
@@ -428,6 +451,20 @@ This ensures optimal performance and context recovery.`,
       maxItems: z.number().int().min(1).max(50).optional(),
     },
     async ({ format, maxItems }) => asTextResult(await smartStatus({ format, maxItems })),
+  );
+
+  server.tool(
+    'smart_edit',
+    'Batch edit multiple files with pattern replacement. Supports literal string replacement or regex patterns. Use for bulk refactoring, removing patterns (comments, console.log, etc.), or renaming across files. Optional dryRun shows preview without modifying files. Returns match count and results per file.',
+    {
+      pattern: z.string(),
+      replacement: z.string(),
+      files: z.array(z.string()).min(1).max(50),
+      mode: z.enum(['literal', 'regex']).optional(),
+      dryRun: z.boolean().optional(),
+    },
+    async ({ pattern, replacement, files, mode, dryRun }) => 
+      asTextResult(await smartEdit({ pattern, replacement, files, mode, dryRun })),
   );
 
   server.tool(

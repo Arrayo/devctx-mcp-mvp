@@ -45,3 +45,9 @@ export const readTextFile = (inputPath, root = projectRoot) => {
 
   return { fullPath, content: raw.toString('utf8') };
 };
+
+export const writeTextFile = (inputPath, content, root = projectRoot) => {
+  const fullPath = resolveSafePath(inputPath, root);
+  fs.writeFileSync(fullPath, content, 'utf8');
+  return fullPath;
+};
