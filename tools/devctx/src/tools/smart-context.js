@@ -28,6 +28,7 @@ import {
   extractExpandedQueries,
   extractFallbackSearchQuery,
   extractKeywordQueries,
+  extractLiteralPatterns,
 } from '../utils/query-extraction.js';
 import {
   dedupeEvidence,
@@ -455,10 +456,12 @@ export const smartContext = async ({
     if (changed.error) diffSummary.error = changed.error;
     searchIndexFreshness = null;
   } else {
+    const literalPatterns = extractLiteralPatterns(task);
     const queries = extractSearchQueries(task);
     const expandedQueries = extractExpandedQueries(task);
     const fallbackKeywords = extractKeywordQueries(task, { allowIntentKeywords: true });
     const queryCandidates = uniqueList([
+      ...literalPatterns,
       ...expandedQueries,
       ...queries,
       ...fallbackKeywords,

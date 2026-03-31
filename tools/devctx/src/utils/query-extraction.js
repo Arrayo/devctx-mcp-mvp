@@ -153,4 +153,28 @@ export const extractSearchQueries = (task) => {
   return queries.slice(0, 3);
 };
 
+const LITERAL_PATTERN_MARKERS = [
+  { pattern: /\/\*\*/, literal: '/**' },
+  { pattern: /\/\*/, literal: '/*' },
+  { pattern: /\/\/\s*TODO/, literal: 'TODO' },
+  { pattern: /\/\/\s*FIXME/, literal: 'FIXME' },
+  { pattern: /\/\/\s*XXX/, literal: 'XXX' },
+  { pattern: /\/\/\s*HACK/, literal: 'HACK' },
+  { pattern: /console\.log/, literal: 'console.log' },
+  { pattern: /console\.error/, literal: 'console.error' },
+  { pattern: /debugger/, literal: 'debugger' },
+];
+
+export const extractLiteralPatterns = (task) => {
+  const patterns = [];
+  
+  for (const marker of LITERAL_PATTERN_MARKERS) {
+    if (marker.pattern.test(task)) {
+      patterns.push(marker.literal);
+    }
+  }
+  
+  return patterns;
+};
+
 export { extractExpandedQueries, extractFallbackSearchQuery, extractKeywordQueries };
