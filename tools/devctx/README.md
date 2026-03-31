@@ -330,14 +330,17 @@ Returns: relevant files + compressed content + symbol details + graph relationsh
 Maintain task checkpoint:
 
 ```javascript
-// Save checkpoint
+// Save checkpoint (flat API - recommended)
+{ action: 'update', goal: 'Implement OAuth', status: 'in_progress', nextStep: '...' }
+
+// Or nested format (backward compatible)
 { action: 'update', update: { goal: 'Implement OAuth', status: 'in_progress', nextStep: '...' }}
 
 // Resume task
 { action: 'get' }
 ```
 
-Stores compressed task state (~100 tokens: goal, status, decisions, blockers), not full conversation.
+Stores compressed task state (~100 tokens: goal, status, decisions, blockers), not full conversation. Supports both flat and nested parameter formats.
 
 ### smart_status
 
@@ -349,6 +352,21 @@ Display current session context:
 ```
 
 Shows goal, status, recent decisions, touched files, and progress. Updates automatically with each MCP operation.
+
+### smart_edit
+
+Batch edit multiple files:
+
+```javascript
+{
+  pattern: 'console.log',
+  replacement: 'logger.info',
+  files: ['src/a.js', 'src/b.js'],
+  mode: 'literal'  // or 'regex'
+}
+```
+
+Use `dryRun: true` for preview. Max 50 files per call.
 
 ## New Features
 

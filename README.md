@@ -668,14 +668,17 @@ These tools provide specialized capabilities for specific workflows:
 Maintain compressed task state across sessions.
 
 ```javascript
-// Save checkpoint
+// Save checkpoint (flat API - recommended)
+{ action: 'update', goal: '...', status: 'in_progress', nextStep: '...' }
+
+// Or nested format (backward compatible)
 { action: 'update', update: { goal: '...', status: 'in_progress', nextStep: '...' }}
 
 // Resume later
 { action: 'get' }
 ```
 
-Compresses task context to ~100 tokens (goal, status, decisions, blockers). Critical for long tasks.
+Compresses task context to ~100 tokens (goal, status, decisions, blockers). Critical for long tasks. Supports both flat and nested formats.
 
 ---
 
@@ -689,6 +692,23 @@ Display current session context with progress visibility.
 ```
 
 Shows goal, status, recent decisions, touched files, pinned context, and progress stats. Updates automatically with each MCP operation.
+
+---
+
+### smart_edit
+
+Batch edit multiple files with pattern replacement.
+
+```javascript
+{
+  pattern: 'console.log',
+  replacement: 'logger.info',
+  files: ['src/a.js', 'src/b.js'],
+  mode: 'literal'  // or 'regex'
+}
+```
+
+Supports `dryRun: true` for preview. Useful for bulk refactoring, removing patterns, or renaming across files.
 
 ---
 

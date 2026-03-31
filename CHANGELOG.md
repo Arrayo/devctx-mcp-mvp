@@ -2,19 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-03-31
 
 ### Added
-- **smart_status Tool:** New tool for session context visibility
+- **smart_edit Tool:** Batch file editing with pattern replacement
+  - Edit multiple files in one call with literal or regex patterns
+  - Supports `dryRun` mode for preview without modifications
+  - Returns match count and detailed results per file
+  - Use cases: bulk refactoring, removing console.log, pattern cleanup
+  - Example: Remove all `console.log` from 10 files in one call
+  - Max 50 files per call for safety
+
+- **smart_status Tool:** Session context visibility
   - Displays current session: goal, status, nextStep, currentFocus
   - Shows recent decisions, touched files, pinned context, unresolved questions
   - Progress stats: completed count, decisions count, files count
   - Two formats: `detailed` (formatted with emojis) and `compact` (minimal JSON)
   - Updates automatically with each MCP operation
   - Fallback to most recent session if no active session exists
-  - Useful for understanding current work state without modifying session
 
 ### Enhanced
+- **smart_summary Flat API:** Simplified parameter structure (backward compatible)
+  - New: `{ action: 'update', goal: '...', status: '...' }` (flat)
+  - Old: `{ action: 'update', update: { goal: '...', status: '...' } }` (nested)
+  - Both formats supported - nested takes priority if both provided
+  - No breaking changes - existing code continues to work
+  - Makes API more intuitive and easier to use
+
 - **smart_context Pattern Detection:** Automatically detects and prioritizes literal patterns
   - Detects: `/**`, `/*`, `// TODO`, `// FIXME`, `// XXX`, `// HACK`
   - Detects: `console.log`, `console.error`, `debugger`
