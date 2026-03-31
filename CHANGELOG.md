@@ -2,6 +2,108 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-03-31
+
+### Added
+- **smart_doctor Tool:** Comprehensive health checks for devctx state
+  - Repo safety checks (tracked/staged state.sqlite detection)
+  - Storage diagnostics with SQLite integrity verification
+  - Compaction recommendations (stale sessions, old events, oversized metrics)
+  - Legacy state detection and cleanup guidance
+  - CLI: `smart-context-doctor` with `--json` and `--no-integrity` flags
+  - Overall status: ok/warning/error with prioritized recommended actions
+
+- **Orchestration Benchmark:** Release gating for production quality
+  - 5 core scenarios: aligned-resume, context-refresh, blocked-remediation, skipped-checkpoint, persisted-checkpoint
+  - Baseline enforcement in `orchestration-release-baseline.json`
+  - CI integration: `npm run benchmark:orchestration:release` blocks on regression
+  - `prepublishOnly` hook prevents npm publish if benchmark fails
+
+- **Product Quality Metrics:** Beyond token savings
+  - Continuity alignment rate (% of turns with aligned context)
+  - Blocked remediation coverage (% of blocked turns with recommendedActions)
+  - Refresh top-file signal rate (% of refreshes with topFiles)
+  - Checkpoint persistence rate (% of checkpoints actually persisted)
+  - Average recommended actions when blocked
+  - Exposed in `smart_metrics` and `report-metrics.js`
+
+- **Operational Guidance:** `recommendedPath` in smart_turn
+  - Modes: blocked_guided, guided_refresh, guided_context, lightweight, continue_until_milestone, checkpointed
+  - `nextTools`: Array of recommended tools (e.g., ['repo_safety', 'smart_search', 'smart_read'])
+  - `steps`: Array of instructions with priority (required/recommended)
+  - Surfaced in Claude hooks and headless wrapper
+
+### Enhanced
+- **Uniform mutationSafety Contract:** Consistent across all tools
+  - New `mutation-safety.js` utility with `buildMutationSafety`, `buildDegradedMode`, `attachSafetyMetadata`
+  - All tools expose: `{ blocked, blockedBy, stateDbPath, recommendedActions, message }`
+  - `degradedMode` when side effects are suppressed
+  - Centralized subject/message generation
+
+- **SQLite Diagnostics:** Structured recovery guidance
+  - `diagnoseStateStorage()` with PRAGMA quick_check
+  - `getStateStorageHealth()` for missing/oversized/corrupted detection
+  - `classifyStateDbError()` for locked/permission/corrupted classification
+  - Enriched error messages with recovery actions
+
+- **Client Integration:** Consistent guidance across all clients
+  - Updated `init-clients.js` to surface mutationSafety contract
+  - New blocked-state remediation row in `client-compatibility.md`
+  - All clients (Cursor, Claude Desktop, Codex, Qwen) get guidance on blockedBy and recommendedActions
+
+### Changed
+- **Test Suite:** Expanded to 598+ tests (99%+ coverage)
+- **CI/CD:** Release gating with orchestration benchmark
+- **Package Version:** Bumped to 1.6.0
+
+## [1.5.0] - 2026-03-31
+
+### Added
+- **Session Isolation:** Automatic new session creation in `smart_turn(start)`
+  - Triggers when `ensureSession=true`, no fixed `sessionId`, and prompt mismatches active session
+  - Prevents context contamination between unrelated tasks
+  - Returns `isolatedSession` and `previousSessionId` in response
+
+- **Net Token Savings:** Honest accounting of overhead
+  - Calculates `netSavedTokens = savedTokens - overheadTokens`
+  - Tracks overhead from `smart_summary`, hooks, and wrapper operations
+  - Exposed in `smart_metrics` and `report-metrics.js`
+  - Shows both gross and net savings percentages
+
+- **Workflow Tracking in Core:** Integrated into `smart_turn`
+  - Enabled via `DEVCTX_WORKFLOW_TRACKING=true` environment variable
+  - `smart_turn(start)` auto-tracks workflow (debugging, code review, etc.)
+  - `smart_turn(end)` closes workflow for events: milestone, task_complete, session_end, blocker
+  - Persists `overheadTokens`, `netSavedTokens`, `netSavingsPct` in workflow metadata
+
+- **Context Refresh:** Lightweight rehydration in `smart_turn(start)`
+  - Calls `smart_context(minimal)` to rehydrate context for current prompt
+  - Incrementally refreshes index if stale or unavailable
+  - Returns `refreshedContext` with `topFiles`, `hints`, `indexRefreshed`
+  - Propagated to Claude hooks and headless wrapper
+
+- **Net Metrics Coverage API:** Transparency for historical data
+  - `netMetricsCoverage` per workflow: `{ available, source }` (persisted/derived/none)
+  - `netMetricsCoverage` in summary: `{ coveredWorkflows, totalWorkflows, coveragePct, complete }`
+  - Exposed in `workflow-tracker.js` public API
+
+### Enhanced
+- **Selective Context Refresh:** Optimized to avoid unnecessary overhead
+  - Only triggers for: new/isolated sessions, ambiguous cases, real continuity changes
+  - Skips refresh for aligned or trivial prompts
+  - Reduces token cost for routine operations
+
+- **Anti-Commit Enforcement:** Hardened for SQLite state
+  - Centralized policy in `repo-safety.js` with `getRepoMutationSafety()`
+  - Closes bypasses in `workflow-tracker.js`, `context-patterns.js`, `metrics.js`
+  - `smart_turn` exposes `workflow.blocked` when writes are blocked
+  - Claude hooks avoid persisting state when repo safety blocks SQLite
+
+### Changed
+- **Documentation:** Aligned for workflow tracking, net savings, session isolation
+- **Test Suite:** Expanded coverage for new features
+- **Package Version:** Bumped to 1.5.0
+
 ## [1.4.0] - 2026-03-31
 
 ### Added

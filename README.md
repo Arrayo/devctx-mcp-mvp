@@ -1261,11 +1261,11 @@ npm run benchmark
 ```
 
 Runs all verification suites:
-- 421 unit tests
+- 598+ unit tests (99%+ coverage)
 - 14 feature verifications
 - Synthetic corpus evaluation
 - Real project evaluation
-- Orchestration regression benchmark
+- Orchestration regression benchmark (5 core scenarios)
 - Production metrics report
 
 Takes 3-4 minutes. See [Benchmark Documentation](./docs/verification/benchmark.md) for details.
@@ -1993,23 +1993,28 @@ export DEVCTX_CACHE_WARMING=false
 }
 ```
 
-## Changelog
+## Recent Improvements
 
-### v1.1.0 (Latest)
+### v1.6.0 (Current)
 
-- ✅ Cache warming (5x faster cold start)
-- ✅ Symbol-level git blame
-- ✅ Cross-project context
-- ✅ Repository metadata updated
-- 421 tests passing (100%)
+**Operational resilience & production readiness:**
+- ✅ `smart_doctor` tool for comprehensive health checks (repo safety, storage diagnostics, compaction, legacy cleanup)
+- ✅ Uniform `mutationSafety` contract across all tools (blocked state, remediation actions, degraded mode)
+- ✅ SQLite diagnostics with integrity verification and structured recovery guidance
+- ✅ Orchestration benchmark with release gating (5 core scenarios, baseline enforcement in CI)
+- ✅ Product quality metrics (continuity alignment, blocked remediation coverage, checkpoint persistence)
+- ✅ Operational guidance via `recommendedPath` (next tools, steps, modes)
 
-### v1.0.4
+**Core capabilities:**
+- ✅ Project-local SQLite state (`.devctx/state.sqlite`) with event-driven persistence
+- ✅ Session isolation and continuity tracking via `smart_turn(start/end)`
+- ✅ Workflow tracking (debugging, code review, refactoring, testing, architecture)
+- ✅ Net token savings reporting (gross savings - overhead)
+- ✅ Anti-commit enforcement (prevents accidental commits of mutable state)
+- ✅ Context refresh with incremental index rebuilding
+- ✅ 598+ tests passing (99%+ coverage)
 
-- ✅ Streaming progress notifications
-- ✅ Diff-aware context analysis
-- ✅ Intelligent context prediction
-
-See individual CHANGELOG files for detailed changes.
+See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
 
 ## Repository Structure
 
@@ -2019,11 +2024,12 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 /
 ├── tools/devctx/          ← Publishable package
 │   ├── src/               ← Source code
-│   ├── tests/             ← 421 unit tests
+│   ├── tests/             ← 598+ unit tests
+│   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata
+│   └── package.json       ← Package metadata (v1.6.0)
 ├── docs/                  ← Documentation (GitHub only)
-├── .github/workflows/     ← CI/CD
+├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file
 ```
 
