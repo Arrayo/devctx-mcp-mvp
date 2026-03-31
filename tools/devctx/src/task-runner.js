@@ -1,15 +1,20 @@
 import { persistMetrics } from './metrics.js';
 import { countTokens } from './tokenCounter.js';
+import { TASK_RUNNER_QUALITY_ANALYTICS_KIND } from './analytics/product-quality.js';
 import { runHeadlessWrapper } from './orchestration/headless-wrapper.js';
+import { smartContext } from './tools/smart-context.js';
 import { smartDoctor } from './tools/smart-doctor.js';
+import { smartSearch } from './tools/smart-search.js';
 import { smartStatus } from './tools/smart-status.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartTurn } from './tools/smart-turn.js';
 import {
   RUNNER_COMMANDS,
+  SPECIALIZED_WORKFLOW_COMMANDS,
   WORKFLOW_COMMANDS,
   WORKFLOW_DEFINITIONS,
   buildCleanupPlan,
+  buildWorkflowPolicyProfile,
   buildRunnerBlockedResult,
   buildWorkflowPrompt,
   evaluateRunnerGate,
@@ -19,6 +24,162 @@ const START_MAX_TOKENS = 350;
 const END_MAX_TOKENS = 350;
 
 const normalizeWhitespace = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
+const truncate = (value, maxLength = 160) => {
+  const normalized = normalizeWhitespace(value);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  if (maxLength <= 3) {
+    return '';
+  }
+
+  return `${normalized.slice(0, maxLength - 3)}...`;
+};
+
+const asArray = (value) => Array.isArray(value) ? value : [];
+const uniqueCompact = (values) => [...new Set(asArray(values).map((value) => normalizeWhitespace(value)).filter(Boolean))];
+
+const extractPreflightTopFiles = (preflightResult) => {
+  if (!preflightResult) {
+    return [];
+  }
+
+  if (preflightResult.tool === 'smart_context') {
+    return uniqueCompact(asArray(preflightResult.result?.context).map((item) => item?.file).filter(Boolean)).slice(0, 3);
+  }
+
+  if (preflightResult.tool === 'smart_search') {
+    return uniqueCompact(asArray(preflightResult.result?.topFiles).map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      return item?.file ?? item?.path ?? '';
+    })).slice(0, 3);
+  }
+
+  return [];
+};
+
+const extractPreflightHints = (preflightResult) => {
+  if (!preflightResult) {
+    return [];
+  }
+
+  if (preflightResult.tool === 'smart_context') {
+    return uniqueCompact(preflightResult.result?.hints).slice(0, 2);
+  }
+
+  if (preflightResult.tool === 'smart_search') {
+    const totalMatches = Number(preflightResult.result?.totalMatches ?? 0);
+    if (totalMatches > 0) {
+      return [`${totalMatches} search match(es) surfaced for the workflow target`];
+    }
+  }
+
+  return [];
+};
+
+const buildPreflightSummary = (preflightResult) => {
+  if (!preflightResult) {
+    return null;
+  }
+
+  const topFiles = extractPreflightTopFiles(preflightResult);
+  const hints = extractPreflightHints(preflightResult);
+
+  return {
+    tool: preflightResult.tool,
+    topFiles,
+    hints,
+    totalMatches: Number(preflightResult.result?.totalMatches ?? 0),
+  };
+};
+
+const runWorkflowPreflight = async ({ workflowProfile, prompt }) => {
+  const preflight = workflowProfile.preflight;
+  if (!preflight) {
+    return null;
+  }
+
+  const normalizedPrompt = normalizeWhitespace(prompt) || workflowProfile.label;
+
+  if (preflight.tool === 'smart_context') {
+    const result = await smartContext({
+      task: normalizedPrompt,
+      detail: preflight.detail ?? 'minimal',
+      include: preflight.include ?? ['hints'],
+      maxTokens: preflight.maxTokens ?? 1200,
+    });
+    return {
+      tool: 'smart_context',
+      request: {
+        task: normalizedPrompt,
+        detail: preflight.detail ?? 'minimal',
+        include: preflight.include ?? ['hints'],
+        maxTokens: preflight.maxTokens ?? 1200,
+      },
+      result,
+    };
+  }
+
+  if (preflight.tool === 'smart_search') {
+    const result = await smartSearch({
+      query: normalizedPrompt,
+      intent: preflight.intent ?? workflowProfile.workflowIntent,
+    });
+    return {
+      tool: 'smart_search',
+      request: {
+        query: normalizedPrompt,
+        intent: preflight.intent ?? workflowProfile.workflowIntent,
+      },
+      result,
+    };
+  }
+
+  return null;
+};
+
+const buildWorkflowPromptWithPolicy = ({ prompt, workflowProfile, preflightSummary }) => {
+  const lines = [
+    prompt,
+    '',
+    'Workflow policy:',
+    `- Mode: ${workflowProfile.policyMode}`,
+    `- Intent: ${workflowProfile.workflowIntent}`,
+    `- Prefer this tool order: ${workflowProfile.nextTools.join(' -> ')}`,
+  ];
+
+  if (workflowProfile.checkpointStrategy) {
+    lines.push(`- Checkpoint rule: ${workflowProfile.checkpointStrategy}`);
+  }
+
+  if (preflightSummary?.tool) {
+    lines.push(`- Preflight: ${preflightSummary.tool}`);
+  }
+
+  if (preflightSummary?.topFiles?.length) {
+    lines.push(`- Focus files: ${preflightSummary.topFiles.join(', ')}`);
+  }
+
+  if (preflightSummary?.hints?.length) {
+    lines.push(`- Signals: ${preflightSummary.hints.map((hint) => truncate(hint, 120)).join(' | ')}`);
+  }
+
+  return lines.join('\n');
+};
+
+const buildWorkflowPolicyPayload = ({ commandName, workflowProfile, preflightSummary }) => ({
+  commandName,
+  label: workflowProfile.label,
+  policyMode: workflowProfile.policyMode,
+  intent: workflowProfile.workflowIntent,
+  specialized: workflowProfile.specialized,
+  nextTools: [...workflowProfile.nextTools],
+  checkpointStrategy: workflowProfile.checkpointStrategy,
+  preflight: preflightSummary,
+});
 
 const recordRunnerMetrics = async ({
   commandName,
@@ -28,6 +189,19 @@ const recordRunnerMetrics = async ({
   blocked = false,
   doctorIssued = false,
 }) => {
+  const startResult = result?.start ?? result?.startResult ?? null;
+  const endResult = result?.end ?? (result?.phase === 'end' ? result : null);
+  const workflowPolicy = result?.workflowPolicy ?? null;
+  const preflight = workflowPolicy?.preflight ?? null;
+  const mutationBlocked = Boolean(result?.mutationSafety?.blocked ?? startResult?.mutationSafety?.blocked ?? endResult?.mutationSafety?.blocked);
+  const storageIssue = result?.storageHealth?.issue ?? startResult?.storageHealth?.issue ?? endResult?.storageHealth?.issue ?? 'ok';
+  const recommendedPathMode = result?.recommendedPath?.mode
+    ?? startResult?.recommendedPath?.mode
+    ?? endResult?.recommendedPath?.mode
+    ?? null;
+  const checkpointPersisted = Boolean(endResult && !endResult.checkpoint?.skipped && !endResult.checkpoint?.blocked);
+  const checkpointSkipped = Boolean(endResult?.checkpoint?.skipped);
+
   await persistMetrics({
     tool: 'task_runner',
     action: commandName,
@@ -37,10 +211,28 @@ const recordRunnerMetrics = async ({
     savedTokens: 0,
     savingsPct: 0,
     metadata: {
+      analyticsKind: TASK_RUNNER_QUALITY_ANALYTICS_KIND,
       client,
       usedWrapper,
       blocked,
       doctorIssued,
+      dryRun: Boolean(result?.dryRun),
+      allowDegraded: Boolean(result?.allowDegraded),
+      isWorkflowCommand: WORKFLOW_COMMANDS.has(commandName),
+      specializedWorkflow: SPECIALIZED_WORKFLOW_COMMANDS.has(commandName),
+      workflowIntent: workflowPolicy?.intent ?? null,
+      workflowPolicyMode: workflowPolicy?.policyMode ?? null,
+      workflowNextToolsCount: workflowPolicy?.nextTools?.length ?? 0,
+      workflowHasCheckpointRule: Boolean(workflowPolicy?.checkpointStrategy),
+      workflowPreflightTool: preflight?.tool ?? null,
+      workflowPreflightTopFiles: preflight?.topFiles?.length ?? 0,
+      workflowPreflightHints: preflight?.hints?.length ?? 0,
+      continuityState: startResult?.continuity?.state ?? null,
+      mutationBlocked,
+      storageIssue,
+      recommendedPathMode,
+      checkpointPersisted,
+      checkpointSkipped,
     },
     timestamp: new Date().toISOString(),
   });
@@ -60,20 +252,42 @@ const runWorkflowCommand = async ({
   runCommand,
   allowDegraded = false,
 }) => {
-  const effectivePrompt = buildWorkflowPrompt({
+  const requestedPrompt = buildWorkflowPrompt({
     commandName,
     prompt,
   });
+  const workflowProfile = buildWorkflowPolicyProfile({ commandName });
 
   const start = await smartTurn({
     phase: 'start',
     sessionId,
-    prompt: effectivePrompt,
+    prompt: requestedPrompt,
     ensureSession: true,
     maxTokens: START_MAX_TOKENS,
   });
 
   const gate = evaluateRunnerGate({ startResult: start });
+  let preflightSummary = null;
+
+  if (!gate.requiresDoctor || allowDegraded) {
+    const preflightResult = await runWorkflowPreflight({
+      workflowProfile,
+      prompt: requestedPrompt,
+    });
+    preflightSummary = buildPreflightSummary(preflightResult);
+  }
+
+  const workflowPolicy = buildWorkflowPolicyPayload({
+    commandName,
+    workflowProfile,
+    preflightSummary,
+  });
+  const effectivePrompt = buildWorkflowPromptWithPolicy({
+    prompt: requestedPrompt,
+    workflowProfile,
+    preflightSummary,
+  });
+
   if (gate.requiresDoctor && !allowDegraded) {
     const doctor = await smartDoctor();
     const blockedResult = buildRunnerBlockedResult({
@@ -84,6 +298,7 @@ const runWorkflowCommand = async ({
       gate,
       doctorResult: doctor,
       allowDegraded,
+      workflowPolicy,
     });
     await recordRunnerMetrics({
       commandName,
@@ -112,11 +327,14 @@ const runWorkflowCommand = async ({
 
   const result = {
     success: true,
+    usedWrapper: true,
     ...wrapperResult,
     command: commandName,
     client,
     prompt: effectivePrompt,
+    requestedPrompt,
     gate,
+    workflowPolicy,
   };
 
   await recordRunnerMetrics({

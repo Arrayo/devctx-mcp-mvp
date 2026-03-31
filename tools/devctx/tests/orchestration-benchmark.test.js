@@ -19,6 +19,14 @@ test('evaluateScenarioExpectations passes when start/end outputs match the scena
       checkpointSkipped: false,
       checkpointPersisted: true,
       endRecommendedPathMode: 'checkpointed',
+      runnerSuccess: true,
+      runnerBlocked: false,
+      runnerDoctorIssued: false,
+      runnerUsedWrapper: true,
+      runnerWorkflowIntent: 'explore',
+      runnerPolicyMode: 'review_guided',
+      runnerPreflightTool: 'smart_context',
+      runnerPreflightTopFilesMin: 2,
     },
   };
 
@@ -53,6 +61,19 @@ test('evaluateScenarioExpectations passes when start/end outputs match the scena
         mode: 'checkpointed',
       },
     },
+    runnerResult: {
+      success: true,
+      blocked: false,
+      usedWrapper: true,
+      workflowPolicy: {
+        intent: 'explore',
+        policyMode: 'review_guided',
+        preflight: {
+          tool: 'smart_context',
+          topFiles: ['src/auth.js', 'src/wrapper.js'],
+        },
+      },
+    },
   });
 
   assert.equal(result.pass, true);
@@ -68,6 +89,10 @@ test('evaluateScenarioExpectations reports mismatches clearly', () => {
       checkpointSkipped: false,
       checkpointPersisted: true,
       endRecommendedPathMode: 'checkpointed',
+      runnerBlocked: true,
+      runnerDoctorIssued: true,
+      runnerPolicyMode: 'debug_guided',
+      runnerPreflightTool: 'smart_search',
     },
   };
 
@@ -95,6 +120,18 @@ test('evaluateScenarioExpectations reports mismatches clearly', () => {
         mode: 'continue_until_milestone',
       },
     },
+    runnerResult: {
+      success: true,
+      blocked: false,
+      usedWrapper: true,
+      workflowPolicy: {
+        policyMode: 'review_guided',
+        preflight: {
+          tool: 'smart_context',
+          topFiles: [],
+        },
+      },
+    },
   });
 
   assert.equal(result.pass, false);
@@ -104,6 +141,10 @@ test('evaluateScenarioExpectations reports mismatches clearly', () => {
   assert.ok(result.failures.some((failure) => failure.includes('checkpointSkipped=false')));
   assert.ok(result.failures.some((failure) => failure.includes('checkpointPersisted=true')));
   assert.ok(result.failures.some((failure) => failure.includes('end recommendedPath.mode=checkpointed')));
+  assert.ok(result.failures.some((failure) => failure.includes('runnerBlocked=true')));
+  assert.ok(result.failures.some((failure) => failure.includes('runnerDoctorIssued=true')));
+  assert.ok(result.failures.some((failure) => failure.includes('runner policyMode=debug_guided')));
+  assert.ok(result.failures.some((failure) => failure.includes('runner preflight.tool=smart_search')));
 });
 
 test('summarizeOrchestrationBenchmark enforces scenario and product-quality thresholds', () => {
@@ -119,6 +160,9 @@ test('summarizeOrchestrationBenchmark enforces scenario and product-quality thre
       minBlockedRemediationCoveragePct: 100,
       minRefreshTopFileSignalRatePct: 100,
       minCheckpointPersistenceRatePct: 60,
+      minRunnerWorkflowCoveragePct: 100,
+      minRunnerPreflightCoveragePct: 100,
+      minRunnerDoctorCoveragePct: 100,
     },
     metrics: {
       summary: {
@@ -137,6 +181,15 @@ test('summarizeOrchestrationBenchmark enforces scenario and product-quality thre
         checkpointing: {
           persistenceRatePct: 50,
         },
+        taskRunner: {
+          workflowPolicy: {
+            coveragePct: 50,
+            preflightCoveragePct: 100,
+          },
+          blockedState: {
+            doctorCoveragePct: 80,
+          },
+        },
       },
     },
   });
@@ -154,6 +207,9 @@ test('summarizeOrchestrationBenchmark enforces scenario and product-quality thre
   assert.ok(result.thresholdChecks.some((check) => check.key === 'blockedRemediationCoveragePct' && check.pass === true));
   assert.ok(result.thresholdChecks.some((check) => check.key === 'refreshTopFileSignalRatePct' && check.pass === true));
   assert.ok(result.thresholdChecks.some((check) => check.key === 'checkpointPersistenceRatePct' && check.pass === false));
+  assert.ok(result.thresholdChecks.some((check) => check.key === 'runnerWorkflowCoveragePct' && check.pass === false));
+  assert.ok(result.thresholdChecks.some((check) => check.key === 'runnerPreflightCoveragePct' && check.pass === true));
+  assert.ok(result.thresholdChecks.some((check) => check.key === 'runnerDoctorCoveragePct' && check.pass === false));
 });
 
 test('evaluateReleaseBaseline enforces required scenarios and numeric minimums', () => {

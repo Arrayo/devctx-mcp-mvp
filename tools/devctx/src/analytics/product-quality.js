@@ -2,10 +2,77 @@ const roundPct = (value, total) =>
   total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0;
 
 export const PRODUCT_QUALITY_ANALYTICS_KIND = 'smart_turn_quality';
+export const TASK_RUNNER_QUALITY_ANALYTICS_KIND = 'task_runner_quality';
 
 const isProductQualityEntry = (entry) =>
   entry?.tool === 'smart_turn'
   && entry?.metadata?.analyticsKind === PRODUCT_QUALITY_ANALYTICS_KIND;
+
+const isTaskRunnerQualityEntry = (entry) =>
+  entry?.tool === 'task_runner'
+  && entry?.metadata?.analyticsKind === TASK_RUNNER_QUALITY_ANALYTICS_KIND;
+
+const analyzeTaskRunnerQuality = (entries = []) => {
+  const runnerEntries = entries.filter(isTaskRunnerQualityEntry);
+  const workflowEntries = runnerEntries.filter((entry) => entry.metadata?.isWorkflowCommand);
+  const specializedWorkflowEntries = workflowEntries.filter((entry) => entry.metadata?.specializedWorkflow);
+  const specializedExecutableEntries = specializedWorkflowEntries.filter((entry) => !entry.metadata?.blocked);
+  const blockedEntries = runnerEntries.filter((entry) => entry.metadata?.blocked);
+  const doctorEntries = runnerEntries.filter((entry) => entry.metadata?.doctorIssued);
+  const wrappedEntries = workflowEntries.filter((entry) => entry.metadata?.usedWrapper);
+  const workflowPolicyEntries = workflowEntries.filter((entry) => entry.metadata?.workflowPolicyMode);
+  const preflightEntries = specializedWorkflowEntries.filter((entry) => entry.metadata?.workflowPreflightTool);
+  const blockedWithDoctor = blockedEntries.filter((entry) => entry.metadata?.doctorIssued);
+  const checkpointEntries = runnerEntries.filter((entry) => entry.action === 'checkpoint');
+  const persistedCheckpointEntries = checkpointEntries.filter((entry) => entry.metadata?.checkpointPersisted);
+
+  const commandBreakdown = [...runnerEntries.reduce((acc, entry) => {
+    const key = entry.action ?? 'unknown';
+    const current = acc.get(key) ?? {
+      command: key,
+      count: 0,
+      blocked: 0,
+      doctorIssued: 0,
+      usedWrapper: 0,
+      preflighted: 0,
+    };
+    current.count += 1;
+    current.blocked += entry.metadata?.blocked ? 1 : 0;
+    current.doctorIssued += entry.metadata?.doctorIssued ? 1 : 0;
+    current.usedWrapper += entry.metadata?.usedWrapper ? 1 : 0;
+    current.preflighted += entry.metadata?.workflowPreflightTool ? 1 : 0;
+    acc.set(key, current);
+    return acc;
+  }, new Map()).values()].sort((a, b) => b.count - a.count || a.command.localeCompare(b.command));
+
+  return {
+    commandsMeasured: runnerEntries.length,
+    workflowCommands: workflowEntries.length,
+    specializedWorkflowCommands: specializedWorkflowEntries.length,
+    blockedCommands: blockedEntries.length,
+    doctorCommands: doctorEntries.length,
+    dryRunCommands: runnerEntries.filter((entry) => entry.metadata?.dryRun).length,
+    commandBreakdown,
+    workflowPolicy: {
+      coveredCommands: workflowPolicyEntries.length,
+      preflightedCommands: preflightEntries.length,
+      wrapperBackedCommands: wrappedEntries.length,
+      coveragePct: roundPct(workflowPolicyEntries.length, workflowEntries.length),
+      preflightCoveragePct: roundPct(preflightEntries.length, specializedWorkflowEntries.length),
+      wrapperCoveragePct: roundPct(wrappedEntries.length, workflowEntries.length),
+    },
+    blockedState: {
+      blockedCommands: blockedEntries.length,
+      blockedWithDoctor: blockedWithDoctor.length,
+      doctorCoveragePct: roundPct(blockedWithDoctor.length, blockedEntries.length),
+    },
+    checkpointing: {
+      commandsMeasured: checkpointEntries.length,
+      persistedCommands: persistedCheckpointEntries.length,
+      persistenceRatePct: roundPct(persistedCheckpointEntries.length, checkpointEntries.length),
+    },
+  };
+};
 
 export const analyzeProductQuality = (entries = []) => {
   const qualityEntries = entries.filter(isProductQualityEntry);
@@ -65,42 +132,72 @@ export const analyzeProductQuality = (entries = []) => {
       blockedEnds,
       persistenceRatePct: roundPct(persistedEnds, endEntries.length),
     },
+    taskRunner: analyzeTaskRunnerQuality(entries),
   };
 };
 
 export const formatProductQualityReport = (stats) => {
-  if (!stats || stats.turnsMeasured === 0) {
+  const hasSmartTurn = Number(stats?.turnsMeasured ?? 0) > 0;
+  const hasTaskRunner = Number(stats?.taskRunner?.commandsMeasured ?? 0) > 0;
+
+  if (!stats || (!hasSmartTurn && !hasTaskRunner)) {
     return '';
   }
 
   const lines = [];
   lines.push('');
-  lines.push('Product Quality Signals (Measured from smart_turn)');
+  lines.push('Product Quality Signals');
   lines.push('');
-  lines.push(`Turns measured:        ${stats.turnsMeasured}`);
-  lines.push(`Start turns:           ${stats.startsMeasured}`);
-  lines.push(`End turns:             ${stats.endsMeasured}`);
-  lines.push('');
-  lines.push('Continuity Recovery:');
-  lines.push(`Aligned starts:        ${stats.continuityRecovery.alignedStarts}/${stats.continuityRecovery.startsMeasured} (${stats.continuityRecovery.alignmentRatePct}%)`);
-  lines.push(`Reusable starts:       ${stats.continuityRecovery.reusableStarts}/${stats.continuityRecovery.startsMeasured} (${stats.continuityRecovery.reusableRatePct}%)`);
-  lines.push(`Isolated starts:       ${stats.continuityRecovery.isolatedStarts}`);
-  lines.push(`Ambiguous resumes:     ${stats.continuityRecovery.ambiguousStarts}`);
-  lines.push('');
-  lines.push('Blocked-State Handling:');
-  lines.push(`Blocked turns:         ${stats.blockedState.turnsBlocked}`);
-  lines.push(`With remediation:      ${stats.blockedState.blockedWithRecommendedActions}/${stats.blockedState.turnsBlocked} (${stats.blockedState.remediationCoveragePct}%)`);
-  lines.push('');
-  lines.push('Context Refresh Signals:');
-  lines.push(`Refreshed starts:      ${stats.contextRefresh.refreshedStarts}`);
-  lines.push(`With top-file signal:  ${stats.contextRefresh.refreshedWithTopFiles}/${stats.contextRefresh.refreshedStarts} (${stats.contextRefresh.topFileSignalRatePct}%)`);
-  lines.push(`Index refreshes:       ${stats.contextRefresh.indexRefreshedStarts}`);
-  lines.push('');
-  lines.push('Checkpointing:');
-  lines.push(`Persisted ends:        ${stats.checkpointing.persistedEnds}/${stats.checkpointing.endsMeasured} (${stats.checkpointing.persistenceRatePct}%)`);
-  lines.push(`Skipped ends:          ${stats.checkpointing.skippedEnds}`);
-  lines.push(`Blocked ends:          ${stats.checkpointing.blockedEnds}`);
-  lines.push('');
+
+  if (hasSmartTurn) {
+    lines.push('smart_turn orchestration:');
+    lines.push(`Turns measured:        ${stats.turnsMeasured}`);
+    lines.push(`Start turns:           ${stats.startsMeasured}`);
+    lines.push(`End turns:             ${stats.endsMeasured}`);
+    lines.push('');
+    lines.push('Continuity Recovery:');
+    lines.push(`Aligned starts:        ${stats.continuityRecovery.alignedStarts}/${stats.continuityRecovery.startsMeasured} (${stats.continuityRecovery.alignmentRatePct}%)`);
+    lines.push(`Reusable starts:       ${stats.continuityRecovery.reusableStarts}/${stats.continuityRecovery.startsMeasured} (${stats.continuityRecovery.reusableRatePct}%)`);
+    lines.push(`Isolated starts:       ${stats.continuityRecovery.isolatedStarts}`);
+    lines.push(`Ambiguous resumes:     ${stats.continuityRecovery.ambiguousStarts}`);
+    lines.push('');
+    lines.push('Blocked-State Handling:');
+    lines.push(`Blocked turns:         ${stats.blockedState.turnsBlocked}`);
+    lines.push(`With remediation:      ${stats.blockedState.blockedWithRecommendedActions}/${stats.blockedState.turnsBlocked} (${stats.blockedState.remediationCoveragePct}%)`);
+    lines.push('');
+    lines.push('Context Refresh Signals:');
+    lines.push(`Refreshed starts:      ${stats.contextRefresh.refreshedStarts}`);
+    lines.push(`With top-file signal:  ${stats.contextRefresh.refreshedWithTopFiles}/${stats.contextRefresh.refreshedStarts} (${stats.contextRefresh.topFileSignalRatePct}%)`);
+    lines.push(`Index refreshes:       ${stats.contextRefresh.indexRefreshedStarts}`);
+    lines.push('');
+    lines.push('Checkpointing:');
+    lines.push(`Persisted ends:        ${stats.checkpointing.persistedEnds}/${stats.checkpointing.endsMeasured} (${stats.checkpointing.persistenceRatePct}%)`);
+    lines.push(`Skipped ends:          ${stats.checkpointing.skippedEnds}`);
+    lines.push(`Blocked ends:          ${stats.checkpointing.blockedEnds}`);
+    lines.push('');
+  }
+
+  if (hasTaskRunner) {
+    lines.push('task_runner workflows:');
+    lines.push(`Commands measured:     ${stats.taskRunner.commandsMeasured}`);
+    lines.push(`Workflow commands:     ${stats.taskRunner.workflowCommands}`);
+    lines.push(`Specialized commands:  ${stats.taskRunner.specializedWorkflowCommands}`);
+    lines.push(`Blocked commands:      ${stats.taskRunner.blockedCommands}`);
+    lines.push(`Doctor commands:       ${stats.taskRunner.doctorCommands}`);
+    lines.push('');
+    lines.push('Workflow Policy Coverage:');
+    lines.push(`Policy-backed:         ${stats.taskRunner.workflowPolicy.coveredCommands}/${stats.taskRunner.workflowCommands} (${stats.taskRunner.workflowPolicy.coveragePct}%)`);
+    lines.push(`Preflighted:           ${stats.taskRunner.workflowPolicy.preflightedCommands}/${stats.taskRunner.specializedWorkflowCommands} (${stats.taskRunner.workflowPolicy.preflightCoveragePct}%)`);
+    lines.push(`Wrapper-backed:        ${stats.taskRunner.workflowPolicy.wrapperBackedCommands}/${stats.taskRunner.workflowCommands} (${stats.taskRunner.workflowPolicy.wrapperCoveragePct}%)`);
+    lines.push('');
+    lines.push('Blocked-State Routing:');
+    lines.push(`Blocked with doctor:   ${stats.taskRunner.blockedState.blockedWithDoctor}/${stats.taskRunner.blockedState.blockedCommands} (${stats.taskRunner.blockedState.doctorCoveragePct}%)`);
+    lines.push('');
+    lines.push('Checkpoint Commands:');
+    lines.push(`Persisted checkpoints: ${stats.taskRunner.checkpointing.persistedCommands}/${stats.taskRunner.checkpointing.commandsMeasured} (${stats.taskRunner.checkpointing.persistenceRatePct}%)`);
+    lines.push('');
+  }
+
   lines.push('Notes:');
   lines.push('- These are measured orchestration signals, not direct answer-quality scores.');
   lines.push('- Context refresh usefulness is proxied by whether refreshed turns surfaced top-file signals.');

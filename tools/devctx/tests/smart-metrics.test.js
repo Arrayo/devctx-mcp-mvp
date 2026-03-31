@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { persistMetrics } from '../src/metrics.js';
+import { TASK_RUNNER_QUALITY_ANALYTICS_KIND } from '../src/analytics/product-quality.js';
 import { smartMetrics } from '../src/tools/smart-metrics.js';
 import { smartTurn } from '../src/tools/smart-turn.js';
 import { withStateDb } from '../src/storage/sqlite.js';
@@ -169,6 +170,83 @@ test('smart_metrics - includes smart_turn product-quality signals emitted from r
     } else {
       process.env.DEVCTX_METRICS_FILE = previousMetricsFile;
     }
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_metrics - includes task_runner workflow-quality signals', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-task-runner-'));
+  const metricsFile = path.join(tmpRoot, '.devctx', 'metrics.jsonl');
+
+  try {
+    fs.mkdirSync(path.dirname(metricsFile), { recursive: true });
+    const entries = [
+      {
+        tool: 'task_runner',
+        action: 'review',
+        sessionId: 'runner-session',
+        rawTokens: 0,
+        compressedTokens: 40,
+        savedTokens: 0,
+        metadata: {
+          analyticsKind: TASK_RUNNER_QUALITY_ANALYTICS_KIND,
+          isWorkflowCommand: true,
+          specializedWorkflow: true,
+          usedWrapper: true,
+          blocked: false,
+          doctorIssued: false,
+          workflowPolicyMode: 'review_guided',
+          workflowPreflightTool: 'smart_context',
+          workflowPreflightTopFiles: 2,
+        },
+        timestamp: '2026-03-30T10:00:00.000Z',
+      },
+      {
+        tool: 'task_runner',
+        action: 'debug',
+        sessionId: 'runner-session',
+        rawTokens: 0,
+        compressedTokens: 30,
+        savedTokens: 0,
+        metadata: {
+          analyticsKind: TASK_RUNNER_QUALITY_ANALYTICS_KIND,
+          isWorkflowCommand: true,
+          specializedWorkflow: true,
+          usedWrapper: false,
+          blocked: true,
+          doctorIssued: true,
+          workflowPolicyMode: 'debug_guided',
+          workflowPreflightTool: 'smart_search',
+          workflowPreflightTopFiles: 1,
+        },
+        timestamp: '2026-03-30T11:00:00.000Z',
+      },
+      {
+        tool: 'task_runner',
+        action: 'checkpoint',
+        sessionId: 'runner-session',
+        rawTokens: 0,
+        compressedTokens: 20,
+        savedTokens: 0,
+        metadata: {
+          analyticsKind: TASK_RUNNER_QUALITY_ANALYTICS_KIND,
+          blocked: false,
+          doctorIssued: false,
+          checkpointPersisted: true,
+        },
+        timestamp: '2026-03-30T12:00:00.000Z',
+      },
+    ];
+    fs.writeFileSync(metricsFile, entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n', 'utf8');
+
+    const result = await smartMetrics({ file: metricsFile, window: 'all', latest: 10, sessionId: 'runner-session' });
+    assert.equal(result.productQuality.taskRunner.commandsMeasured, 3);
+    assert.equal(result.productQuality.taskRunner.workflowCommands, 2);
+    assert.equal(result.productQuality.taskRunner.workflowPolicy.coveragePct, 100);
+    assert.equal(result.productQuality.taskRunner.workflowPolicy.preflightCoveragePct, 100);
+    assert.equal(result.productQuality.taskRunner.blockedState.doctorCoveragePct, 100);
+    assert.equal(result.productQuality.taskRunner.checkpointing.persistedCommands, 1);
+  } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });

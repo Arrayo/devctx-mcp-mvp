@@ -10,6 +10,7 @@ import { smartContext } from '../src/tools/smart-context.js';
 import { smartSummary } from '../src/tools/smart-summary.js';
 import { smartTurn } from '../src/tools/smart-turn.js';
 import { smartMetrics } from '../src/tools/smart-metrics.js';
+import { runTaskRunner } from '../src/task-runner.js';
 import { projectRoot, setProjectRoot } from '../src/utils/paths.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -63,7 +64,7 @@ export const loadReleaseBaseline = (filePath = DEFAULT_BASELINE_PATH) =>
 
 const matchesExpected = (actual, expected) => actual === expected;
 
-export const evaluateScenarioExpectations = ({ scenario, startResult, endResult }) => {
+export const evaluateScenarioExpectations = ({ scenario, startResult, endResult, runnerResult }) => {
   const expect = scenario.expect ?? {};
   const failures = [];
 
@@ -113,6 +114,38 @@ export const evaluateScenarioExpectations = ({ scenario, startResult, endResult 
 
   if (expect.endRecommendedPathMode && endResult?.recommendedPath?.mode !== expect.endRecommendedPathMode) {
     failures.push(`expected end recommendedPath.mode=${expect.endRecommendedPathMode}, got ${endResult?.recommendedPath?.mode ?? 'null'}`);
+  }
+
+  if (expect.runnerSuccess !== undefined && Boolean(runnerResult?.success) !== expect.runnerSuccess) {
+    failures.push(`expected runnerSuccess=${expect.runnerSuccess}, got ${Boolean(runnerResult?.success)}`);
+  }
+
+  if (expect.runnerBlocked !== undefined && Boolean(runnerResult?.blocked) !== expect.runnerBlocked) {
+    failures.push(`expected runnerBlocked=${expect.runnerBlocked}, got ${Boolean(runnerResult?.blocked)}`);
+  }
+
+  if (expect.runnerDoctorIssued !== undefined && Boolean(runnerResult?.doctor) !== expect.runnerDoctorIssued) {
+    failures.push(`expected runnerDoctorIssued=${expect.runnerDoctorIssued}, got ${Boolean(runnerResult?.doctor)}`);
+  }
+
+  if (expect.runnerUsedWrapper !== undefined && Boolean(runnerResult?.usedWrapper) !== expect.runnerUsedWrapper) {
+    failures.push(`expected runnerUsedWrapper=${expect.runnerUsedWrapper}, got ${Boolean(runnerResult?.usedWrapper)}`);
+  }
+
+  if (expect.runnerWorkflowIntent && runnerResult?.workflowPolicy?.intent !== expect.runnerWorkflowIntent) {
+    failures.push(`expected runner workflow intent=${expect.runnerWorkflowIntent}, got ${runnerResult?.workflowPolicy?.intent ?? 'null'}`);
+  }
+
+  if (expect.runnerPolicyMode && runnerResult?.workflowPolicy?.policyMode !== expect.runnerPolicyMode) {
+    failures.push(`expected runner policyMode=${expect.runnerPolicyMode}, got ${runnerResult?.workflowPolicy?.policyMode ?? 'null'}`);
+  }
+
+  if (expect.runnerPreflightTool && runnerResult?.workflowPolicy?.preflight?.tool !== expect.runnerPreflightTool) {
+    failures.push(`expected runner preflight.tool=${expect.runnerPreflightTool}, got ${runnerResult?.workflowPolicy?.preflight?.tool ?? 'null'}`);
+  }
+
+  if (expect.runnerPreflightTopFilesMin && Number(runnerResult?.workflowPolicy?.preflight?.topFiles?.length ?? 0) < expect.runnerPreflightTopFilesMin) {
+    failures.push(`expected runner preflight top files >= ${expect.runnerPreflightTopFilesMin}`);
   }
 
   return {
@@ -185,6 +218,18 @@ const runScenarioAction = async ({ root, action, startResult }) => {
   throw new Error(`Unsupported scenario action: ${action.type}`);
 };
 
+const buildRunnerArgs = (runner = {}) => ({
+  commandName: runner.commandName ?? 'task',
+  client: runner.client ?? 'benchmark',
+  prompt: runner.prompt ?? '',
+  sessionId: runner.sessionId,
+  event: runner.event,
+  dryRun: runner.dryRun ?? false,
+  allowDegraded: runner.allowDegraded ?? false,
+  verifyIntegrity: runner.verifyIntegrity ?? true,
+  update: runner.update ?? {},
+});
+
 export const summarizeOrchestrationBenchmark = ({ scenarioResults, metrics, thresholds }) => {
   const passed = scenarioResults.filter((scenario) => scenario.pass).length;
   const total = scenarioResults.length;
@@ -228,6 +273,33 @@ export const summarizeOrchestrationBenchmark = ({ scenarioResults, metrics, thre
       pass: metrics.productQuality.checkpointing.persistenceRatePct >= thresholds.minCheckpointPersistenceRatePct,
     },
   ];
+
+  if (typeof thresholds.minRunnerWorkflowCoveragePct === 'number') {
+    thresholdChecks.push({
+      key: 'runnerWorkflowCoveragePct',
+      actual: metrics.productQuality.taskRunner.workflowPolicy.coveragePct,
+      expected: thresholds.minRunnerWorkflowCoveragePct,
+      pass: metrics.productQuality.taskRunner.workflowPolicy.coveragePct >= thresholds.minRunnerWorkflowCoveragePct,
+    });
+  }
+
+  if (typeof thresholds.minRunnerPreflightCoveragePct === 'number') {
+    thresholdChecks.push({
+      key: 'runnerPreflightCoveragePct',
+      actual: metrics.productQuality.taskRunner.workflowPolicy.preflightCoveragePct,
+      expected: thresholds.minRunnerPreflightCoveragePct,
+      pass: metrics.productQuality.taskRunner.workflowPolicy.preflightCoveragePct >= thresholds.minRunnerPreflightCoveragePct,
+    });
+  }
+
+  if (typeof thresholds.minRunnerDoctorCoveragePct === 'number') {
+    thresholdChecks.push({
+      key: 'runnerDoctorCoveragePct',
+      actual: metrics.productQuality.taskRunner.blockedState.doctorCoveragePct,
+      expected: thresholds.minRunnerDoctorCoveragePct,
+      pass: metrics.productQuality.taskRunner.blockedState.doctorCoveragePct >= thresholds.minRunnerDoctorCoveragePct,
+    });
+  }
 
   return {
     scenarios: {
@@ -314,6 +386,7 @@ export const runOrchestrationBenchmark = async ({
       const metricsFile = path.join(root, '.devctx', 'metrics.jsonl');
       let startResult = null;
       let endResult = null;
+      let runnerResult = null;
       const actionResults = [];
 
       try {
@@ -335,22 +408,28 @@ export const runOrchestrationBenchmark = async ({
           execFileSync('git', ['add', '-f', '.devctx/state.sqlite'], { cwd: root, stdio: 'ignore' });
         }
 
-        startResult = await smartTurn({
-          phase: 'start',
-          sessionId: scenario.start.sessionId,
-          prompt: scenario.start.prompt,
-          ensureSession: scenario.start.ensureSession ?? false,
-        });
+        if (scenario.runner) {
+          runnerResult = await runTaskRunner(buildRunnerArgs(scenario.runner));
+          startResult = runnerResult.start ?? null;
+          endResult = runnerResult.end ?? (runnerResult.phase === 'end' ? runnerResult : null);
+        } else {
+          startResult = await smartTurn({
+            phase: 'start',
+            sessionId: scenario.start.sessionId,
+            prompt: scenario.start.prompt,
+            ensureSession: scenario.start.ensureSession ?? false,
+          });
 
-        for (const action of scenario.actions ?? []) {
-          const actionResult = await runScenarioAction({ root, action, startResult });
-          actionResults.push(actionResult);
-          if (action.type === 'smart_turn_end') {
-            endResult = actionResult.result;
+          for (const action of scenario.actions ?? []) {
+            const actionResult = await runScenarioAction({ root, action, startResult });
+            actionResults.push(actionResult);
+            if (action.type === 'smart_turn_end') {
+              endResult = actionResult.result;
+            }
           }
         }
 
-        const evaluation = evaluateScenarioExpectations({ scenario, startResult, endResult });
+        const evaluation = evaluateScenarioExpectations({ scenario, startResult, endResult, runnerResult });
         aggregateScenarioMetricsFile(metricsFile, aggregateMetricsFile);
         scenarioResults.push({
           id: scenario.id,
@@ -367,6 +446,17 @@ export const runOrchestrationBenchmark = async ({
             ? {
                 checkpointSkipped: Boolean(endResult.checkpoint?.skipped),
                 recommendedPathMode: endResult.recommendedPath?.mode ?? null,
+              }
+            : null,
+          runner: runnerResult
+            ? {
+                command: runnerResult.command ?? scenario.runner.commandName,
+                blocked: Boolean(runnerResult.blocked),
+                doctorIssued: Boolean(runnerResult.doctor),
+                usedWrapper: Boolean(runnerResult.usedWrapper),
+                policyMode: runnerResult.workflowPolicy?.policyMode ?? null,
+                preflightTool: runnerResult.workflowPolicy?.preflight?.tool ?? null,
+                preflightTopFiles: runnerResult.workflowPolicy?.preflight?.topFiles?.length ?? 0,
               }
             : null,
           actionCount: actionResults.length,
@@ -439,9 +529,13 @@ const printResult = ({ result, resultsFile }) => {
   console.log(`Scenarios:     ${result.summary.scenarios.passed}/${result.summary.scenarios.total} passed (${result.summary.scenarios.passRatePct}%)`);
   console.log(`Net saved:     ${result.metrics.summary.netSavedTokens} (${result.metrics.summary.netSavingsPct}%)`);
   console.log(`Aligned starts:${result.metrics.productQuality.continuityRecovery.alignmentRatePct}%`);
-  console.log(`Remediation:   ${result.metrics.productQuality.blockedState.remediationCoveragePct}%`);
-  console.log(`Refresh signal:${result.metrics.productQuality.contextRefresh.topFileSignalRatePct}%`);
-  console.log(`Checkpointing: ${result.metrics.productQuality.checkpointing.persistenceRatePct}%`);
+      console.log(`Remediation:   ${result.metrics.productQuality.blockedState.remediationCoveragePct}%`);
+      console.log(`Refresh signal:${result.metrics.productQuality.contextRefresh.topFileSignalRatePct}%`);
+      console.log(`Checkpointing: ${result.metrics.productQuality.checkpointing.persistenceRatePct}%`);
+      if (result.metrics.productQuality.taskRunner?.commandsMeasured > 0) {
+        console.log(`Runner policy: ${result.metrics.productQuality.taskRunner.workflowPolicy.coveragePct}%`);
+        console.log(`Runner doctor: ${result.metrics.productQuality.taskRunner.blockedState.doctorCoveragePct}%`);
+      }
   console.log('');
   console.log('Threshold checks:');
   for (const check of result.summary.thresholdChecks) {

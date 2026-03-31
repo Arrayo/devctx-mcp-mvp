@@ -56,29 +56,58 @@ export const WORKFLOW_COMMANDS = new Set([
   'test',
 ]);
 
+export const SPECIALIZED_WORKFLOW_COMMANDS = new Set([
+  'review',
+  'debug',
+  'refactor',
+  'test',
+]);
+
 export const WORKFLOW_DEFINITIONS = Object.freeze({
   task: {
     label: 'generic task',
     defaultEvent: 'milestone',
     requirePrompt: true,
+    workflowIntent: 'implementation',
+    policyMode: 'guided',
+    nextTools: ['smart_context', 'smart_read', 'smart_turn(end)'],
+    checkpointStrategy: 'Checkpoint the first meaningful milestone after you validate the working set.',
     buildPrompt: (prompt) => normalizeWhitespace(prompt),
   },
   continue: {
     label: 'continue task',
     defaultEvent: 'milestone',
     requirePrompt: false,
+    workflowIntent: 'implementation',
+    policyMode: 'resume_guided',
+    nextTools: ['smart_turn(start)', 'smart_context', 'smart_turn(end)'],
+    checkpointStrategy: 'Continue until you reach the next concrete milestone, then checkpoint it.',
     buildPrompt: buildContinuePrompt,
   },
   resume: {
     label: 'resume task',
     defaultEvent: 'milestone',
     requirePrompt: false,
+    workflowIntent: 'implementation',
+    policyMode: 'resume_guided',
+    nextTools: ['smart_turn(start)', 'smart_context', 'smart_turn(end)'],
+    checkpointStrategy: 'Resume the active session and checkpoint the next meaningful slice rather than every minor step.',
     buildPrompt: buildContinuePrompt,
   },
   review: {
     label: 'code review',
     defaultEvent: 'milestone',
     requirePrompt: false,
+    workflowIntent: 'explore',
+    policyMode: 'review_guided',
+    nextTools: ['smart_context', 'smart_read', 'smart_turn(end)'],
+    checkpointStrategy: 'Checkpoint only after concrete findings, risk assessment, or a completed review slice.',
+    preflight: {
+      tool: 'smart_context',
+      detail: 'minimal',
+      include: ['hints', 'graph'],
+      maxTokens: 1200,
+    },
     buildPrompt: (prompt) => {
       const normalized = normalizeWhitespace(prompt) || 'Review the relevant diff or touched code path and surface concrete findings first.';
       return [
@@ -93,6 +122,14 @@ export const WORKFLOW_DEFINITIONS = Object.freeze({
     label: 'debugging task',
     defaultEvent: 'milestone',
     requirePrompt: false,
+    workflowIntent: 'debug',
+    policyMode: 'debug_guided',
+    nextTools: ['smart_search(intent=debug)', 'smart_read(symbol)', 'smart_turn(end)'],
+    checkpointStrategy: 'Checkpoint after the root cause is isolated or after the fix path is narrowed materially.',
+    preflight: {
+      tool: 'smart_search',
+      intent: 'debug',
+    },
     buildPrompt: (prompt) => {
       const normalized = normalizeWhitespace(prompt) || 'Investigate the failing path, identify the root cause, and propose or apply the smallest correct fix.';
       return [
@@ -107,6 +144,16 @@ export const WORKFLOW_DEFINITIONS = Object.freeze({
     label: 'refactor task',
     defaultEvent: 'milestone',
     requirePrompt: false,
+    workflowIntent: 'implementation',
+    policyMode: 'refactor_guided',
+    nextTools: ['smart_context', 'smart_read(symbol)', 'smart_turn(end)'],
+    checkpointStrategy: 'Checkpoint each behavior-preserving slice once the dependency edges are revalidated.',
+    preflight: {
+      tool: 'smart_context',
+      detail: 'minimal',
+      include: ['hints', 'graph', 'symbolDetail'],
+      maxTokens: 1400,
+    },
     buildPrompt: (prompt) => {
       const normalized = normalizeWhitespace(prompt) || 'Refactor the target area while preserving behavior and validating the main dependency edges.';
       return [
@@ -121,6 +168,14 @@ export const WORKFLOW_DEFINITIONS = Object.freeze({
     label: 'testing task',
     defaultEvent: 'milestone',
     requirePrompt: false,
+    workflowIntent: 'tests',
+    policyMode: 'test_guided',
+    nextTools: ['smart_search(intent=tests)', 'smart_read(symbol)', 'smart_turn(end)'],
+    checkpointStrategy: 'Checkpoint after the target tests are added, repaired, or conclusively validated.',
+    preflight: {
+      tool: 'smart_search',
+      intent: 'tests',
+    },
     buildPrompt: (prompt) => {
       const normalized = normalizeWhitespace(prompt) || 'Add or repair the relevant test coverage, then verify the main expected path.';
       return [
@@ -145,6 +200,25 @@ export const buildWorkflowPrompt = ({ commandName, prompt }) => {
   }
 
   return effectivePrompt;
+};
+
+export const buildWorkflowPolicyProfile = ({ commandName }) => {
+  const definition = WORKFLOW_DEFINITIONS[commandName];
+  if (!definition) {
+    throw new Error(`Unsupported workflow command: ${commandName}`);
+  }
+
+  return {
+    commandName,
+    label: definition.label,
+    workflowIntent: definition.workflowIntent ?? 'implementation',
+    policyMode: definition.policyMode ?? 'guided',
+    nextTools: [...(definition.nextTools ?? [])],
+    checkpointStrategy: definition.checkpointStrategy ?? null,
+    preflight: definition.preflight ? { ...definition.preflight } : null,
+    specialized: SPECIALIZED_WORKFLOW_COMMANDS.has(commandName),
+    defaultEvent: definition.defaultEvent ?? 'milestone',
+  };
 };
 
 export const evaluateRunnerGate = ({ startResult }) => {
@@ -200,12 +274,14 @@ export const buildRunnerBlockedResult = ({
   gate,
   doctorResult,
   allowDegraded,
+  workflowPolicy,
 }) => ({
   success: false,
   command: commandName,
   client,
   prompt: truncate(prompt, 240),
   blocked: true,
+  usedWrapper: false,
   allowDegraded,
   message: buildBlockedRunnerMessage({ commandName, gate, doctorResult }),
   gate,
@@ -213,6 +289,7 @@ export const buildRunnerBlockedResult = ({
   doctor: doctorResult,
   sessionId: startResult?.sessionId ?? null,
   recommendedActions: doctorResult?.recommendedActions ?? startResult?.mutationSafety?.recommendedActions ?? [],
+  workflowPolicy,
 });
 
 export const buildCleanupPlan = ({

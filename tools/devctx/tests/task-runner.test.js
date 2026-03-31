@@ -7,6 +7,7 @@ import path from 'node:path';
 import { runTaskRunner } from '../src/task-runner.js';
 import { smartSummary } from '../src/tools/smart-summary.js';
 import { projectRoot, setProjectRoot } from '../src/utils/runtime-config.js';
+import { buildIndex, persistIndex } from '../src/index.js';
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
@@ -19,6 +20,11 @@ before(() => {
   taskRunnerRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-task-runner-'));
   setProjectRoot(taskRunnerRoot);
   execFileSync('git', ['init'], { cwd: taskRunnerRoot, stdio: 'ignore' });
+  fs.mkdirSync(path.join(taskRunnerRoot, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(taskRunnerRoot, 'src', 'auth.js'), 'export function loginHandler(token) { return { ok: Boolean(token) }; }\n', 'utf8');
+  fs.writeFileSync(path.join(taskRunnerRoot, 'src', 'auth.test.js'), 'import { loginHandler } from "./auth.js";\nexport const smoke = () => loginHandler("token").ok;\n', 'utf8');
+  const index = buildIndex(taskRunnerRoot);
+  persistIndex(index, taskRunnerRoot);
 });
 
 after(() => {
@@ -40,8 +46,28 @@ test('task runner review command uses workflow prompt and wrapper in dry-run mod
   assert.equal(result.success, true);
   assert.equal(result.command, 'review');
   assert.match(result.prompt, /Perform a code review/i);
+  assert.equal(result.workflowPolicy.policyMode, 'review_guided');
+  assert.equal(result.workflowPolicy.preflight.tool, 'smart_context');
+  assert.ok(Array.isArray(result.workflowPolicy.preflight.topFiles));
   assert.match(result.wrappedPrompt, /next tools:/i);
   assert.ok(result.sessionId);
+
+  await smartSummary({ action: 'reset', sessionId: result.sessionId });
+});
+
+test('task runner debug command captures smart_search preflight guidance', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const result = await runTaskRunner({
+    commandName: 'debug',
+    client: 'cursor',
+    prompt: 'Investigate loginHandler failures and narrow the root cause',
+    dryRun: true,
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.command, 'debug');
+  assert.equal(result.workflowPolicy.policyMode, 'debug_guided');
+  assert.equal(result.workflowPolicy.preflight.tool, 'smart_search');
+  assert.ok(result.workflowPolicy.preflight.totalMatches >= 0);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });

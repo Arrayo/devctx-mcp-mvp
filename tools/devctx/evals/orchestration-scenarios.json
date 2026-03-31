@@ -5,8 +5,11 @@
     "minNetSavedTokens": 150,
     "minContinuityAlignmentRatePct": 20,
     "minBlockedRemediationCoveragePct": 100,
-    "minRefreshTopFileSignalRatePct": 100,
-    "minCheckpointPersistenceRatePct": 50
+    "minRefreshTopFileSignalRatePct": 80,
+    "minCheckpointPersistenceRatePct": 50,
+    "minRunnerWorkflowCoveragePct": 100,
+    "minRunnerPreflightCoveragePct": 50,
+    "minRunnerDoctorCoveragePct": 100
   },
   "scenarios": [
     {
@@ -147,6 +150,76 @@
       "expect": {
         "checkpointPersisted": true,
         "endRecommendedPathMode": "checkpointed"
+      }
+    },
+    {
+      "id": "runner-review-guidance",
+      "description": "Runs the review workflow through task_runner and captures preflight guidance",
+      "runner": {
+        "commandName": "review",
+        "client": "cursor",
+        "prompt": "Review the auth and wrapper changes, then surface concrete risks first",
+        "dryRun": true
+      },
+      "expect": {
+        "runnerSuccess": true,
+        "runnerBlocked": false,
+        "runnerUsedWrapper": true,
+        "runnerWorkflowIntent": "explore",
+        "runnerPolicyMode": "review_guided",
+        "runnerPreflightTool": "smart_context",
+        "runnerPreflightTopFilesMin": 1
+      }
+    },
+    {
+      "id": "runner-blocked-doctor",
+      "description": "Routes blocked task_runner workflows through doctor before execution",
+      "seedSession": {
+        "sessionId": "bench-runner-blocked",
+        "update": {
+          "goal": "Resume the blocked review workflow",
+          "status": "in_progress",
+          "currentFocus": "Repo safety blocked state"
+        }
+      },
+      "stageStateDb": true,
+      "runner": {
+        "commandName": "debug",
+        "client": "cursor",
+        "prompt": "Debug the blocked workflow path safely",
+        "dryRun": true
+      },
+      "expect": {
+        "mutationBlocked": true,
+        "runnerSuccess": false,
+        "runnerBlocked": true,
+        "runnerDoctorIssued": true,
+        "runnerPolicyMode": "debug_guided"
+      }
+    },
+    {
+      "id": "runner-checkpoint",
+      "description": "Persists a milestone through the task_runner checkpoint command",
+      "seedSession": {
+        "sessionId": "bench-runner-checkpoint",
+        "update": {
+          "goal": "Checkpoint the task runner benchmark flow",
+          "status": "in_progress",
+          "currentFocus": "checkpoint command"
+        }
+      },
+      "runner": {
+        "commandName": "checkpoint",
+        "client": "cursor",
+        "sessionId": "bench-runner-checkpoint",
+        "event": "milestone",
+        "update": {
+          "completed": ["Checkpointed the runner flow"],
+          "nextStep": "Inspect the persisted benchmark session"
+        }
+      },
+      "expect": {
+        "checkpointPersisted": true
       }
     }
   ]
