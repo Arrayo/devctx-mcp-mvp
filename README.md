@@ -29,25 +29,16 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## What's New in `1.6.2`
+## Latest Release: `1.7.1`
 
-`1.6.2` improves security and operational visibility:
+Major features:
+- **Shared orchestration layer** for automatic context management
+- **Client adapters** (Claude, Cursor) with turn tracking and checkpoint enforcement
+- **Comparative metrics** for cross-client benchmarking
+- **Task runner workflows** for terminal and scripted workflows
+- **90% token reduction** through intelligent compression
 
-- **smart_shell security:** Fixed false positives (allows `rg "foo|bar"`, `find evals/`, blocks `eval "code"`)
-- **Runtime preflight:** Node 22+ check on startup with clear error messages
-- **smart_doctor impact:** Shows estimated cleanup impact (`~3247 rows, ~15.2MB, 45% reduction`)
-- **Legacy cleanup:** Guided workflow with visual table before applying cleanup
-
-`1.6.1` fixed operational robustness for CLI usage (project root, SQLite locks, prompt rendering).
-
-`1.6.0` added a product-layer task runner on top of the MCP tools:
-
-- `smart-context-task` for terminal and scripted workflows
-- `cursor-devctx` assisted launcher for Cursor projects
-- continuity-aware workflows for `task`, `implement`, `continue`, `resume`, `review`, `debug`, `refactor`, and `test`
-- workflow-level metrics and release-gated orchestration benchmarks
-
-If you want the practical entrypoint rather than raw MCP primitives, start with [Task Runner Workflows](./docs/task-runner.md).
+See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
 ## Why it exists
 
@@ -304,7 +295,7 @@ For **non-trivial tasks** (debugging, review, refactor, testing, architecture), 
 
 ### The Product Entry Point: `smart-context-task`
 
-If you want the same lifecycle packaged into named workflows, use the task runner introduced in `1.6.0`:
+If you want the same lifecycle packaged into named workflows, use the task runner:
 
 ```bash
 smart-context-task task --prompt "inspect the auth flow and continue the bugfix"
@@ -2049,43 +2040,17 @@ export DEVCTX_CACHE_WARMING=false
 }
 ```
 
-## Recent Improvements
+## Core Capabilities
 
-### v1.6.2 (Current)
+- ✅ **90% token reduction** through intelligent compression
+- ✅ **Automatic orchestration** with shared layer and client adapters
+- ✅ **Session continuity** via SQLite state persistence
+- ✅ **Workflow tracking** (debugging, code review, refactoring, testing, architecture)
+- ✅ **Task runner CLI** with continuity-aware workflows
+- ✅ **Comparative metrics** for cross-client benchmarking
+- ✅ **Production-ready** with 600+ tests and release-gated benchmarks
 
-**Security & operational improvements:**
-- ✅ `smart_shell` false positive fixes (quoted pipes, path names with eval/exec)
-- ✅ Runtime preflight: Node 22+ check on startup
-- ✅ `smart_doctor` impact estimation (rows, bytes, % reduction)
-- ✅ Legacy cleanup guided workflow with visual table
-
-### v1.6.1
-
-**CLI operational fixes:**
-- ✅ Task runner project root now uses `cwd` instead of package path
-- ✅ SQLite lock retry with incremental backoff (3 attempts)
-- ✅ Fixed `[object Object]` in task runner prompt rendering
-
-### v1.6.0
-
-**Operational resilience & production readiness:**
-- ✅ `smart_doctor` tool for comprehensive health checks (repo safety, storage diagnostics, compaction, legacy cleanup)
-- ✅ Uniform `mutationSafety` contract across all tools (blocked state, remediation actions, degraded mode)
-- ✅ SQLite diagnostics with integrity verification and structured recovery guidance
-- ✅ Orchestration benchmark with release gating (5 core scenarios, baseline enforcement in CI)
-- ✅ Product quality metrics (continuity alignment, blocked remediation coverage, checkpoint persistence)
-- ✅ Operational guidance via `recommendedPath` (next tools, steps, modes)
-
-**Core capabilities:**
-- ✅ Project-local SQLite state (`.devctx/state.sqlite`) with event-driven persistence
-- ✅ Session isolation and continuity tracking via `smart_turn(start/end)`
-- ✅ Workflow tracking (debugging, code review, refactoring, testing, architecture)
-- ✅ Net token savings reporting (gross savings - overhead)
-- ✅ Anti-commit enforcement (prevents accidental commits of mutable state)
-- ✅ Context refresh with incremental index rebuilding
-- ✅ 598+ tests passing (99%+ coverage)
-
-See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
+See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
 ## Repository Structure
 
@@ -2098,7 +2063,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 598+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.6.2)
+│   └── package.json       ← Package metadata (v1.7.1)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file

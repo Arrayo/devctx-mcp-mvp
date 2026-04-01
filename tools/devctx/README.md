@@ -52,9 +52,9 @@ Restart your AI client. Done.
 
 ---
 
-## `1.6.0` Task Runner
+## Task Runner
 
-`1.6.0` adds `smart-context-task`, a workflow-oriented CLI on top of the raw MCP tools.
+`smart-context-task` is a workflow-oriented CLI on top of the raw MCP tools.
 
 Use it when you want a more repeatable path than “agent reads rules and hopefully picks the right flow”.
 

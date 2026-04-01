@@ -41,7 +41,7 @@ The core MCP still remains the source of truth. The runner does not replace `sma
   - Uses `smart_turn(start)` plus `smart_context` preflight and continuity guidance.
 
 - `implement`
-  - Implementation-oriented workflow introduced in `1.6.0`.
+  - Implementation-oriented workflow with automatic orchestration.
   - Uses dependency-aware `smart_context` preflight with symbol detail.
 
 - `continue`

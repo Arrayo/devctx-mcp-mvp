@@ -18,6 +18,12 @@ All notable changes to this project will be documented in this file.
 - Added validation script: `scripts/validate-client-detection.sh`
 - Total: 715/715 tests passing
 
+## [1.7.1] - 2026-04-01
+
+### Changed
+- **Documentation:** Removed version-specific references from README files
+- **Repository:** Cleaned up local development files (.cursor/rules/, .cursorrules, .gitlab-ci.yml, PUBLISH.md)
+
 ## [1.7.0] - 2026-04-01
 
 ### Added

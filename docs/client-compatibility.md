@@ -4,7 +4,7 @@
 
 This document provides detailed information about each client's capabilities, installation, and recommended workflows.
 
-If you want the workflow layer added in `1.6.0`, read [Task Runner Workflows](./task-runner.md) alongside this document.
+If you want the workflow layer, read [Task Runner Workflows](./task-runner.md) alongside this document.
 
 ---
 
