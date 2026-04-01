@@ -329,12 +329,19 @@ const buildCompactionCheck = ({ storageHealth, maintenance }) => {
   }
 
   if (needsCompaction.length > 0) {
+    const totalRows = compactionEstimate.totalDeletes;
+    const estimatedBytes = Math.round(storageHealth.sizeBytes * (totalRows / (counts.sessions + counts.sessionEvents + counts.metricsEvents + counts.hookTurnState)));
+    const pctReduction = Math.round((estimatedBytes / storageHealth.sizeBytes) * 100);
+    const impactSummary = totalRows > 0
+      ? `Estimated impact: ~${totalRows} rows, ~${(estimatedBytes / 1024 / 1024).toFixed(1)}MB (${pctReduction}% reduction)`
+      : 'Estimated impact: minimal (no rows to delete with current retention policy)';
+
     return buildCheck({
       id: 'compaction',
       status: 'warning',
       message: 'SQLite retention/compaction hygiene should be refreshed before the local state grows further.',
       recommendedActions: [
-        'Run smart_summary with action="compact" to prune old events and metrics.',
+        `Run smart_summary with action="compact" to prune old events and metrics. ${impactSummary}`,
         'Use vacuum=true if you expect large deletions and want to reclaim file size immediately.',
       ],
       details: {
@@ -345,6 +352,11 @@ const buildCompactionCheck = ({ storageHealth, maintenance }) => {
         activeSessionId,
         counts,
         compactionEstimate,
+        estimatedImpact: {
+          rowsToDelete: totalRows,
+          bytesReclaimed: estimatedBytes,
+          pctReduction,
+        },
         lastCompactedAt,
         daysSinceCompaction,
         retentionDays,

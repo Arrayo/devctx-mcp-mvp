@@ -513,10 +513,26 @@ const runCleanupCommand = async ({
   });
 
   if (cleanupMode === 'legacy') {
-    const result = await smartSummary({
+    const dryRun = await smartSummary({
       action: 'cleanup_legacy',
-      apply,
+      apply: false,
     });
+
+    if (!apply && dryRun.eligibleFiles?.length > 0) {
+      console.log('\n📋 Legacy files eligible for cleanup:\n');
+      console.log('File                          Size');
+      console.log('─'.repeat(50));
+      for (const file of dryRun.eligibleFiles) {
+        const sizeKB = file.sizeBytes ? `${(file.sizeBytes / 1024).toFixed(1)}KB` : 'N/A';
+        console.log(`${file.relativePath.padEnd(30)} ${sizeKB}`);
+      }
+      const totalKB = dryRun.eligibleFiles.reduce((sum, f) => sum + (f.sizeBytes || 0), 0) / 1024;
+      console.log('─'.repeat(50));
+      console.log(`Total: ${dryRun.eligibleFiles.length} files, ${totalKB.toFixed(1)}KB\n`);
+      console.log('💡 To apply cleanup, run: smart-context-task cleanup --mode legacy --apply\n');
+    }
+
+    const result = apply ? await smartSummary({ action: 'cleanup_legacy', apply: true }) : dryRun;
     const payload = {
       command: 'cleanup',
       cleanupMode,

@@ -29,13 +29,16 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## What's New in `1.6.1`
+## What's New in `1.6.2`
 
-`1.6.1` fixes operational robustness for CLI usage:
+`1.6.2` improves security and operational visibility:
 
-- Task runner now correctly uses project root from `cwd` instead of installed package path
-- Improved SQLite lock handling with retry logic for transient contention
-- Fixed `[object Object]` rendering in task runner prompts
+- **smart_shell security:** Fixed false positives (allows `rg "foo|bar"`, `find evals/`, blocks `eval "code"`)
+- **Runtime preflight:** Node 22+ check on startup with clear error messages
+- **smart_doctor impact:** Shows estimated cleanup impact (`~3247 rows, ~15.2MB, 45% reduction`)
+- **Legacy cleanup:** Guided workflow with visual table before applying cleanup
+
+`1.6.1` fixed operational robustness for CLI usage (project root, SQLite locks, prompt rendering).
 
 `1.6.0` added a product-layer task runner on top of the MCP tools:
 
@@ -2048,7 +2051,15 @@ export DEVCTX_CACHE_WARMING=false
 
 ## Recent Improvements
 
-### v1.6.1 (Current)
+### v1.6.2 (Current)
+
+**Security & operational improvements:**
+- ✅ `smart_shell` false positive fixes (quoted pipes, path names with eval/exec)
+- ✅ Runtime preflight: Node 22+ check on startup
+- ✅ `smart_doctor` impact estimation (rows, bytes, % reduction)
+- ✅ Legacy cleanup guided workflow with visual table
+
+### v1.6.1
 
 **CLI operational fixes:**
 - ✅ Task runner project root now uses `cwd` instead of package path
@@ -2087,7 +2098,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 598+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.6.1)
+│   └── package.json       ← Package metadata (v1.6.2)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file

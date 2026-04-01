@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.2] - 2026-04-01
+
+### Improved
+- **smart_shell Security:** Fixed false positives for legitimate shell patterns
+  - Allow pipe character inside quoted arguments: `rg "foo|bar" src`
+  - Allow `eval`/`exec` in path names: `find evals -name "*.json"`, `npm run eval:report`
+  - Block `eval`/`exec` as commands: `eval "code"`, `exec /bin/sh`
+  - Properly handle escaped characters: `find -exec rm {} \;`
+  - Test coverage: Added 3 new tests, updated 4 security tests
+
+- **Runtime Preflight:** Check Node version on startup
+  - New `runtime-check.js` utility validates Node 22+ requirement
+  - Server and task runner exit early with clear error if Node < 22
+  - Message: "Node X.Y.Z is below minimum requirement (22+). node:sqlite and node:test require Node 22+"
+  - Test coverage: `runtime-check.test.js`
+
+- **smart_doctor Impact Estimation:** Show estimated cleanup impact
+  - Compaction recommendations now include: `~3247 rows, ~15.2MB (45% reduction)`
+  - New `estimatedImpact` field in details: `{ rowsToDelete, bytesReclaimed, pctReduction }`
+  - Helps users decide when to run compaction
+
+- **Legacy Cleanup Workflow:** Guided cleanup with visual feedback
+  - `smart-context-task cleanup --mode legacy` shows table of eligible files
+  - Displays file names, sizes, and total impact before cleanup
+  - Clear instruction: "To apply cleanup, run: smart-context-task cleanup --mode legacy --apply"
+
+### Changed
+- **Package Version:** Bumped to 1.6.2
+
 ## [1.6.1] - 2026-03-31
 
 ### Fixed
