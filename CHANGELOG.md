@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0] - 2026-04-01
+
+### Added
+- **Shared Orchestration Layer:** Centralized orchestration logic in `base-orchestrator.js` and `event-policy.js`
+  - Managed start/end cycle with session isolation
+  - Wrapped prompts with context overhead tracking
+  - Preflight logic (smart_context/smart_search) with policy composition
+  - Continuity guidance and automaticity signals
+  - Eliminates 433 lines of duplication from task-runner and headless-wrapper
+
+- **Client Adapter Pattern:** Reusable adapters for IDE-specific hooks
+  - `claude-adapter.js`: SessionStart, UserPromptSubmit, PostToolUse, Stop events
+  - `cursor-adapter.js`: ConversationStart, UserMessageSubmit, PostToolUse, ConversationEnd events
+  - Full dependency injection for testability
+  - Turn tracking in SQLite with checkpoint enforcement
+  - Auto-append carryover on conversation end
+  - Backward compatible: legacy hooks reduced to 1-line re-exports
+
+- **Comparative Client Metrics:** Cross-client benchmarking in product quality analytics
+  - Per-client aggregation: adapter events, auto-start/checkpoint coverage, context overhead
+  - Comparative signals: lowest avg overhead client, best auto-start rate
+  - Standardized metadata: client, managedByClientAdapter, autoStartTriggered, autoCheckpointTriggered, overheadTokens
+  - New report section: "Client Adapter Signals" with per-client breakdown
+  - Prevents double-counting: overheadTokens only from events that declare it
+
+### Changed
+- **task-runner.js:** Refactored to consume shared orchestration (-265 lines)
+- **headless-wrapper.js:** Refactored to delegate to base orchestrator (-225 lines)
+- **claude-hooks.js:** Reduced to 1-line re-export for backward compatibility
+- **product-quality.js:** Extended with client adapter quality analysis
+- **report-metrics.js:** Fixed bug that hid quality section when turnsMeasured was 0
+
+### Tests
+- Added 54 unit tests for base-orchestrator and event-policy
+- Added 17 unit tests for claude-adapter and cursor-adapter
+- Added 3 unit tests for product-quality
+- Total: 93/93 tests passing
+
+### Documentation
+- `docs/auto-orchestration-design.md`: Architecture and implementation plan
+- `docs/phase-1-consolidation.md`: Shared orchestration validation summary
+- `docs/phase-2-client-adapters.md`: Client adapter pattern documentation
+- `docs/auto-orchestration-summary.md`: Executive summary of all phases
+- `docs/verification/benchmark.md`: Validation workflow for client comparison
+
 ## [1.6.2] - 2026-04-01
 
 ### Improved
