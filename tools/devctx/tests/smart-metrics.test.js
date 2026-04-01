@@ -271,6 +271,113 @@ test('smart_metrics - includes task_runner workflow-quality signals', async () =
   }
 });
 
+test('smart_metrics - groups automaticity and overhead by client adapter', async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-clients-'));
+  const metricsFile = path.join(tmpRoot, '.devctx', 'metrics.jsonl');
+
+  try {
+    fs.mkdirSync(path.dirname(metricsFile), { recursive: true });
+    const entries = [
+      {
+        tool: 'claude_hook',
+        action: 'UserPromptSubmit',
+        sessionId: 'client-session',
+        rawTokens: 0,
+        compressedTokens: 0,
+        savedTokens: 0,
+        metadata: {
+          client: 'claude',
+          adapterClient: 'claude',
+          managedByClientAdapter: true,
+          autoStartTriggered: true,
+          autoCheckpointTriggered: false,
+          overheadTokens: 14,
+        },
+        timestamp: '2026-03-31T09:00:00.000Z',
+      },
+      {
+        tool: 'claude_hook',
+        action: 'Stop',
+        sessionId: 'client-session',
+        rawTokens: 0,
+        compressedTokens: 0,
+        savedTokens: 0,
+        metadata: {
+          client: 'claude',
+          adapterClient: 'claude',
+          managedByClientAdapter: true,
+          autoStartTriggered: false,
+          autoCheckpointTriggered: true,
+          autoAppended: true,
+          overheadTokens: 0,
+        },
+        timestamp: '2026-03-31T09:05:00.000Z',
+      },
+      {
+        tool: 'agent_wrapper',
+        action: 'cursor:start',
+        sessionId: 'client-session',
+        rawTokens: 0,
+        compressedTokens: 0,
+        savedTokens: 0,
+        metadata: {
+          client: 'cursor',
+          managedByBaseOrchestrator: true,
+          autoStarted: true,
+          overheadTokens: 10,
+        },
+        timestamp: '2026-03-31T09:10:00.000Z',
+      },
+      {
+        tool: 'task_runner',
+        action: 'review',
+        sessionId: 'client-session',
+        rawTokens: 0,
+        compressedTokens: 25,
+        savedTokens: 0,
+        metadata: {
+          analyticsKind: TASK_RUNNER_QUALITY_ANALYTICS_KIND,
+          client: 'cursor',
+          isWorkflowCommand: true,
+          specializedWorkflow: true,
+          usedWrapper: true,
+          blocked: false,
+          doctorIssued: false,
+          workflowPolicyMode: 'review_guided',
+          workflowPreflightTool: 'smart_context',
+          managedByBaseOrchestrator: true,
+          autoStartTriggered: true,
+          autoPreflightTriggered: true,
+          autoCheckpointTriggered: false,
+          contextOverheadTokens: 10,
+        },
+        timestamp: '2026-03-31T09:12:00.000Z',
+      },
+    ];
+    fs.writeFileSync(metricsFile, entries.map((entry) => JSON.stringify(entry)).join('\n') + '\n', 'utf8');
+
+    const result = await smartMetrics({ file: metricsFile, window: 'all', latest: 10, sessionId: 'client-session' });
+    assert.equal(result.productQuality.clientAdapters.clientsMeasured, 2);
+
+    const claude = result.productQuality.clientAdapters.byClient.find((entry) => entry.client === 'claude');
+    const cursor = result.productQuality.clientAdapters.byClient.find((entry) => entry.client === 'cursor');
+
+    assert.ok(claude);
+    assert.equal(claude.adapterEvents, 2);
+    assert.equal(claude.autoStartedEvents, 1);
+    assert.equal(claude.autoCheckpointedEvents, 1);
+    assert.equal(claude.contextOverheadTokens, 14);
+
+    assert.ok(cursor);
+    assert.equal(cursor.baseOrchestratedEvents, 2);
+    assert.equal(cursor.autoStartedEvents, 2);
+    assert.equal(cursor.autoPreflightedEvents, 1);
+    assert.equal(cursor.contextOverheadTokens, 10);
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
 test('smart_metrics - suppresses SQLite side effects and global metric writes when state sqlite is tracked or staged', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-blocked-'));
   const previousProjectRoot = projectRoot;

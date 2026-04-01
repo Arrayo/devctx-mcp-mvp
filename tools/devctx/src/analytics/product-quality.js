@@ -12,6 +12,69 @@ const isTaskRunnerQualityEntry = (entry) =>
   entry?.tool === 'task_runner'
   && entry?.metadata?.analyticsKind === TASK_RUNNER_QUALITY_ANALYTICS_KIND;
 
+const roundAverage = (total, count) =>
+  count > 0 ? Number((total / count).toFixed(1)) : 0;
+
+const getMetricsClient = (entry) =>
+  entry?.metadata?.adapterClient
+  ?? entry?.metadata?.client
+  ?? null;
+
+const analyzeClientAdapterQuality = (entries = []) => {
+  const clientEntries = entries.filter((entry) => Boolean(getMetricsClient(entry)));
+
+  const byClient = [...clientEntries.reduce((acc, entry) => {
+    const client = getMetricsClient(entry);
+    const current = acc.get(client) ?? {
+      client,
+      entriesMeasured: 0,
+      adapterEvents: 0,
+      wrapperEvents: 0,
+      taskRunnerEvents: 0,
+      baseOrchestratedEvents: 0,
+      autoStartedEvents: 0,
+      autoPreflightedEvents: 0,
+      autoCheckpointedEvents: 0,
+      blockedEvents: 0,
+      contextOverheadEntries: 0,
+      contextOverheadTokens: 0,
+    };
+
+    const overheadTokens = Math.max(0, Number(entry.metadata?.overheadTokens ?? 0));
+    current.entriesMeasured += 1;
+    current.adapterEvents += entry.metadata?.managedByClientAdapter ? 1 : 0;
+    current.wrapperEvents += entry.tool === 'agent_wrapper' ? 1 : 0;
+    current.taskRunnerEvents += entry.tool === 'task_runner' ? 1 : 0;
+    current.baseOrchestratedEvents += entry.metadata?.managedByBaseOrchestrator ? 1 : 0;
+    current.autoStartedEvents += (entry.metadata?.autoStartTriggered || entry.metadata?.autoStarted) ? 1 : 0;
+    current.autoPreflightedEvents += entry.metadata?.autoPreflightTriggered ? 1 : 0;
+    current.autoCheckpointedEvents += (entry.metadata?.autoCheckpointTriggered || entry.metadata?.autoAppended) ? 1 : 0;
+    current.blockedEvents += entry.metadata?.blocked ? 1 : 0;
+    current.contextOverheadEntries += overheadTokens > 0 ? 1 : 0;
+    current.contextOverheadTokens += overheadTokens;
+
+    acc.set(client, current);
+    return acc;
+  }, new Map()).values()]
+    .map((entry) => ({
+      ...entry,
+      averageContextOverheadTokens: roundAverage(entry.contextOverheadTokens, entry.contextOverheadEntries),
+      adapterCoveragePct: roundPct(entry.adapterEvents, entry.entriesMeasured),
+      baseOrchestratorCoveragePct: roundPct(entry.baseOrchestratedEvents, entry.entriesMeasured),
+      autoStartCoveragePct: roundPct(entry.autoStartedEvents, entry.entriesMeasured),
+      autoPreflightCoveragePct: roundPct(entry.autoPreflightedEvents, entry.entriesMeasured),
+      autoCheckpointCoveragePct: roundPct(entry.autoCheckpointedEvents, entry.entriesMeasured),
+    }))
+    .sort((a, b) => a.client.localeCompare(b.client));
+
+  return {
+    clientsMeasured: byClient.length,
+    entriesMeasured: clientEntries.length,
+    totalContextOverheadTokens: byClient.reduce((total, entry) => total + entry.contextOverheadTokens, 0),
+    byClient,
+  };
+};
+
 const analyzeTaskRunnerQuality = (entries = []) => {
   const runnerEntries = entries.filter(isTaskRunnerQualityEntry);
   const workflowEntries = runnerEntries.filter((entry) => entry.metadata?.isWorkflowCommand);
@@ -156,6 +219,7 @@ export const analyzeProductQuality = (entries = []) => {
       blockedEnds,
       persistenceRatePct: roundPct(persistedEnds, endEntries.length),
     },
+    clientAdapters: analyzeClientAdapterQuality(entries),
     taskRunner: analyzeTaskRunnerQuality(entries),
   };
 };
@@ -226,6 +290,14 @@ export const formatProductQualityReport = (stats) => {
     lines.push('');
     lines.push('Checkpoint Commands:');
     lines.push(`Persisted checkpoints: ${stats.taskRunner.checkpointing.persistedCommands}/${stats.taskRunner.checkpointing.commandsMeasured} (${stats.taskRunner.checkpointing.persistenceRatePct}%)`);
+    lines.push('');
+  }
+
+  if (Number(stats?.clientAdapters?.clientsMeasured ?? 0) > 0) {
+    lines.push('Client Adapter Signals:');
+    for (const client of stats.clientAdapters.byClient) {
+      lines.push(`${client.client}: entries=${client.entriesMeasured}, adapter=${client.adapterEvents}, auto-start=${client.autoStartedEvents}, auto-preflight=${client.autoPreflightedEvents}, auto-checkpoint=${client.autoCheckpointedEvents}, overhead=${client.contextOverheadTokens} tokens`);
+    }
     lines.push('');
   }
 
