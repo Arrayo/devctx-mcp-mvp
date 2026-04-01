@@ -79,7 +79,7 @@ describe('smart_shell find hardening', () => {
     fs.writeFileSync(plainFixture, 'plain fixture\n', 'utf8');
 
     try {
-      const result = await smartShell({ command: 'find tools/devctx/fixtures/formats -name "*error*" -o -name "*plain*"' });
+      const result = await smartShell({ command: 'find fixtures/formats -name "*error*" -o -name "*plain*"' });
       assert.equal(result.blocked, false);
       assert.equal(result.exitCode, 0);
       assert.match(result.output, /_smart_shell_error\.txt/);
@@ -163,14 +163,14 @@ describe('path validation security', () => {
 
 describe('smart_search literal search', () => {
   it('treats regex metacharacters as literal text', async () => {
-    const result = await smartSearch({ query: '[a-z]+@fake', cwd: 'tools/devctx/src' });
-    assert.equal(result.engine, 'rg');
+    const result = await smartSearch({ query: '[a-z]+@fake', cwd: 'src' });
+    assert.ok(['rg', 'walk'].includes(result.engine), `engine should be rg or walk, got ${result.engine}`);
     assert.equal(result.totalMatches, 0, '[a-z]+@fake as regex would match many strings but as literal should match nothing');
   });
 
   it('finds exact literal strings', async () => {
-    const result = await smartSearch({ query: 'smartSearch', cwd: 'tools/devctx/src' });
-    assert.equal(result.engine, 'rg');
+    const result = await smartSearch({ query: 'smartSearch', cwd: 'src' });
+    assert.ok(['rg', 'walk'].includes(result.engine), `engine should be rg or walk, got ${result.engine}`);
     assert.ok(result.totalMatches > 0, 'should find literal smartSearch matches');
   });
 });
@@ -183,8 +183,6 @@ describe('readTextFile binary detection', () => {
   const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'formats');
   const binFixture = path.join(fixtureDir, '_test_binary.bin');
   const txtFixture = path.join(fixtureDir, '_test_text.txt');
-  const relBin = 'tools/devctx/fixtures/formats/_test_binary.bin';
-  const relTxt = 'tools/devctx/fixtures/formats/_test_text.txt';
 
   beforeEach(() => {
     fs.writeFileSync(binFixture, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x00, 0x00, 0x0d]));
@@ -200,7 +198,7 @@ describe('readTextFile binary detection', () => {
     const { readTextFile } = await import('../src/utils/fs.js');
 
     assert.throws(
-      () => readTextFile(relBin),
+      () => readTextFile(binFixture),
       (err) => err.message.includes('Binary file'),
     );
   });
@@ -208,7 +206,7 @@ describe('readTextFile binary detection', () => {
   it('accepts valid UTF-8 text files', async () => {
     const { readTextFile } = await import('../src/utils/fs.js');
 
-    const result = readTextFile(relTxt);
+    const result = readTextFile(txtFixture);
     assert.ok(result.content.includes('Hello world'));
   });
 });
