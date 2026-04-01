@@ -5,7 +5,7 @@ import { smartSearch } from '../src/tools/smart-search.js';
 import { projectRoot } from '../src/utils/paths.js';
 import { createRecorder, emitJson, formatError } from './lib/smoke-helpers.js';
 
-const fixtureRoot = 'tools/devctx/fixtures/formats';
+const fixtureRoot = 'fixtures/formats';
 const fixtureRootPath = path.resolve(projectRoot, fixtureRoot);
 
 const readCases = [
