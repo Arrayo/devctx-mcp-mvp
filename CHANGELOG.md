@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.3] - 2026-04-01
+
+### Fixed
+- **npm Package:** Added `README.md` to `files` array in `package.json` so it appears on npm registry
+
 ## [1.7.2] - 2026-04-01
 
 ### Added
