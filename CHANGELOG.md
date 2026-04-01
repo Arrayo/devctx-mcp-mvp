@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.1] - 2026-03-31
+
+### Fixed
+- **Task Runner CLI Project Root:** `runtime-config.js` now uses `process.cwd()` as default instead of deriving from installed package path
+  - Result: `smart-context-task` and `cursor-devctx` launcher now correctly use `.devctx` from the project where they're invoked
+  - Test coverage: `runtime-config.test.js` validates `projectRoot === cwd` when no `--project-root` or env is set
+
+- **SQLite Lock Handling:** Improved resilience for transient database locks
+  - `sqlite.js`: Added `busy_timeout=1000ms` and retry logic with 3 attempts and incremental backoff (75ms × attempt)
+  - `task-runner.js`: Wrapped all `smart_turn`, `smart_doctor`, `smart_status` calls with retry (100ms × attempt)
+  - Result: Task runner workflows tolerate brief SQLite contention without failing
+  - Test coverage: `task runner review dry-run tolerates transient SQLite locks` simulates real lock with child process
+
+- **Prompt Rendering:** Fixed `[object Object]` appearing in task runner prompts
+  - New `extractContextTopFiles` function normalizes `topFiles` to string paths
+  - Handles both object format (`{file, path}`) and string format
+  - Result: `Refreshed top files: tests/robustness.test.js, src/task-runner/policy.js` instead of `[object Object]`
+  - Applied to preflight and continuity guidance rendering
+
+### Changed
+- **Package Version:** Bumped to 1.6.1
+
 ## [1.6.0] - 2026-03-31
 
 ### Added
