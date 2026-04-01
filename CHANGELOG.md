@@ -20,9 +20,19 @@ All notable changes to this project will be documented in this file.
 
 ## [1.7.1] - 2026-04-01
 
+### Added
+- **Top Tools Visibility:** `smart_metrics` now includes `summary.topTools` field
+  - Highlights top 3 tools by net savings (e.g., smart_context: 850 tokens, smart_read: 400 tokens)
+  - Filters out tools with negative or zero net savings
+  - Makes compression tool value immediately visible in session reports
+  - Addresses feedback: "el valor práctico de smart_context y smart_read se notó durante el trabajo, pero no quedó tan visible en la métrica agregada"
+
 ### Changed
 - **Documentation:** Removed version-specific references from README files
 - **Repository:** Cleaned up local development files (.cursor/rules/, .cursorrules, .gitlab-ci.yml, PUBLISH.md)
+
+### Tests
+- Added test for `topTools` ordering and filtering
 
 ## [1.7.0] - 2026-04-01
 

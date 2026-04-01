@@ -726,3 +726,90 @@ test('smart_metrics - client adapter metrics distinguish cursor from generic', {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('smart_metrics - topTools highlights tools with highest net savings', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-top-tools-'));
+  const metricsFile = path.join(tmpRoot, '.devctx', 'metrics.jsonl');
+  const previousProjectRoot = projectRoot;
+
+  try {
+    setProjectRoot(tmpRoot);
+    fs.mkdirSync(path.dirname(metricsFile), { recursive: true });
+
+    await persistMetrics({
+      tool: 'smart_context',
+      target: 'task-a',
+      sessionId: 'top-test',
+      rawTokens: 1000,
+      compressedTokens: 150,
+      savedTokens: 850,
+      timestamp: '2026-04-01T10:00:00.000Z',
+    });
+
+    await persistMetrics({
+      tool: 'smart_read',
+      target: 'file-b.js',
+      sessionId: 'top-test',
+      rawTokens: 500,
+      compressedTokens: 100,
+      savedTokens: 400,
+      timestamp: '2026-04-01T10:05:00.000Z',
+    });
+
+    await persistMetrics({
+      tool: 'smart_search',
+      target: 'query-c',
+      sessionId: 'top-test',
+      rawTokens: 300,
+      compressedTokens: 150,
+      savedTokens: 150,
+      timestamp: '2026-04-01T10:10:00.000Z',
+    });
+
+    await persistMetrics({
+      tool: 'smart_turn',
+      action: 'start',
+      sessionId: 'top-test',
+      rawTokens: 0,
+      compressedTokens: 200,
+      savedTokens: 0,
+      metadata: { overheadTokens: 200 },
+      timestamp: '2026-04-01T10:15:00.000Z',
+    });
+
+    await persistMetrics({
+      tool: 'smart_summary',
+      action: 'checkpoint',
+      sessionId: 'top-test',
+      rawTokens: 0,
+      compressedTokens: 50,
+      savedTokens: 0,
+      metadata: { overheadTokens: 50 },
+      timestamp: '2026-04-01T10:20:00.000Z',
+    });
+
+    const result = await smartMetrics({ window: 'all', latest: 10, sessionId: 'top-test' });
+
+    assert.ok(result.summary.topTools);
+    assert.strictEqual(result.summary.topTools.length, 3);
+
+    const [first, second, third] = result.summary.topTools;
+    assert.strictEqual(first.tool, 'smart_context');
+    assert.strictEqual(first.netSavedTokens, 850);
+    assert.strictEqual(first.count, 1);
+
+    assert.strictEqual(second.tool, 'smart_read');
+    assert.strictEqual(second.netSavedTokens, 400);
+    assert.strictEqual(second.count, 1);
+
+    assert.strictEqual(third.tool, 'smart_search');
+    assert.strictEqual(third.netSavedTokens, 150);
+    assert.strictEqual(third.count, 1);
+
+    assert.ok(!result.summary.topTools.some((t) => t.tool === 'smart_turn'));
+    assert.ok(!result.summary.topTools.some((t) => t.tool === 'smart_summary'));
+  } finally {
+    setProjectRoot(previousProjectRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});

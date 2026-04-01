@@ -267,6 +267,18 @@ export const aggregateMetrics = (entries) => {
 
   const netSavedTokens = getNetSavedTokens(savedTokens, overheadTokens);
 
+  const topTools = tools
+    .slice()
+    .sort((a, b) => b.netSavedTokens - a.netSavedTokens)
+    .slice(0, 3)
+    .filter((tool) => tool.netSavedTokens > 0)
+    .map((tool) => ({
+      tool: tool.tool,
+      netSavedTokens: tool.netSavedTokens,
+      netSavingsPct: tool.netSavingsPct,
+      count: tool.count,
+    }));
+
   return {
     count: entries.length,
     rawTokens,
@@ -275,6 +287,7 @@ export const aggregateMetrics = (entries) => {
     savingsPct: rawTokens > 0 ? Number(((savedTokens / rawTokens) * 100).toFixed(2)) : 0,
     netSavedTokens,
     netSavingsPct: rawTokens > 0 ? Number(((netSavedTokens / rawTokens) * 100).toFixed(2)) : 0,
+    topTools,
     tools,
     overheadTokens,
     overheadPctOfRaw: rawTokens > 0 ? Number(((overheadTokens / rawTokens) * 100).toFixed(2)) : 0,
