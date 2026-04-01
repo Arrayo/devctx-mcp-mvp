@@ -89,6 +89,22 @@ describe('smart_shell find hardening', () => {
       try { fs.unlinkSync(plainFixture); } catch {}
     }
   });
+
+  it('allows pipe character inside quoted arguments', async () => {
+    const result = await smartShell({ command: 'rg "foo|bar" src' });
+    assert.equal(result.blocked, false);
+  });
+
+  it('allows eval in path names', async () => {
+    const result = await smartShell({ command: 'find evals -name "*.json"' });
+    assert.equal(result.blocked, false);
+  });
+
+  it('blocks eval as shell command', async () => {
+    const result = await smartShell({ command: 'eval "malicious code"' });
+    assert.equal(result.blocked, true);
+    assert.match(result.output, /Dangerous pattern/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

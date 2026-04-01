@@ -276,8 +276,8 @@ test('smart_shell security - blocks find -exec', async () => {
   const result = await smartShell({ command: 'find . -name "*.js" -exec rm {} \\;' });
   assert.equal(result.exitCode, 126);
   assert.equal(result.blocked, true);
-  // Blocked by shell operators (parentheses in {}) before reaching find arg validation
-  assert.match(result.output, /Shell operators are not allowed/);
+  // Blocked by find arg validation
+  assert.match(result.output, /find argument not allowed: -exec/);
 });
 
 test('smart_shell security - blocks find -delete', async () => {
@@ -292,24 +292,24 @@ test('smart_shell security - blocks find -ok', async () => {
   const result = await smartShell({ command: 'find . -name "*.sh" -ok chmod +x {} \\;' });
   assert.equal(result.exitCode, 126);
   assert.equal(result.blocked, true);
-  // Blocked by shell operators (parentheses in {}) before reaching find arg validation
-  assert.match(result.output, /Shell operators are not allowed/);
+  // Blocked by find arg validation
+  assert.match(result.output, /find argument not allowed: -ok/);
 });
 
 test('smart_shell security - blocks find -execdir', async () => {
   const result = await smartShell({ command: 'find . -execdir rm {} \\;' });
   assert.equal(result.exitCode, 126);
   assert.equal(result.blocked, true);
-  // Blocked by shell operators (parentheses in {}) before reaching find arg validation
-  assert.match(result.output, /Shell operators are not allowed/);
+  // Blocked by find arg validation
+  assert.match(result.output, /find argument not allowed: -execdir/);
 });
 
 test('smart_shell security - blocks find -okdir', async () => {
   const result = await smartShell({ command: 'find . -okdir rm {} \\;' });
   assert.equal(result.exitCode, 126);
   assert.equal(result.blocked, true);
-  // Blocked by shell operators (parentheses in {}) before reaching find arg validation
-  assert.match(result.output, /Shell operators are not allowed/);
+  // Blocked by find arg validation
+  assert.match(result.output, /find argument not allowed: -okdir/);
 });
 
 // Category 7: Malformed Commands

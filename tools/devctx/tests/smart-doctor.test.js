@@ -45,6 +45,48 @@ try {
     }
   });
 
+  it('keeps compaction informational when current retention policy would not reclaim any rows', async () => {
+    const previousProjectRoot = projectRoot;
+    const previousStateDbPath = process.env.DEVCTX_STATE_DB_PATH;
+    const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-doctor-fresh-compaction-'));
+    const stateDbPath = path.join(repoRoot, '.devctx', 'state.sqlite');
+    const recentTimestamp = new Date(Date.now() - (60 * 60 * 1000)).toISOString();
+
+    try {
+      setProjectRoot(repoRoot);
+      process.env.DEVCTX_STATE_DB_PATH = stateDbPath;
+      await initializeStateDb({ filePath: stateDbPath });
+
+      await withStateDb((db) => {
+        for (let index = 0; index < 1600; index += 1) {
+          db.prepare(`
+            INSERT INTO metrics_events(
+              tool, action, session_id, target, raw_tokens, compressed_tokens, saved_tokens,
+              savings_pct, latency_ms, metadata_json, created_at, legacy_key
+            ) VALUES('smart_read', 'range', NULL, ?, 100, 40, 60, 60, 5, '{}', ?, NULL)
+          `).run(`fresh-file-${index}.js`, recentTimestamp);
+        }
+      }, { filePath: stateDbPath });
+
+      const result = await smartDoctor();
+      const compactionCheck = result.checks.find((check) => check.id === 'compaction');
+
+      assert.equal(result.overall, 'ok');
+      assert.equal(compactionCheck?.status, 'info');
+      assert.equal(compactionCheck?.details.reason, 'baseline_not_initialized');
+      assert.equal(compactionCheck?.details.compactionEstimate.totalDeletes, 0);
+      assert.deepStrictEqual(compactionCheck?.recommendedActions, []);
+    } finally {
+      if (previousStateDbPath !== undefined) {
+        process.env.DEVCTX_STATE_DB_PATH = previousStateDbPath;
+      } else {
+        delete process.env.DEVCTX_STATE_DB_PATH;
+      }
+      setProjectRoot(previousProjectRoot);
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it('surfaces repo safety blocks as doctor errors', async () => {
     const previousProjectRoot = projectRoot;
     const previousStateDbPath = process.env.DEVCTX_STATE_DB_PATH;

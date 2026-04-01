@@ -10,7 +10,6 @@ import { recordDevctxOperation } from '../missed-opportunities.js';
 
 const execFile = promisify(execFileCallback);
 const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
-const blockedPattern = /[|&;<>`\n\r$()]/;
 const allowedCommands = new Set(['pwd', 'ls', 'find', 'rg', 'git', 'npm', 'pnpm', 'yarn', 'bun']);
 const allowedGitSubcommands = new Set(['status', 'diff', 'show', 'log', 'branch', 'rev-parse', 'blame']);
 const allowedPackageManagerSubcommands = new Set(['test', 'run', 'lint', 'build', 'typecheck', 'check']);
@@ -20,8 +19,8 @@ const dangerousPatterns = [
   /sudo/i,
   /curl.*\|/i,
   /wget.*\|/i,
-  /eval/i,
-  /exec/i,
+  /(^|\s)eval(\s|$)/i,
+  /(^|\s)exec(\s|$)/i,
 ];
 const MAX_COMMAND_LENGTH = 500;
 
@@ -79,6 +78,45 @@ const tokenize = (command) => {
   return tokens;
 };
 
+const hasUnquotedShellOperators = (command) => {
+  let inQuote = null;
+  let prevWasEscape = false;
+
+  for (const char of command) {
+    if (prevWasEscape) {
+      prevWasEscape = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      prevWasEscape = true;
+      continue;
+    }
+
+    if (inQuote) {
+      if (char === inQuote) {
+        inQuote = null;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      inQuote = char;
+      continue;
+    }
+
+    if (/[|&;<>`\n\r$]/.test(char)) {
+      return true;
+    }
+
+    if (char === '(' || char === ')') {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 const validateCommand = (command, tokens) => {
   if (isShellDisabled()) {
     return 'Shell execution is disabled (DEVCTX_SHELL_DISABLED=true)';
@@ -92,8 +130,8 @@ const validateCommand = (command, tokens) => {
     return `Command too long (max ${MAX_COMMAND_LENGTH} chars)`;
   }
 
-  if (blockedPattern.test(command)) {
-    return 'Shell operators are not allowed (|, &, ;, <, >, `, $, (, ))';
+  if (hasUnquotedShellOperators(command)) {
+    return 'Shell operators are not allowed outside quotes (|, &, ;, <, >, `, $, (, ))';
   }
 
   for (const pattern of dangerousPatterns) {

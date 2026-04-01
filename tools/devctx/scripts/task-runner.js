@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 import { runTaskRunner } from '../src/task-runner.js';
+import { checkNodeVersion } from '../src/utils/runtime-check.js';
+
+const runtimeCheck = checkNodeVersion();
+if (!runtimeCheck.ok) {
+  console.error(`[smart-context-task] Runtime check failed: ${runtimeCheck.message}`);
+  console.error(`[smart-context-task] Current: ${runtimeCheck.current}, Required: ${runtimeCheck.minimum}+`);
+  process.exit(1);
+}
 
 const requireValue = (argv, index, flag) => {
   const value = argv[index + 1];

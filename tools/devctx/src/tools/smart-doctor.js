@@ -68,6 +68,76 @@ const readMaintenanceSnapshot = async ({ filePath, storageHealth }) => {
   try {
     return await withStateDbSnapshot((db) => {
       const count = (tableName) => db.prepare(`SELECT COUNT(*) AS count FROM ${tableName}`).get().count;
+      const retentionDays = Number(getMeta(db, 'state_compaction_retention_days') ?? DEFAULT_RETENTION_DAYS);
+      const activeSessionId = db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE)?.session_id ?? null;
+      const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+      const hookTurnCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const staleSessionsQuery = activeSessionId
+        ? db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM sessions
+          WHERE datetime(updated_at) < datetime(?)
+            AND session_id != ?
+        `)
+        : db.prepare(`
+          SELECT COUNT(*) AS count
+          FROM sessions
+          WHERE datetime(updated_at) < datetime(?)
+        `);
+      const staleSessions = activeSessionId
+        ? staleSessionsQuery.get(cutoff, activeSessionId).count
+        : staleSessionsQuery.get(cutoff).count;
+      const staleSessionEventsQuery = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM (
+          SELECT
+            se.event_id,
+            se.created_at,
+            ROW_NUMBER() OVER (
+              PARTITION BY se.session_id
+              ORDER BY datetime(se.created_at) DESC, se.event_id DESC
+            ) AS row_num
+          FROM session_events se
+          JOIN sessions s ON s.session_id = se.session_id
+          WHERE datetime(s.updated_at) >= datetime(@cutoff)
+             OR s.session_id = @activeSessionId
+        )
+        WHERE row_num > @keepLatest
+          AND datetime(created_at) < datetime(@cutoff)
+      `);
+      const staleMetricsQuery = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM (
+          SELECT
+            metric_id,
+            created_at,
+            ROW_NUMBER() OVER (
+              ORDER BY datetime(created_at) DESC, metric_id DESC
+            ) AS row_num
+          FROM metrics_events
+        )
+        WHERE row_num > @keepLatest
+          AND datetime(created_at) < datetime(@cutoff)
+      `);
+      const staleHookTurns = db.prepare(`
+        SELECT COUNT(*) AS count
+        FROM hook_turn_state
+        WHERE datetime(updated_at) < datetime(?)
+      `).get(hookTurnCutoff).count;
+      const compactionEstimate = {
+        sessionsDeleted: staleSessions,
+        sessionEventsDeleted: staleSessionEventsQuery.get({
+          cutoff,
+          activeSessionId,
+          keepLatest: DEFAULT_KEEP_LATEST_EVENTS_PER_SESSION,
+        }).count,
+        metricsEventsDeleted: staleMetricsQuery.get({
+          cutoff,
+          keepLatest: DEFAULT_KEEP_LATEST_METRICS,
+        }).count,
+        hookTurnStateDeleted: staleHookTurns,
+      };
+      compactionEstimate.totalDeletes = Object.values(compactionEstimate).reduce((total, value) => total + value, 0);
 
       return {
         available: true,
@@ -78,14 +148,15 @@ const readMaintenanceSnapshot = async ({ filePath, storageHealth }) => {
           hookTurnState: count('hook_turn_state'),
           workflowMetrics: count('workflow_metrics'),
         },
-        activeSessionId: db.prepare('SELECT session_id FROM active_session WHERE scope = ?').get(ACTIVE_SESSION_SCOPE)?.session_id ?? null,
+        activeSessionId,
         schemaVersion: Number(getMeta(db, 'schema_version') ?? 0),
         lastCompactedAt: getMeta(db, 'state_compacted_at'),
-        retentionDays: Number(getMeta(db, 'state_compaction_retention_days') ?? DEFAULT_RETENTION_DAYS),
+        retentionDays,
         legacyImport: {
           sessions: Number(getMeta(db, 'legacy_sessions_import_count') ?? 0),
           metrics: Number(getMeta(db, 'legacy_metrics_import_count') ?? 0),
         },
+        compactionEstimate,
       };
     }, { filePath });
   } catch (error) {
@@ -227,21 +298,30 @@ const buildCompactionCheck = ({ storageHealth, maintenance }) => {
     retentionDays,
     schemaVersion,
     activeSessionId,
+    compactionEstimate = {
+      sessionsDeleted: 0,
+      sessionEventsDeleted: 0,
+      metricsEventsDeleted: 0,
+      hookTurnStateDeleted: 0,
+      totalDeletes: 0,
+    },
   } = maintenance;
   const daysSinceCompaction = daysSince(lastCompactedAt);
   const sessionEventThreshold = Math.max(SESSION_EVENTS_WARNING_FLOOR, counts.sessions * DEFAULT_KEEP_LATEST_EVENTS_PER_SESSION * 5);
   const needsCompaction = [];
+  const canReclaimRows = compactionEstimate.totalDeletes > 0;
 
   if (storageHealth.issue === 'oversized') {
     needsCompaction.push('database_size');
   }
 
-  if (!lastCompactedAt && (counts.sessionEvents > sessionEventThreshold || counts.metricsEvents > METRICS_WARNING_FLOOR)) {
+  if (!lastCompactedAt && canReclaimRows && (counts.sessionEvents > sessionEventThreshold || counts.metricsEvents > METRICS_WARNING_FLOOR)) {
     needsCompaction.push('never_compacted');
   }
 
   if (
     daysSinceCompaction !== null
+    && canReclaimRows
     && daysSinceCompaction > retentionDays
     && (counts.sessionEvents > sessionEventThreshold || counts.metricsEvents > DEFAULT_KEEP_LATEST_METRICS)
   ) {
@@ -264,6 +344,28 @@ const buildCompactionCheck = ({ storageHealth, maintenance }) => {
         schemaVersion,
         activeSessionId,
         counts,
+        compactionEstimate,
+        lastCompactedAt,
+        daysSinceCompaction,
+        retentionDays,
+      },
+    });
+  }
+
+  if (!lastCompactedAt && !canReclaimRows && (counts.sessionEvents > sessionEventThreshold || counts.metricsEvents > METRICS_WARNING_FLOOR)) {
+    return buildCheck({
+      id: 'compaction',
+      status: 'info',
+      message: 'SQLite state has never been compacted, but the current retention policy would not reclaim any rows yet.',
+      recommendedActions: [],
+      details: {
+        available: true,
+        recommended: false,
+        reason: 'baseline_not_initialized',
+        schemaVersion,
+        activeSessionId,
+        counts,
+        compactionEstimate,
         lastCompactedAt,
         daysSinceCompaction,
         retentionDays,
@@ -282,6 +384,7 @@ const buildCompactionCheck = ({ storageHealth, maintenance }) => {
       schemaVersion,
       activeSessionId,
       counts,
+      compactionEstimate,
       lastCompactedAt,
       daysSinceCompaction,
       retentionDays,

@@ -16,6 +16,7 @@ import { smartMetrics } from './tools/smart-metrics.js';
 import { smartTurn } from './tools/smart-turn.js';
 import { projectRoot, projectRootSource } from './utils/paths.js';
 import { setServerForStreaming } from './streaming.js';
+import { checkNodeVersion } from './utils/runtime-check.js';
 import { 
   getSymbolBlame, 
   getFileAuthorshipStats, 
@@ -44,6 +45,13 @@ export const asTextResult = (result) => ({
 });
 
 export const createDevctxServer = () => {
+  const runtimeCheck = checkNodeVersion();
+  if (!runtimeCheck.ok) {
+    console.error(`[devctx] Runtime check failed: ${runtimeCheck.message}`);
+    console.error(`[devctx] Current: ${runtimeCheck.current}, Required: ${runtimeCheck.minimum}+`);
+    process.exit(1);
+  }
+
   const server = new McpServer({
     name: 'devctx',
     version,
