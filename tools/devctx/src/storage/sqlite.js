@@ -1103,6 +1103,7 @@ const buildSessionCleanupCandidate = (db, sessionsDir, fileName) => {
   const payload = readJsonFile(filePath);
 
   if (!payload || typeof payload !== 'object') {
+    const sizeBytes = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
     return {
       type: 'session',
       path: filePath,
@@ -1110,6 +1111,7 @@ const buildSessionCleanupCandidate = (db, sessionsDir, fileName) => {
       eligible: false,
       reason: 'invalid_json',
       sessionId: null,
+      sizeBytes,
     };
   }
 
@@ -1120,6 +1122,7 @@ const buildSessionCleanupCandidate = (db, sessionsDir, fileName) => {
     WHERE session_id = ?
   `).get(sessionId);
   if (!sessionRow) {
+    const sizeBytes = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
     return {
       type: 'session',
       path: filePath,
@@ -1127,12 +1130,15 @@ const buildSessionCleanupCandidate = (db, sessionsDir, fileName) => {
       eligible: false,
       reason: 'missing_in_sqlite',
       sessionId,
+      sizeBytes,
     };
   }
 
   const fileUpdatedAt = toIsoString(payload.updatedAt, sessionRow.updated_at);
   const sqliteUpdatedAt = toIsoString(sessionRow.updated_at);
   const eligible = getTimestamp(sqliteUpdatedAt) >= getTimestamp(fileUpdatedAt);
+
+  const sizeBytes = fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
 
   return {
     type: 'session',
@@ -1141,6 +1147,7 @@ const buildSessionCleanupCandidate = (db, sessionsDir, fileName) => {
     eligible,
     reason: eligible ? 'imported_and_not_newer_than_sqlite' : 'legacy_file_newer_than_sqlite',
     sessionId,
+    sizeBytes,
     fileUpdatedAt,
     sqliteUpdatedAt,
   };
@@ -1153,34 +1160,40 @@ const buildActiveCleanupCandidate = (db, activeSessionFile) => {
 
   const payload = readJsonFile(activeSessionFile);
   if (!payload || typeof payload !== 'object') {
+    const sizeBytes = fs.statSync(activeSessionFile).size;
     return {
       type: 'active_session',
       path: activeSessionFile,
       eligible: false,
       reason: 'invalid_json',
       sessionId: null,
+      sizeBytes,
     };
   }
 
   const legacySessionId = typeof payload.sessionId === 'string' ? payload.sessionId : null;
   const activeRow = getActiveSessionRow(db);
   if (!legacySessionId) {
+    const sizeBytes = fs.statSync(activeSessionFile).size;
     return {
       type: 'active_session',
       path: activeSessionFile,
       eligible: true,
       reason: 'orphaned_legacy_file',
       sessionId: null,
+      sizeBytes,
     };
   }
 
   if (!activeRow) {
+    const sizeBytes = fs.statSync(activeSessionFile).size;
     return {
       type: 'active_session',
       path: activeSessionFile,
       eligible: true,
       reason: 'sqlite_has_no_active_session',
       sessionId: legacySessionId,
+      sizeBytes,
     };
   }
 
@@ -1189,12 +1202,15 @@ const buildActiveCleanupCandidate = (db, activeSessionFile) => {
   const eligible = activeRow.session_id === legacySessionId
     && getTimestamp(sqliteUpdatedAt) >= getTimestamp(fileUpdatedAt);
 
+  const sizeBytes = fs.existsSync(activeSessionFile) ? fs.statSync(activeSessionFile).size : 0;
+
   return {
     type: 'active_session',
     path: activeSessionFile,
     eligible,
     reason: eligible ? 'sqlite_active_session_matches' : 'sqlite_active_session_differs',
     sessionId: legacySessionId,
+    sizeBytes,
     fileUpdatedAt,
     sqliteUpdatedAt,
   };
@@ -1207,12 +1223,14 @@ const buildMetricsCleanupCandidate = (db, metricsFile) => {
 
   const { entries, invalidLines } = readMetricsEntries(metricsFile);
   if (invalidLines.length > 0) {
+    const sizeBytes = fs.statSync(metricsFile).size;
     return {
       type: 'metrics',
       path: metricsFile,
       eligible: false,
       reason: 'invalid_jsonl',
       entryCount: entries.length,
+      sizeBytes,
       invalidLines,
       missingEntries: [],
     };
@@ -1231,12 +1249,15 @@ const buildMetricsCleanupCandidate = (db, metricsFile) => {
     }
   }
 
+  const sizeBytes = fs.existsSync(metricsFile) ? fs.statSync(metricsFile).size : 0;
+
   return {
     type: 'metrics',
     path: metricsFile,
     eligible: missingEntries.length === 0,
     reason: missingEntries.length === 0 ? 'all_entries_imported' : 'sqlite_missing_entries',
     entryCount: entries.length,
+    sizeBytes,
     invalidLines,
     missingEntries,
   };

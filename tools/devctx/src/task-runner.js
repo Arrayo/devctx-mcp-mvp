@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { persistMetrics } from './metrics.js';
 import { countTokens } from './tokenCounter.js';
+import { projectRoot } from './utils/paths.js';
 import { TASK_RUNNER_QUALITY_ANALYTICS_KIND } from './analytics/product-quality.js';
 import { runHeadlessWrapper } from './orchestration/headless-wrapper.js';
 import { smartContext } from './tools/smart-context.js';
@@ -518,18 +519,49 @@ const runCleanupCommand = async ({
       apply: false,
     });
 
-    if (!apply && dryRun.eligibleFiles?.length > 0) {
-      console.log('\n📋 Legacy files eligible for cleanup:\n');
-      console.log('File                          Size');
-      console.log('─'.repeat(50));
-      for (const file of dryRun.eligibleFiles) {
-        const sizeKB = file.sizeBytes ? `${(file.sizeBytes / 1024).toFixed(1)}KB` : 'N/A';
-        console.log(`${file.relativePath.padEnd(30)} ${sizeKB}`);
+    if (!apply) {
+      const eligibleFiles = [];
+
+      if (dryRun.sessions?.candidates) {
+        for (const session of dryRun.sessions.candidates) {
+          if (session.deletable) {
+            eligibleFiles.push({
+              relativePath: session.relativePath || session.path,
+              sizeBytes: session.sizeBytes || 0,
+            });
+          }
+        }
       }
-      const totalKB = dryRun.eligibleFiles.reduce((sum, f) => sum + (f.sizeBytes || 0), 0) / 1024;
-      console.log('─'.repeat(50));
-      console.log(`Total: ${dryRun.eligibleFiles.length} files, ${totalKB.toFixed(1)}KB\n`);
-      console.log('💡 To apply cleanup, run: smart-context-task cleanup --mode legacy --apply\n');
+
+      if (dryRun.metrics?.eligible && dryRun.metrics?.path) {
+        eligibleFiles.push({
+          relativePath: dryRun.metrics.path.replace(projectRoot + '/', ''),
+          sizeBytes: dryRun.metrics.sizeBytes || 0,
+        });
+      }
+
+      if (dryRun.activeSession?.eligible && dryRun.activeSession?.path) {
+        eligibleFiles.push({
+          relativePath: dryRun.activeSession.path.replace(projectRoot + '/', ''),
+          sizeBytes: dryRun.activeSession.sizeBytes || 0,
+        });
+      }
+
+      if (eligibleFiles.length > 0) {
+        console.log('\n📋 Legacy files eligible for cleanup:\n');
+        console.log('File                                      Size');
+        console.log('─'.repeat(60));
+        for (const file of eligibleFiles) {
+          const sizeKB = file.sizeBytes ? `${(file.sizeBytes / 1024).toFixed(1)}KB` : 'N/A';
+          console.log(`${file.relativePath.padEnd(42)} ${sizeKB}`);
+        }
+        const totalKB = eligibleFiles.reduce((sum, f) => sum + (f.sizeBytes || 0), 0) / 1024;
+        console.log('─'.repeat(60));
+        console.log(`Total: ${eligibleFiles.length} files, ${totalKB.toFixed(1)}KB\n`);
+        console.log('💡 To apply cleanup, run: smart-context-task cleanup --cleanup-mode legacy --apply\n');
+      } else {
+        console.log('\n✅ No legacy files eligible for cleanup.\n');
+      }
     }
 
     const result = apply ? await smartSummary({ action: 'cleanup_legacy', apply: true }) : dryRun;

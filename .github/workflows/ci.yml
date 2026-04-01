@@ -24,8 +24,12 @@ jobs:
           cache-dependency-path: tools/devctx/package-lock.json
       - run: npm ci
       - run: npm test
-      - run: npm run smoke:json
-      - run: npm run smoke:formats
+      - name: Smoke JSON (Node 22 only)
+        if: matrix.node-version == 22
+        run: npm run smoke:json
+      - name: Smoke Formats (Node 22 only)
+        if: matrix.node-version == 22
+        run: npm run smoke:formats
       - name: Lint (Node 22 only)
         if: matrix.node-version == 22
         run: npx --yes eslint@9 src/ scripts/

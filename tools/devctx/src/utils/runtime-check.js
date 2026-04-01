@@ -15,15 +15,15 @@ const parseNodeVersion = (versionString) => {
   };
 };
 
-export const checkNodeVersion = () => {
-  const current = parseNodeVersion(process.version);
+export const checkNodeVersion = (versionString = process.version) => {
+  const current = parseNodeVersion(versionString);
 
   if (!current) {
     return {
       ok: false,
-      current: process.version,
+      current: versionString,
       minimum: MINIMUM_NODE_VERSION,
-      message: `Unable to parse Node version: ${process.version}`,
+      message: `Unable to parse Node version: ${versionString}`,
       reason: MINIMUM_NODE_VERSION_REASON,
     };
   }
@@ -41,8 +41,8 @@ export const checkNodeVersion = () => {
   };
 };
 
-export const assertNodeVersion = () => {
-  const check = checkNodeVersion();
+export const assertNodeVersion = (versionString = process.version) => {
+  const check = checkNodeVersion(versionString);
 
   if (!check.ok) {
     throw new Error(check.message);
