@@ -15,6 +15,7 @@ import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
 import { buildMetricsDisplay } from '../utils/metrics-display.js';
+import { createProgressReporter } from '../streaming.js';
 import { 
   getDetailedDiff, 
   analyzeChangeImpact, 
@@ -386,7 +387,15 @@ export const smartContext = async ({
   detail = 'balanced',
   include = DEFAULT_INCLUDE,
   prefetch = false,
+  progress: enableProgress = false,
 }) => {
+  const progress = enableProgress ? createProgressReporter('smart_context') : null;
+  const startTime = Date.now();
+  
+  if (progress) {
+    progress.report({ phase: 'planning', task: task.substring(0, 80) });
+  }
+  
   const resolvedIntent = (intent && VALID_INTENTS.has(intent)) ? intent : inferIntent(task);
   const root = projectRoot;
   const detailMode = VALID_DETAIL_MODES.has(detail) ? detail : 'balanced';
@@ -439,6 +448,14 @@ export const smartContext = async ({
       return impactB - impactA;
     });
     
+    if (progress) {
+      progress.report({ 
+        phase: 'diff-analysis', 
+        changedFiles: changed.files.length,
+        expandedFiles: expandedFiles.size,
+      });
+    }
+    
     diffSummary = {
       ref: changed.ref,
       totalChanged: changed.files.length + changed.skippedDeleted,
@@ -468,6 +485,10 @@ export const smartContext = async ({
       ...fallbackKeywords,
       extractFallbackSearchQuery(task),
     ]).slice(0, 6);
+    if (progress) {
+      progress.report({ phase: 'searching', queries: queryCandidates.length });
+    }
+    
     const searchResults = await Promise.all(
       queryCandidates.map((query) => smartSearch({ query, cwd: '.', intent: resolvedIntent }))
     );
@@ -603,6 +624,10 @@ export const smartContext = async ({
   }
 
   if (pendingReads.length > 0) {
+    if (progress) {
+      progress.report({ phase: 'reading', files: pendingReads.length });
+    }
+    
     const batchResults = await smartReadBatch({
       files: pendingReads.map(({ item }) => ({ path: item.absPath, mode: item.mode })),
     });
@@ -806,9 +831,18 @@ export const smartContext = async ({
       compressedTokens: totalCompressedTokens,
       savedTokens,
     },
-    startTime: null,
+    startTime: enableProgress ? startTime : null,
     filesCount: filesIncluded,
   });
+
+  if (progress) {
+    progress.complete({
+      task: task.substring(0, 80),
+      files: filesIncluded,
+      savedTokens,
+      savingsPct: totalRawTokens > 0 ? ((savedTokens / totalRawTokens) * 100).toFixed(1) : null,
+    });
+  }
 
   const result = {
     success: true,

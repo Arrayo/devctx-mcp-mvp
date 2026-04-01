@@ -2,7 +2,7 @@
 
 ## High Priority
 
-### 1. Task Complexity Detection (Fast Path) ⚡ NEXT
+### 1. Task Complexity Detection (Fast Path) ✅ COMPLETED
 
 **Problem:** System assumes all tasks are complex, runs full preflight even for simple changes.
 
@@ -37,7 +37,7 @@ const isSimpleTask = (prompt) => {
 
 ---
 
-### 2. Streaming Progress (Real-Time Visibility)
+### 2. Streaming Progress (Real-Time Visibility) ✅ COMPLETED
 
 **Problem:** Black box execution - users can't see what agent is doing until it finishes.
 
@@ -61,7 +61,11 @@ yield { type: 'result', content: '...', metrics: { ... } };
 - Add streaming option
 - Emit progress events at key points
 
-**Estimated effort:** 1-2 days (requires MCP SDK investigation)
+**Status:** ✅ Implemented in v1.7.2
+- Added optional `progress` parameter to all major tools
+- Emits MCP `notifications/progress` events
+- Throttled to 100ms intervals
+- 4 unit tests passing
 
 ---
 
@@ -98,21 +102,20 @@ yield { type: 'result', content: '...', metrics: { ... } };
 
 - ✅ **Inline Metrics Display** (v1.7.2) - Implemented
 - ✅ **Top Tools Visibility** (v1.7.2) - Implemented
-- 🔄 **Task Complexity Detection** - Next (this session)
-- ⏳ **Streaming Progress** - After complexity detection
-- ⏳ **Context Scoring** - Lower priority
+- ✅ **Task Complexity Detection** (v1.7.2) - Implemented
+- ✅ **Streaming Progress** (v1.7.2) - Implemented
+- ⏳ **Context Scoring** - Next priority
 
 ## User Feedback Addressed
 
 > "Caja negra: No pude ver el proceso paso a paso"
-- ✅ Partially: metricsDisplay shows per-operation metrics
-- 🔄 Fully: Streaming progress (pending)
+- ✅ Solved: Streaming progress + metricsDisplay
 
 > "Métricas ocultas: No hubo feedback sobre tokens consumidos"
 - ✅ Solved: metricsDisplay + topTools
 
 > "Overkill para refactor pequeño: gastó más tiempo en entender el contexto"
-- 🔄 Next: Task complexity detection with fast path
+- ✅ Solved: Task complexity detection with fast path
 
 > "el valor práctico de smart_context y smart_read se notó durante el trabajo, pero no quedó tan visible"
 - ✅ Solved: topTools + metricsDisplay

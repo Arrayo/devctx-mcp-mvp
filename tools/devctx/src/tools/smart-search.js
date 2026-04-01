@@ -13,6 +13,7 @@ import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision
 import { recordDevctxOperation } from '../missed-opportunities.js';
 import { IGNORED_DIRS, IGNORED_FILE_NAMES } from '../config/ignored-paths.js';
 import { buildMetricsDisplay } from '../utils/metrics-display.js';
+import { createProgressReporter } from '../streaming.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -294,7 +295,14 @@ const buildCompactResult = (groups, totalMatches, query, root) => {
   return lines.join('\n');
 };
 
-export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = false }) => {
+export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = false, progress: enableProgress = false }) => {
+  const progress = enableProgress ? createProgressReporter('smart_search') : null;
+  const startTime = Date.now();
+  
+  if (progress) {
+    progress.report({ phase: 'searching', query });
+  }
+  
   const root = resolveSafePath(cwd);
   const rgMatches = _testForceWalk ? null : await searchWithRipgrep(root, query);
   const usedFallback = rgMatches === null;
@@ -341,6 +349,11 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   let graphHits = null;
   let indexFreshness = 'unavailable';
   let loadedIndex = null;
+  
+  if (progress) {
+    progress.report({ phase: 'ranking', rawMatches: rawMatches.length });
+  }
+  
   try {
     loadedIndex = loadIndex(indexRoot);
     if (loadedIndex) {
@@ -427,9 +440,19 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     tool: 'smart_search',
     target: query,
     metrics,
-    startTime: null,
+    startTime: enableProgress ? startTime : null,
     filesCount: groups.length,
   });
+
+  if (progress) {
+    progress.complete({
+      query,
+      matches: dedupedMatches.length,
+      files: groups.length,
+      savedTokens: metrics.savedTokens,
+      savingsPct: metrics.savingsPct,
+    });
+  }
 
   const result = {
     query,

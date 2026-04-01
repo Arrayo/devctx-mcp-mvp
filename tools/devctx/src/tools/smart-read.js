@@ -13,6 +13,7 @@ import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
 import { buildMetricsDisplay } from '../utils/metrics-display.js';
+import { createProgressReporter } from '../streaming.js';
 
 const execFile = promisify(execFileCb);
 import { summarizeGo, summarizeRust, summarizeJava, summarizeShell, summarizeTerraform, summarizeDockerfile, summarizeSql, extractGoSymbol, extractRustSymbol, extractJavaSymbol, summarizeCsharp, extractCsharpSymbol, summarizeKotlin, extractKotlinSymbol, summarizePhp, extractPhpSymbol, summarizeSwift, extractSwiftSymbol } from './smart-read/additional-languages.js';
@@ -409,14 +410,26 @@ const formatContextSections = (sections) => {
   return parts.length > 0 ? '\n' + parts.join('\n') : '';
 };
 
-export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine, symbol, maxTokens, context: includeContext, cwd }) => {
+export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine, symbol, maxTokens, context: includeContext, cwd, progress: enableProgress = false }) => {
+  const progress = enableProgress ? createProgressReporter('smart_read') : null;
+  const startTime = Date.now();
+  
   let fullPath, content;
   const effectiveRoot = cwd || projectRoot;
+  
+  if (progress) {
+    progress.report({ phase: 'reading', file: filePath });
+  }
   
   try {
     const result = readTextFile(filePath, effectiveRoot);
     fullPath = result.fullPath;
     content = result.content;
+    
+    if (progress) {
+      const rawTokens = countTokens(content);
+      progress.report({ phase: 'loaded', file: path.relative(effectiveRoot, fullPath), rawTokens });
+    }
   } catch (error) {
     const errorMessage = error.message || String(error);
     return {
@@ -478,6 +491,18 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     const g = cachedGenerate(fullPath, extension, content, mode, mtime);
     compressedText = g.text;
     cacheHit = g.cached;
+  }
+
+  if (progress) {
+    const compressedTokens = countTokens(compressedText);
+    const rawTokens = countTokens(content);
+    progress.report({ 
+      phase: 'compressed', 
+      mode: effectiveMode,
+      rawTokens, 
+      compressedTokens,
+      ratio: rawTokens > 0 ? (rawTokens / compressedTokens).toFixed(1) : null,
+    });
   }
 
   let contextResult = null;
@@ -550,8 +575,17 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     tool: 'smart_read',
     target: path.relative(effectiveRoot, fullPath),
     metrics,
-    startTime: null,
+    startTime: enableProgress ? startTime : null,
   });
+
+  if (progress) {
+    progress.complete({
+      file: path.relative(effectiveRoot, fullPath),
+      mode: effectiveMode,
+      savedTokens: metrics.savedTokens,
+      savingsPct: metrics.savingsPct,
+    });
+  }
 
   const result = {
     filePath: fullPath,

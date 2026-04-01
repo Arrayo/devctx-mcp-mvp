@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [1.7.2] - 2026-04-01
 
 ### Added
+- **Streaming Progress Notifications:** Real-time visibility into long-running operations
+  - Optional `progress` parameter in `smart_read`, `smart_search`, `smart_context`, `smart_shell`
+  - Emits MCP `notifications/progress` events with phase, elapsed time, and operation-specific data
+  - Phases: planning → searching → reading → compressed → complete
+  - Throttled to max 1 update per 100ms to avoid spam
+  - Addresses feedback: "Caja negra: no pude ver el proceso paso a paso"
+  - Impact: Agents can show real-time progress instead of appearing frozen
+
 - **Fast Path for Simple Tasks:** Automatic detection of simple tasks to skip overhead
   - Detects patterns: "move X to Y", "rename Z", "fix typo", "add comment", etc.
   - Fast path: skips preflight, skips session isolation, skips checkpoint enforcement
@@ -41,11 +49,12 @@ All notable changes to this project will be documented in this file.
 - **Repository:** Cleaned up local development files (.cursor/rules/, .cursorrules, .gitlab-ci.yml, PUBLISH.md)
 
 ### Tests
+- Added 4 unit tests for streaming progress (notifications, throttling, error handling)
 - Added 10 unit tests for simple task detection
 - Added 8 unit tests for `metricsDisplay` formatting
 - Added 8 unit tests for client detection
 - Added test for `topTools` ordering and filtering
-- 64/64 tests passing (simple-task + metrics-display + orchestration)
+- 68/68 tests passing (streaming + simple-task + metrics-display + orchestration)
 
 ### Documentation
 - `docs/issues/execution-visibility-and-task-sizing.md`: Analysis of visibility and overhead issues
