@@ -20,6 +20,76 @@ const getMetricsClient = (entry) =>
   ?? entry?.metadata?.client
   ?? null;
 
+const hasMeasuredClientAdapters = (stats) =>
+  Number(stats?.clientAdapters?.clientsMeasured ?? 0) > 0;
+
+const appendClientAdapterSignals = (lines, stats) => {
+  if (!hasMeasuredClientAdapters(stats)) {
+    return;
+  }
+
+  const clients = stats.clientAdapters.byClient;
+  const lowestOverheadClient = clients.reduce((best, current) => {
+    if (!best) {
+      return current;
+    }
+
+    if (current.averageContextOverheadTokens < best.averageContextOverheadTokens) {
+      return current;
+    }
+
+    if (current.averageContextOverheadTokens === best.averageContextOverheadTokens
+      && current.client.localeCompare(best.client) < 0) {
+      return current;
+    }
+
+    return best;
+  }, null);
+  const highestAutoStartClient = clients.reduce((best, current) => {
+    if (!best) {
+      return current;
+    }
+
+    if (current.autoStartCoveragePct > best.autoStartCoveragePct) {
+      return current;
+    }
+
+    if (current.autoStartCoveragePct === best.autoStartCoveragePct
+      && current.client.localeCompare(best.client) < 0) {
+      return current;
+    }
+
+    return best;
+  }, null);
+
+  lines.push('Client Adapter Signals:');
+  lines.push(`Clients measured:      ${stats.clientAdapters.clientsMeasured}`);
+  lines.push(`Adapter events:        ${clients.reduce((total, client) => total + client.adapterEvents, 0)}`);
+  lines.push(`Overhead total:        ${stats.clientAdapters.totalContextOverheadTokens} tokens`);
+  if (lowestOverheadClient) {
+    lines.push(`Lowest avg overhead:   ${lowestOverheadClient.client} (${lowestOverheadClient.averageContextOverheadTokens} tokens)`);
+  }
+  if (highestAutoStartClient) {
+    lines.push(`Best auto-start rate:  ${highestAutoStartClient.client} (${highestAutoStartClient.autoStartCoveragePct}%)`);
+  }
+  lines.push('');
+
+  for (const client of clients) {
+    lines.push(`${client.client}:`);
+    lines.push(`  Entries measured:    ${client.entriesMeasured}`);
+    lines.push(`  Adapter coverage:    ${client.adapterEvents}/${client.entriesMeasured} (${client.adapterCoveragePct}%)`);
+    lines.push(`  Base orchestrated:   ${client.baseOrchestratedEvents}/${client.entriesMeasured} (${client.baseOrchestratorCoveragePct}%)`);
+    lines.push(`  Auto-started:        ${client.autoStartedEvents}/${client.entriesMeasured} (${client.autoStartCoveragePct}%)`);
+    lines.push(`  Auto-preflighted:    ${client.autoPreflightedEvents}/${client.entriesMeasured} (${client.autoPreflightCoveragePct}%)`);
+    lines.push(`  Auto-checkpointed:   ${client.autoCheckpointedEvents}/${client.entriesMeasured} (${client.autoCheckpointCoveragePct}%)`);
+    lines.push(`  Context overhead:    ${client.contextOverheadTokens} tokens total (${client.averageContextOverheadTokens} avg)`);
+    if (client.blockedEvents > 0) {
+      lines.push(`  Blocked events:      ${client.blockedEvents}`);
+    }
+    lines.push('');
+  }
+};
+
 const analyzeClientAdapterQuality = (entries = []) => {
   const clientEntries = entries.filter((entry) => Boolean(getMetricsClient(entry)));
 
@@ -224,11 +294,19 @@ export const analyzeProductQuality = (entries = []) => {
   };
 };
 
+export const hasProductQualitySignals = (stats) =>
+  Boolean(stats)
+  && (
+    Number(stats.turnsMeasured ?? 0) > 0
+    || Number(stats?.taskRunner?.commandsMeasured ?? 0) > 0
+    || hasMeasuredClientAdapters(stats)
+  );
+
 export const formatProductQualityReport = (stats) => {
   const hasSmartTurn = Number(stats?.turnsMeasured ?? 0) > 0;
   const hasTaskRunner = Number(stats?.taskRunner?.commandsMeasured ?? 0) > 0;
 
-  if (!stats || (!hasSmartTurn && !hasTaskRunner)) {
+  if (!hasProductQualitySignals(stats)) {
     return '';
   }
 
@@ -293,13 +371,7 @@ export const formatProductQualityReport = (stats) => {
     lines.push('');
   }
 
-  if (Number(stats?.clientAdapters?.clientsMeasured ?? 0) > 0) {
-    lines.push('Client Adapter Signals:');
-    for (const client of stats.clientAdapters.byClient) {
-      lines.push(`${client.client}: entries=${client.entriesMeasured}, adapter=${client.adapterEvents}, auto-start=${client.autoStartedEvents}, auto-preflight=${client.autoPreflightedEvents}, auto-checkpoint=${client.autoCheckpointedEvents}, overhead=${client.contextOverheadTokens} tokens`);
-    }
-    lines.push('');
-  }
+  appendClientAdapterSignals(lines, stats);
 
   lines.push('Notes:');
   lines.push('- These are measured orchestration signals, not direct answer-quality scores.');

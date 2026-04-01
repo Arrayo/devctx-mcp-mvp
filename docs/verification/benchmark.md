@@ -241,6 +241,11 @@ npm run benchmark:orchestration:release
 npm run report:metrics
 ```
 
+**Structured output:**
+```bash
+npm run report:metrics -- --json
+```
+
 **Example output:**
 ```
 devctx metrics report
@@ -266,8 +271,18 @@ By tool:
 - Tool adoption rates
 - Compression ratios per tool
 - Measured orchestration-quality signals from `smart_turn`
+- Comparative client-adapter signals for Claude vs Cursor (or any other adapter emitting `client` metadata)
 
 **Note:** `smart_context` shows 0% savings because it generates new context (doesn't compress existing). Its value is in preventing unnecessary reads.
+
+**Client-adapter validation flow:**
+1. Use Claude and Cursor on real tasks against the same repo for a few sessions.
+2. Run `npm run report:metrics`.
+3. Compare the `Client Adapter Signals` section:
+   - `Adapter coverage` shows how much of the flow is actually going through the adapter.
+   - `Auto-started`, `Auto-preflighted`, and `Auto-checkpointed` show how much useful automation each client is achieving.
+   - `Context overhead` shows the total and average token cost introduced by orchestration.
+4. If you need raw numbers for dashboards or custom analysis, run `npm run report:metrics -- --json` and inspect `productQuality.clientAdapters.byClient`.
 
 ## Measurement Model
 
