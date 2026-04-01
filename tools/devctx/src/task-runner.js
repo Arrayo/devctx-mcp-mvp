@@ -62,6 +62,7 @@ const recordRunnerMetrics = async ({
   usedWrapper = false,
   blocked = false,
   doctorIssued = false,
+  fastPath = false,
 }) => {
   const startResult = result?.start ?? result?.startResult ?? null;
   const endResult = result?.end ?? (result?.phase === 'end' ? result : null);
@@ -198,6 +199,7 @@ const runWorkflowCommand = async ({
       usedWrapper: false,
       blocked: true,
       doctorIssued: true,
+      fastPath,
     });
     return blockedResult;
   }
@@ -235,6 +237,7 @@ const runWorkflowCommand = async ({
     usedWrapper: true,
     blocked: false,
     doctorIssued: false,
+    fastPath,
   });
   return result;
 };
