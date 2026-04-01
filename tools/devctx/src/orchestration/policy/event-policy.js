@@ -13,6 +13,39 @@ export const MIN_NEXT_STEP_LENGTH = 12;
 export const MAX_NEXT_STEP_CAPTURE_LENGTH = 180;
 export const MAX_RECOMMENDED_TOOLS = 3;
 
+const SIMPLE_TASK_PATTERNS = [
+  /^(move|rename|delete|add|remove|fix|update|change|modify|edit)\s+\w+/i,
+  /^(create|write|read|show|display|list|find)\s+(a|an|the)?\s*\w+/i,
+  /\b(one|single|this|that)\s+(file|function|class|component|method)\b/i,
+  /^(add|remove|update|fix)\s+(comment|import|export|type|interface)/i,
+];
+
+const COMPLEX_TASK_INDICATORS = [
+  /\b(refactor|migrate|redesign|architect|implement|integrate)\b/i,
+  /\b(all|every|entire|whole|across|throughout)\b/i,
+  /\b(system|architecture|infrastructure|framework)\b/i,
+  /\b(multiple|several|many)\s+(files|components|modules)\b/i,
+];
+
+export const isSimpleTask = (prompt) => {
+  if (!prompt || typeof prompt !== 'string') {
+    return false;
+  }
+
+  const normalized = normalizeWhitespace(prompt);
+  
+  if (normalized.length > 200) {
+    return false;
+  }
+
+  const hasComplexIndicator = COMPLEX_TASK_INDICATORS.some((pattern) => pattern.test(normalized));
+  if (hasComplexIndicator) {
+    return false;
+  }
+
+  return SIMPLE_TASK_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
 export const normalizeWhitespace = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
 
 export const truncate = (value, maxLength = DEFAULT_TRUNCATE_LENGTH) => {
@@ -132,9 +165,10 @@ export const runWorkflowPreflight = async ({
   startResult,
   contextTool = smartContext,
   searchTool = smartSearch,
+  skipPreflight = false,
 }) => {
   const preflight = workflowProfile.preflight;
-  if (!preflight) {
+  if (!preflight || skipPreflight) {
     return null;
   }
 
@@ -281,6 +315,7 @@ export const buildTaskRunnerAutomaticity = ({
   usedWrapper = false,
   overheadTokens = 0,
   managedByBaseOrchestrator = false,
+  fastPath = false,
 }) => {
   const safeOverheadTokens = Number.isFinite(overheadTokens) ? Math.max(0, overheadTokens) : 0;
   const checkpointPersisted = Boolean(endResult && !endResult.checkpoint?.skipped && !endResult.checkpoint?.blocked);
@@ -293,5 +328,6 @@ export const buildTaskRunnerAutomaticity = ({
     autoWrappedPrompt: usedWrapper && safeOverheadTokens > 0,
     isolatedSession: Boolean(startResult?.isolatedSession),
     contextOverheadTokens: safeOverheadTokens,
+    fastPath,
   };
 };

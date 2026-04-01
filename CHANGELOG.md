@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [1.7.2] - 2026-04-01
 
 ### Added
+- **Fast Path for Simple Tasks:** Automatic detection of simple tasks to skip overhead
+  - Detects patterns: "move X to Y", "rename Z", "fix typo", "add comment", etc.
+  - Fast path: skips preflight, skips session isolation, skips checkpoint enforcement
+  - Only tracks basic metrics
+  - Impact: Simple tasks 3-5x faster (2-3s → <500ms)
+  - Addresses feedback: "Overkill para refactor pequeño: gastó más tiempo en entender el contexto"
+  - New `fastPath` flag in automaticity metrics
+
 - **Inline Metrics Display:** All tools now include `metricsDisplay` field with human-readable summary
   - Format: `✓ {tool}, {target}, {files} files, {raw}→{compressed} tokens ({ratio})`
   - Examples:
@@ -33,10 +41,11 @@ All notable changes to this project will be documented in this file.
 - **Repository:** Cleaned up local development files (.cursor/rules/, .cursorrules, .gitlab-ci.yml, PUBLISH.md)
 
 ### Tests
+- Added 10 unit tests for simple task detection
 - Added 8 unit tests for `metricsDisplay` formatting
 - Added 8 unit tests for client detection
 - Added test for `topTools` ordering and filtering
-- 48/48 tests passing
+- 64/64 tests passing (simple-task + metrics-display + orchestration)
 
 ### Documentation
 - `docs/issues/execution-visibility-and-task-sizing.md`: Analysis of visibility and overhead issues

@@ -83,6 +83,7 @@ const recordRunnerMetrics = async ({
     usedWrapper,
     overheadTokens: Number(result?.overheadTokens ?? 0),
     managedByBaseOrchestrator: WORKFLOW_COMMANDS.has(commandName),
+    fastPath,
   });
 
   await persistMetrics({
@@ -148,8 +149,10 @@ const runWorkflowCommand = async ({
     ensureSession: true,
     allowIsolation: false,
     startMaxTokens: DEFAULT_START_MAX_TOKENS,
+    enableFastPath: true,
   }));
   const start = startResolution.startResult;
+  const fastPath = startResolution.fastPath ?? false;
 
   const gate = evaluateRunnerGate({ startResult: start });
   let preflightSummary = null;
@@ -159,6 +162,7 @@ const runWorkflowCommand = async ({
       workflowProfile,
       prompt: requestedPrompt,
       startResult: start,
+      skipPreflight: fastPath,
     });
     preflightSummary = buildPreflightSummary(preflightResult);
   }

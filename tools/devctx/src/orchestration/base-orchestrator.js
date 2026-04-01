@@ -8,6 +8,7 @@ import {
   extractNextStep,
   normalizeWhitespace,
   truncate,
+  isSimpleTask,
   MAX_FOCUS_LENGTH,
   MAX_GOAL_LENGTH,
 } from './policy/event-policy.js';
@@ -113,21 +114,25 @@ export const resolveManagedStart = async ({
   startMaxTokens = DEFAULT_START_MAX_TOKENS,
   startTurn = smartTurn,
   summaryTool = smartSummary,
+  enableFastPath = true,
 }) => {
+  const simpleTask = enableFastPath && isSimpleTask(prompt);
+
   const startResult = preparedStartResult ?? await startTurn({
     phase: 'start',
     sessionId,
     prompt,
-    ensureSession,
+    ensureSession: simpleTask ? false : ensureSession,
     maxTokens: startMaxTokens,
   });
 
-  if (!allowIsolation) {
+  if (!allowIsolation || simpleTask) {
     return {
       startResult,
       isolated: Boolean(startResult?.isolatedSession),
       previousSessionId: startResult?.previousSessionId ?? null,
       autoStarted: !preparedStartResult,
+      fastPath: simpleTask,
     };
   }
 
@@ -143,6 +148,7 @@ export const resolveManagedStart = async ({
   return {
     ...isolatedSession,
     autoStarted: !preparedStartResult,
+    fastPath: false,
   };
 };
 
