@@ -21,6 +21,15 @@ All notable changes to this project will be documented in this file.
 ## [1.7.1] - 2026-04-01
 
 ### Added
+- **Inline Metrics Display:** All tools now include `metricsDisplay` field with human-readable summary
+  - Format: `✓ {tool}, {target}, {files} files, {raw}→{compressed} tokens ({ratio})`
+  - Examples:
+    - `✓ smart_read, src/auth.js, 1.2K→120 tokens (10.0:1)`
+    - `✓ smart_search, buildMetrics, 10 files, 1.7K→781 tokens (2.2:1)`
+    - `✓ smart_context, analyze auth flow, 8 files, 15.0K→1.5K tokens (10.0:1)`
+  - Agents can surface this directly without formatting
+  - Addresses feedback: "No pude ver el proceso paso a paso, métricas ocultas"
+
 - **Top Tools Visibility:** `smart_metrics` now includes `summary.topTools` field
   - Highlights top 3 tools by net savings (e.g., smart_context: 850 tokens, smart_read: 400 tokens)
   - Filters out tools with negative or zero net savings
@@ -32,7 +41,9 @@ All notable changes to this project will be documented in this file.
 - **Repository:** Cleaned up local development files (.cursor/rules/, .cursorrules, .gitlab-ci.yml, PUBLISH.md)
 
 ### Tests
+- Added 8 unit tests for `metricsDisplay` formatting
 - Added test for `topTools` ordering and filtering
+- 40/40 tests passing (metrics-display + smart-metrics + orchestration)
 
 ## [1.7.0] - 2026-04-01
 

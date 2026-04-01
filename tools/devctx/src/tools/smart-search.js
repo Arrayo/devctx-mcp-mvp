@@ -12,6 +12,7 @@ import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
 import { IGNORED_DIRS, IGNORED_FILE_NAMES } from '../config/ignored-paths.js';
+import { buildMetricsDisplay } from '../utils/metrics-display.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -422,6 +423,14 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
 
   const confidence = { level: retrievalConfidence, indexFreshness };
 
+  const metricsDisplay = buildMetricsDisplay({
+    tool: 'smart_search',
+    target: query,
+    metrics,
+    startTime: null,
+    filesCount: groups.length,
+  });
+
   const result = {
     query,
     root,
@@ -437,6 +446,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     topFiles: groups.slice(0, 10).map((group) => ({ file: group.file, count: group.count, score: group.score })),
     matches: compressedText,
     metrics,
+    metricsDisplay,
   };
 
   if (provenance) result.provenance = provenance;

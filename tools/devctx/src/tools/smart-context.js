@@ -14,6 +14,7 @@ import { predictContextFiles, recordContextAccess } from '../context-patterns.js
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
+import { buildMetricsDisplay } from '../utils/metrics-display.js';
 import { 
   getDetailedDiff, 
   analyzeChangeImpact, 
@@ -796,6 +797,19 @@ export const smartContext = async ({
     tests: coverageMin(perFile.map((c) => c.tests)),
   };
 
+  const filesIncluded = new Set(context.map((c) => c.file)).size;
+  const metricsDisplay = buildMetricsDisplay({
+    tool: 'smart_context',
+    target: task,
+    metrics: {
+      rawTokens: totalRawTokens,
+      compressedTokens: totalCompressedTokens,
+      savedTokens,
+    },
+    startTime: null,
+    filesCount: filesIncluded,
+  });
+
   const result = {
     success: true,
     task,
@@ -807,7 +821,7 @@ export const smartContext = async ({
     metrics: {
       contentTokens,
       totalTokens: 0,
-      filesIncluded: new Set(context.map((c) => c.file)).size,
+      filesIncluded,
       filesEvaluated: expanded.size,
       savingsPct,
       detailMode,
@@ -825,6 +839,7 @@ export const smartContext = async ({
         }
       } : {})
     },
+    metricsDisplay,
     ...(includeSet.has('hints') ? { hints } : {}),
   };
 

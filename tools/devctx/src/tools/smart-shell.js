@@ -7,6 +7,7 @@ import { pickRelevantLines, truncate, uniqueLines } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
+import { buildMetricsDisplay } from '../utils/metrics-display.js';
 
 const execFile = promisify(execFileCallback);
 const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
@@ -289,6 +290,13 @@ export const smartShell = async ({ command }) => {
     context: `${outputLines} lines → ${compressedText.split('\n').length} lines (relevant only)`,
   });
 
+  const metricsDisplay = buildMetricsDisplay({
+    tool: 'smart_shell',
+    target: command,
+    metrics,
+    startTime: null,
+  });
+
   const result = {
     command,
     exitCode: execution.code,
@@ -296,6 +304,7 @@ export const smartShell = async ({ command }) => {
     output: compressedText,
     confidence: { blocked: false, timedOut: !!execution.timedOut },
     metrics,
+    metricsDisplay,
   };
 
   if (execution.timedOut) result.timedOut = true;
