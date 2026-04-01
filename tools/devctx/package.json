@@ -1,6 +1,6 @@
 {
   "name": "smart-context-mcp",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "description": "MCP server that reduces agent token usage by 90% with intelligent context compression, task checkpoint persistence, and workflow-aware agent guidance.",
   "author": "Francisco Caballero Portero <fcp1978@hotmail.com>",
   "type": "module",

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.4] - 2026-04-01
+
+### Fixed
+- **README Links:** Converted relative documentation links to absolute GitHub URLs to fix npm rendering
+  - Changed `../../docs/task-runner.md` to full GitHub URL
+  - Changed `../../docs/mcp-prompts.md` to full GitHub URL
+  - Fixes README not displaying on npmjs.com web interface
+
 ## [1.7.3] - 2026-04-01
 
 ### Fixed

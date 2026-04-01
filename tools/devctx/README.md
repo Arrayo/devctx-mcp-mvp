@@ -83,7 +83,7 @@ The runner now covers:
 
 For Cursor projects, `smart-context-init` also generates `./.devctx/bin/cursor-devctx`, which routes through the same runner/policy stack.
 
-See [Task Runner Workflows](../../docs/task-runner.md) for the full behavior and command guidance.
+See [Task Runner Workflows](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/task-runner.md) for the full behavior and command guidance.
 
 ---
 
@@ -380,7 +380,7 @@ The MCP server provides **prompts** for automatic forcing:
 - Centrally managed
 - No typos
 
-See [MCP Prompts Documentation](../../docs/mcp-prompts.md).
+See [MCP Prompts Documentation](https://github.com/Arrayo/smart-context-mcp/blob/main/docs/mcp-prompts.md).
 
 ## Core Tools
 
