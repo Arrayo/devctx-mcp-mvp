@@ -1,123 +1,12 @@
 import { spawn } from 'node:child_process';
-import { persistMetrics } from '../metrics.js';
-import { countTokens } from '../tokenCounter.js';
-import { buildOperationalContextLines } from '../client-contract.js';
-import { smartSummary } from '../tools/smart-summary.js';
-import { smartTurn } from '../tools/smart-turn.js';
-
-const DEFAULT_EVENT = 'session_end';
-const START_MAX_TOKENS = 350;
-const END_MAX_TOKENS = 350;
-const SAFE_CONTINUITY_STATES = new Set(['aligned', 'resume']);
-
-const normalizeWhitespace = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
-
-const truncate = (value, maxLength = 160) => {
-  const normalized = normalizeWhitespace(value);
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  if (maxLength <= 3) {
-    return '';
-  }
-
-  return `${normalized.slice(0, maxLength - 3)}...`;
-};
-
-const extractNextStep = (value) => {
-  const normalized = normalizeWhitespace(value);
-  if (!normalized) {
-    return '';
-  }
-
-  const explicitMatch = normalized.match(/(?:next step|siguiente paso)\s*[:\-]\s*([^.;\n]{12,180})/i);
-  if (explicitMatch?.[1]) {
-    return truncate(explicitMatch[1], 150);
-  }
-
-  return '';
-};
-
-const buildContextLines = (startResult) => {
-  const context = buildOperationalContextLines(startResult, {
-    sessionStart: false,
-    maxLineLength: 120,
-    maxLines: 8,
-    maxChars: 560,
-  });
-  return context ? context.split('\n') : [];
-};
-
-export const buildWrappedPrompt = ({ prompt, startResult }) => {
-  const lines = buildContextLines(startResult);
-  if (lines.length === 0) {
-    return prompt;
-  }
-
-  return [
-    'Use the persisted devctx project context below only if it is relevant to the user request.',
-    ...lines.map((line) => `- ${line}`),
-    '',
-    'User request:',
-    prompt,
-  ].join('\n');
-};
-
-const buildFreshSessionUpdate = (prompt) => {
-  const preview = truncate(prompt, 140);
-  return {
-    goal: truncate(prompt, 120),
-    status: 'planning',
-    currentFocus: preview,
-    pinnedContext: [preview],
-    nextStep: 'Inspect the relevant code, validate task boundaries, and checkpoint the first concrete milestone.',
-  };
-};
-
-const ensureIsolatedSession = async ({ prompt, sessionId, startResult }) => {
-  if (sessionId || !startResult?.sessionId) {
-    return {
-      startResult,
-      isolated: Boolean(startResult?.isolatedSession),
-      previousSessionId: startResult?.previousSessionId ?? null,
-    };
-  }
-
-  if (startResult?.isolatedSession) {
-    return {
-      startResult,
-      isolated: true,
-      previousSessionId: startResult.previousSessionId ?? null,
-    };
-  }
-
-  if (SAFE_CONTINUITY_STATES.has(startResult.continuity?.state ?? '')) {
-    return {
-      startResult,
-      isolated: false,
-    };
-  }
-
-  const created = await smartSummary({
-    action: 'update',
-    update: buildFreshSessionUpdate(prompt),
-    maxTokens: START_MAX_TOKENS,
-  });
-  const isolatedStart = await smartTurn({
-    phase: 'start',
-    sessionId: created.sessionId,
-    prompt,
-    ensureSession: false,
-    maxTokens: START_MAX_TOKENS,
-  });
-
-  return {
-    startResult: isolatedStart,
-    isolated: true,
-    previousSessionId: startResult.sessionId,
-  };
-};
+import {
+  buildWrappedPrompt,
+  computeContextOverhead,
+  finalizeManagedRun,
+  recordAgentWrapperMetric,
+  resolveManagedStart,
+} from './base-orchestrator.js';
+import { normalizeWhitespace } from './policy/event-policy.js';
 
 const runChildProcess = ({ command, args, env, stdinText, streamOutput }) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
@@ -154,34 +43,6 @@ const runChildProcess = ({ command, args, env, stdinText, streamOutput }) => new
   }
 });
 
-const buildEndUpdate = ({ prompt, childResult }) => {
-  const combinedOutput = [childResult.stdout, childResult.stderr].filter(Boolean).join('\n');
-  const nextStep = extractNextStep(combinedOutput);
-  const update = {
-    currentFocus: truncate(prompt, 140),
-  };
-
-  if (nextStep) {
-    update.nextStep = nextStep;
-  } else if (childResult.exitCode === 0) {
-    update.nextStep = 'Review the latest headless agent output and checkpoint any concrete file changes before continuing.';
-  } else {
-    update.status = 'blocked';
-    update.whyBlocked = `Headless agent command exited with code ${childResult.exitCode}.`;
-    update.nextStep = 'Review the headless agent stderr/output and rerun the command once the issue is fixed.';
-  }
-
-  return update;
-};
-
-const inferEndEvent = ({ requestedEvent, childResult }) => {
-  if (requestedEvent) {
-    return requestedEvent;
-  }
-
-  return childResult.exitCode === 0 ? DEFAULT_EVENT : 'blocker';
-};
-
 export const runHeadlessWrapper = async ({
   client = 'generic',
   prompt,
@@ -203,35 +64,26 @@ export const runHeadlessWrapper = async ({
     throw new Error('command is required unless dryRun=true');
   }
 
-  const start = preparedStartResult ?? await smartTurn({
-    phase: 'start',
-    sessionId,
+  const sessionResolution = await resolveManagedStart({
     prompt,
+    sessionId,
+    preparedStartResult,
     ensureSession: true,
-    maxTokens: START_MAX_TOKENS,
+    allowIsolation: true,
   });
-  const sessionResolution = await ensureIsolatedSession({ prompt, sessionId, startResult: start });
   const effectiveStart = sessionResolution.startResult;
   const wrappedPrompt = buildWrappedPrompt({ prompt, startResult: effectiveStart });
-  const overheadTokens = Math.max(0, countTokens(wrappedPrompt) - countTokens(prompt));
+  const overheadTokens = computeContextOverhead({ prompt, wrappedPrompt });
 
-  await persistMetrics({
-    tool: 'agent_wrapper',
-    action: `${client}:start`,
+  await recordAgentWrapperMetric({
+    phase: 'start',
+    client,
     sessionId: effectiveStart.sessionId ?? null,
-    rawTokens: 0,
-    compressedTokens: 0,
-    savedTokens: 0,
-    savingsPct: 0,
-    metadata: {
-      isContextOverhead: overheadTokens > 0,
-      overheadTokens,
-      client,
-      dryRun,
-      isolatedSession: sessionResolution.isolated,
-      previousSessionId: sessionResolution.previousSessionId ?? null,
-    },
-    timestamp: new Date().toISOString(),
+    dryRun,
+    overheadTokens,
+    isolatedSession: sessionResolution.isolated,
+    previousSessionId: sessionResolution.previousSessionId ?? null,
+    autoStarted: sessionResolution.autoStarted,
   });
 
   const finalArgs = stdinPrompt ? [...args] : [...args, wrappedPrompt];
@@ -262,32 +114,21 @@ export const runHeadlessWrapper = async ({
     streamOutput,
   });
 
-  const resolvedEvent = inferEndEvent({ requestedEvent: event, childResult });
-  const end = await smartTurn({
-    phase: 'end',
+  const { resolvedEvent, endResult } = await finalizeManagedRun({
+    prompt,
+    childResult,
     sessionId: effectiveStart.sessionId ?? sessionId ?? undefined,
-    event: resolvedEvent,
-    update: buildEndUpdate({ prompt, childResult }),
-    maxTokens: END_MAX_TOKENS,
+    requestedEvent: event,
   });
 
-  await persistMetrics({
-    tool: 'agent_wrapper',
-    action: `${client}:end`,
+  await recordAgentWrapperMetric({
+    phase: 'end',
+    client,
     sessionId: effectiveStart.sessionId ?? null,
-    rawTokens: 0,
-    compressedTokens: 0,
-    savedTokens: 0,
-    savingsPct: 0,
-    metadata: {
-      client,
-      exitCode: childResult.exitCode,
-      event: resolvedEvent,
-      isContextOverhead: false,
-      overheadTokens: 0,
-      isolatedSession: sessionResolution.isolated,
-    },
-    timestamp: new Date().toISOString(),
+    isolatedSession: sessionResolution.isolated,
+    exitCode: childResult.exitCode,
+    event: resolvedEvent,
+    autoStarted: sessionResolution.autoStarted,
   });
 
   return {
@@ -301,7 +142,7 @@ export const runHeadlessWrapper = async ({
     stdout: childResult.stdout,
     stderr: childResult.stderr,
     start: effectiveStart,
-    end,
+    end: endResult,
     sessionId: effectiveStart.sessionId ?? sessionId ?? null,
     isolatedSession: sessionResolution.isolated,
   };

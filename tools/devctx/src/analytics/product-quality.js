@@ -25,6 +25,16 @@ const analyzeTaskRunnerQuality = (entries = []) => {
   const blockedWithDoctor = blockedEntries.filter((entry) => entry.metadata?.doctorIssued);
   const checkpointEntries = runnerEntries.filter((entry) => entry.action === 'checkpoint');
   const persistedCheckpointEntries = checkpointEntries.filter((entry) => entry.metadata?.checkpointPersisted);
+  const baseOrchestratedEntries = workflowEntries.filter((entry) => entry.metadata?.managedByBaseOrchestrator);
+  const autoStartedEntries = workflowEntries.filter((entry) => entry.metadata?.autoStartTriggered);
+  const autoPreflightEntries = workflowEntries.filter((entry) => entry.metadata?.autoPreflightTriggered);
+  const autoCheckpointEntries = runnerEntries.filter((entry) => entry.metadata?.autoCheckpointTriggered);
+  const isolatedWorkflowEntries = workflowEntries.filter((entry) => entry.metadata?.isolatedSession);
+  const contextOverheadEntries = runnerEntries.filter((entry) => Number(entry.metadata?.contextOverheadTokens ?? 0) > 0);
+  const contextOverheadTokens = runnerEntries.reduce(
+    (total, entry) => total + Number(entry.metadata?.contextOverheadTokens ?? 0),
+    0,
+  );
 
   const commandBreakdown = [...runnerEntries.reduce((acc, entry) => {
     const key = entry.action ?? 'unknown';
@@ -70,6 +80,20 @@ const analyzeTaskRunnerQuality = (entries = []) => {
       commandsMeasured: checkpointEntries.length,
       persistedCommands: persistedCheckpointEntries.length,
       persistenceRatePct: roundPct(persistedCheckpointEntries.length, checkpointEntries.length),
+    },
+    automaticity: {
+      baseOrchestratedCommands: baseOrchestratedEntries.length,
+      autoStartedCommands: autoStartedEntries.length,
+      autoPreflightedCommands: autoPreflightEntries.length,
+      autoCheckpointedCommands: autoCheckpointEntries.length,
+      isolatedWorkflowCommands: isolatedWorkflowEntries.length,
+      contextOverheadTokens,
+      averageContextOverheadTokens: contextOverheadEntries.length > 0
+        ? Number((contextOverheadTokens / contextOverheadEntries.length).toFixed(1))
+        : 0,
+      baseOrchestratorCoveragePct: roundPct(baseOrchestratedEntries.length, workflowEntries.length),
+      autoStartCoveragePct: roundPct(autoStartedEntries.length, workflowEntries.length),
+      autoPreflightCoveragePct: roundPct(autoPreflightEntries.length, workflowEntries.length),
     },
   };
 };
@@ -192,6 +216,13 @@ export const formatProductQualityReport = (stats) => {
     lines.push('');
     lines.push('Blocked-State Routing:');
     lines.push(`Blocked with doctor:   ${stats.taskRunner.blockedState.blockedWithDoctor}/${stats.taskRunner.blockedState.blockedCommands} (${stats.taskRunner.blockedState.doctorCoveragePct}%)`);
+    lines.push('');
+    lines.push('Automaticity:');
+    lines.push(`Base orchestrated:     ${stats.taskRunner.automaticity.baseOrchestratedCommands}/${stats.taskRunner.workflowCommands} (${stats.taskRunner.automaticity.baseOrchestratorCoveragePct}%)`);
+    lines.push(`Auto-started:          ${stats.taskRunner.automaticity.autoStartedCommands}/${stats.taskRunner.workflowCommands} (${stats.taskRunner.automaticity.autoStartCoveragePct}%)`);
+    lines.push(`Auto-preflighted:      ${stats.taskRunner.automaticity.autoPreflightedCommands}/${stats.taskRunner.workflowCommands} (${stats.taskRunner.automaticity.autoPreflightCoveragePct}%)`);
+    lines.push(`Auto-checkpointed:     ${stats.taskRunner.automaticity.autoCheckpointedCommands}`);
+    lines.push(`Context overhead:      ${stats.taskRunner.automaticity.contextOverheadTokens} tokens total (${stats.taskRunner.automaticity.averageContextOverheadTokens} avg)`);
     lines.push('');
     lines.push('Checkpoint Commands:');
     lines.push(`Persisted checkpoints: ${stats.taskRunner.checkpointing.persistedCommands}/${stats.taskRunner.checkpointing.commandsMeasured} (${stats.taskRunner.checkpointing.persistenceRatePct}%)`);

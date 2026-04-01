@@ -198,6 +198,11 @@ test('smart_metrics - includes task_runner workflow-quality signals', async () =
           workflowPolicyMode: 'review_guided',
           workflowPreflightTool: 'smart_context',
           workflowPreflightTopFiles: 2,
+          managedByBaseOrchestrator: true,
+          autoStartTriggered: true,
+          autoPreflightTriggered: true,
+          autoCheckpointTriggered: false,
+          contextOverheadTokens: 18,
         },
         timestamp: '2026-03-30T10:00:00.000Z',
       },
@@ -218,6 +223,11 @@ test('smart_metrics - includes task_runner workflow-quality signals', async () =
           workflowPolicyMode: 'debug_guided',
           workflowPreflightTool: 'smart_search',
           workflowPreflightTopFiles: 1,
+          managedByBaseOrchestrator: true,
+          autoStartTriggered: true,
+          autoPreflightTriggered: true,
+          autoCheckpointTriggered: false,
+          contextOverheadTokens: 0,
         },
         timestamp: '2026-03-30T11:00:00.000Z',
       },
@@ -233,6 +243,11 @@ test('smart_metrics - includes task_runner workflow-quality signals', async () =
           blocked: false,
           doctorIssued: false,
           checkpointPersisted: true,
+          managedByBaseOrchestrator: false,
+          autoStartTriggered: false,
+          autoPreflightTriggered: false,
+          autoCheckpointTriggered: true,
+          contextOverheadTokens: 0,
         },
         timestamp: '2026-03-30T12:00:00.000Z',
       },
@@ -246,6 +261,11 @@ test('smart_metrics - includes task_runner workflow-quality signals', async () =
     assert.equal(result.productQuality.taskRunner.workflowPolicy.preflightCoveragePct, 100);
     assert.equal(result.productQuality.taskRunner.blockedState.doctorCoveragePct, 100);
     assert.equal(result.productQuality.taskRunner.checkpointing.persistedCommands, 1);
+    assert.equal(result.productQuality.taskRunner.automaticity.baseOrchestratedCommands, 2);
+    assert.equal(result.productQuality.taskRunner.automaticity.autoStartedCommands, 2);
+    assert.equal(result.productQuality.taskRunner.automaticity.autoPreflightedCommands, 2);
+    assert.equal(result.productQuality.taskRunner.automaticity.autoCheckpointedCommands, 1);
+    assert.equal(result.productQuality.taskRunner.automaticity.contextOverheadTokens, 18);
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }

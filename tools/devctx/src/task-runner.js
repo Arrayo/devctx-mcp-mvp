@@ -3,10 +3,16 @@ import { persistMetrics } from './metrics.js';
 import { countTokens } from './tokenCounter.js';
 import { projectRoot } from './utils/paths.js';
 import { TASK_RUNNER_QUALITY_ANALYTICS_KIND } from './analytics/product-quality.js';
+import { DEFAULT_END_MAX_TOKENS, DEFAULT_START_MAX_TOKENS, resolveManagedStart } from './orchestration/base-orchestrator.js';
 import { runHeadlessWrapper } from './orchestration/headless-wrapper.js';
-import { smartContext } from './tools/smart-context.js';
 import { smartDoctor } from './tools/smart-doctor.js';
-import { smartSearch } from './tools/smart-search.js';
+import {
+  buildPreflightSummary,
+  buildTaskRunnerAutomaticity,
+  buildWorkflowPolicyPayload,
+  buildWorkflowPromptWithPolicy,
+  runWorkflowPreflight,
+} from './orchestration/policy/event-policy.js';
 import { smartStatus } from './tools/smart-status.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartTurn } from './tools/smart-turn.js';
@@ -22,242 +28,8 @@ import {
   evaluateRunnerGate,
 } from './task-runner/policy.js';
 
-const START_MAX_TOKENS = 350;
-const END_MAX_TOKENS = 350;
 const RUNNER_LOCK_RETRY_ATTEMPTS = 3;
 const RUNNER_LOCK_RETRY_DELAY_MS = 100;
-
-const normalizeWhitespace = (value) => String(value ?? '').replace(/\s+/g, ' ').trim();
-const truncate = (value, maxLength = 160) => {
-  const normalized = normalizeWhitespace(value);
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-
-  if (maxLength <= 3) {
-    return '';
-  }
-
-  return `${normalized.slice(0, maxLength - 3)}...`;
-};
-
-const asArray = (value) => Array.isArray(value) ? value : [];
-const uniqueCompact = (values) => [...new Set(asArray(values).map((value) => normalizeWhitespace(value)).filter(Boolean))];
-const extractContextTopFiles = (topFiles) => uniqueCompact(asArray(topFiles).map((item) => {
-  if (typeof item === 'string') {
-    return item;
-  }
-
-  return item?.file ?? item?.path ?? '';
-})).slice(0, 3);
-
-const extractPreflightTopFiles = (preflightResult) => {
-  if (!preflightResult) {
-    return [];
-  }
-
-  if (preflightResult.tool === 'smart_context') {
-    return uniqueCompact(asArray(preflightResult.result?.context).map((item) => item?.file).filter(Boolean)).slice(0, 3);
-  }
-
-  if (preflightResult.tool === 'smart_search') {
-    return extractContextTopFiles(preflightResult.result?.topFiles);
-  }
-
-  return [];
-};
-
-const extractPreflightHints = (preflightResult) => {
-  if (!preflightResult) {
-    return [];
-  }
-
-  if (preflightResult.tool === 'smart_context') {
-    return uniqueCompact(preflightResult.result?.hints).slice(0, 2);
-  }
-
-  if (preflightResult.tool === 'smart_search') {
-    const totalMatches = Number(preflightResult.result?.totalMatches ?? 0);
-    if (totalMatches > 0) {
-      return [`${totalMatches} search match(es) surfaced for the workflow target`];
-    }
-  }
-
-  return [];
-};
-
-const buildPreflightSummary = (preflightResult) => {
-  if (!preflightResult) {
-    return null;
-  }
-
-  const topFiles = extractPreflightTopFiles(preflightResult);
-  const hints = extractPreflightHints(preflightResult);
-
-  return {
-    tool: preflightResult.tool,
-    topFiles,
-    hints,
-    totalMatches: Number(preflightResult.result?.totalMatches ?? 0),
-  };
-};
-
-const buildPreflightTask = ({ workflowProfile, prompt, startResult }) => {
-  const normalizedPrompt = normalizeWhitespace(prompt);
-  const persistedNextStep = normalizeWhitespace(startResult?.summary?.nextStep);
-  const currentFocus = normalizeWhitespace(startResult?.summary?.currentFocus);
-  const refreshedTopFiles = extractContextTopFiles(startResult?.refreshedContext?.topFiles);
-
-  if (workflowProfile.commandName === 'continue' || workflowProfile.commandName === 'resume') {
-    if (persistedNextStep) {
-      return persistedNextStep;
-    }
-    if (currentFocus) {
-      return currentFocus;
-    }
-  }
-
-  if (workflowProfile.commandName === 'task' && currentFocus && persistedNextStep) {
-    return `${currentFocus}. ${persistedNextStep}`;
-  }
-
-  if (normalizedPrompt) {
-    return normalizedPrompt;
-  }
-
-  if (refreshedTopFiles.length > 0) {
-    return `Inspect ${refreshedTopFiles.join(', ')} and continue the persisted task`;
-  }
-
-  return workflowProfile.label;
-};
-
-const runWorkflowPreflight = async ({ workflowProfile, prompt, startResult }) => {
-  const preflight = workflowProfile.preflight;
-  if (!preflight) {
-    return null;
-  }
-
-  const preflightTask = buildPreflightTask({ workflowProfile, prompt, startResult });
-
-  if (preflight.tool === 'smart_context') {
-    const result = await smartContext({
-      task: preflightTask,
-      detail: preflight.detail ?? 'minimal',
-      include: preflight.include ?? ['hints'],
-      maxTokens: preflight.maxTokens ?? 1200,
-    });
-    return {
-      tool: 'smart_context',
-      request: {
-        task: preflightTask,
-        detail: preflight.detail ?? 'minimal',
-        include: preflight.include ?? ['hints'],
-        maxTokens: preflight.maxTokens ?? 1200,
-      },
-      result,
-    };
-  }
-
-  if (preflight.tool === 'smart_search') {
-    const result = await smartSearch({
-      query: preflightTask,
-      intent: preflight.intent ?? workflowProfile.workflowIntent,
-    });
-    return {
-      tool: 'smart_search',
-      request: {
-        query: preflightTask,
-        intent: preflight.intent ?? workflowProfile.workflowIntent,
-      },
-      result,
-    };
-  }
-
-  return null;
-};
-
-const buildContinuityGuidance = ({ startResult }) => {
-  const continuityState = startResult?.continuity?.state ?? 'unknown';
-  const lines = [
-    `- Continuity: ${continuityState}`,
-  ];
-  const nextStep = normalizeWhitespace(startResult?.summary?.nextStep);
-  const currentFocus = normalizeWhitespace(startResult?.summary?.currentFocus);
-  const refreshedTopFiles = extractContextTopFiles(startResult?.refreshedContext?.topFiles);
-  const recommendedNextTools = asArray(startResult?.recommendedPath?.nextTools)
-    .map((tool) => normalizeWhitespace(tool))
-    .filter(Boolean)
-    .slice(0, 3);
-
-  if (currentFocus) {
-    lines.push(`- Persisted focus: ${truncate(currentFocus, 140)}`);
-  }
-
-  if (nextStep) {
-    lines.push(`- Persisted next step: ${truncate(nextStep, 140)}`);
-  }
-
-  if (refreshedTopFiles.length > 0) {
-    lines.push(`- Refreshed top files: ${refreshedTopFiles.join(', ')}`);
-  }
-
-  if (recommendedNextTools.length > 0) {
-    lines.push(`- smart_turn suggested: ${recommendedNextTools.join(' -> ')}`);
-  }
-
-  if (startResult?.isolatedSession) {
-    lines.push('- Session handling: smart_turn already isolated this work from the previous session; revalidate before assuming old focus.');
-  } else if (continuityState === 'aligned' || continuityState === 'resume') {
-    lines.push('- Session handling: reuse the active session context and stay close to the persisted next step unless the task proves otherwise.');
-  } else if (continuityState === 'possible_shift' || continuityState === 'context_mismatch') {
-    lines.push('- Session handling: treat this as a shifted slice, validate the working set early, and avoid silent context reuse.');
-  }
-
-  return lines;
-};
-
-const buildWorkflowPromptWithPolicy = ({ prompt, workflowProfile, preflightSummary, startResult }) => {
-  const lines = [
-    prompt,
-    '',
-    'Workflow policy:',
-    `- Mode: ${workflowProfile.policyMode}`,
-    `- Intent: ${workflowProfile.workflowIntent}`,
-    `- Prefer this tool order: ${workflowProfile.nextTools.join(' -> ')}`,
-  ];
-
-  if (workflowProfile.checkpointStrategy) {
-    lines.push(`- Checkpoint rule: ${workflowProfile.checkpointStrategy}`);
-  }
-
-  lines.push(...buildContinuityGuidance({ startResult }));
-
-  if (preflightSummary?.tool) {
-    lines.push(`- Preflight: ${preflightSummary.tool}`);
-  }
-
-  if (preflightSummary?.topFiles?.length) {
-    lines.push(`- Focus files: ${preflightSummary.topFiles.join(', ')}`);
-  }
-
-  if (preflightSummary?.hints?.length) {
-    lines.push(`- Signals: ${preflightSummary.hints.map((hint) => truncate(hint, 120)).join(' | ')}`);
-  }
-
-  return lines.join('\n');
-};
-
-const buildWorkflowPolicyPayload = ({ commandName, workflowProfile, preflightSummary }) => ({
-  commandName,
-  label: workflowProfile.label,
-  policyMode: workflowProfile.policyMode,
-  intent: workflowProfile.workflowIntent,
-  specialized: workflowProfile.specialized,
-  nextTools: [...workflowProfile.nextTools],
-  checkpointStrategy: workflowProfile.checkpointStrategy,
-  preflight: preflightSummary,
-});
 
 const isRetriableLockError = (error) => {
   const issue = error?.storageHealth?.issue ?? error?.cause?.storageHealth?.issue ?? null;
@@ -302,6 +74,15 @@ const recordRunnerMetrics = async ({
     ?? null;
   const checkpointPersisted = Boolean(endResult && !endResult.checkpoint?.skipped && !endResult.checkpoint?.blocked);
   const checkpointSkipped = Boolean(endResult?.checkpoint?.skipped);
+  const automaticity = buildTaskRunnerAutomaticity({
+    isWorkflowCommand: WORKFLOW_COMMANDS.has(commandName),
+    startResult,
+    endResult,
+    workflowPolicy,
+    usedWrapper,
+    overheadTokens: Number(result?.overheadTokens ?? 0),
+    managedByBaseOrchestrator: WORKFLOW_COMMANDS.has(commandName),
+  });
 
   await persistMetrics({
     tool: 'task_runner',
@@ -334,6 +115,7 @@ const recordRunnerMetrics = async ({
       recommendedPathMode,
       checkpointPersisted,
       checkpointSkipped,
+      ...automaticity,
     },
     timestamp: new Date().toISOString(),
   });
@@ -359,13 +141,14 @@ const runWorkflowCommand = async ({
   });
   const workflowProfile = buildWorkflowPolicyProfile({ commandName });
 
-  const start = await withRunnerLockRetry(() => smartTurn({
-    phase: 'start',
-    sessionId,
+  const startResolution = await withRunnerLockRetry(() => resolveManagedStart({
     prompt: requestedPrompt,
+    sessionId,
     ensureSession: true,
-    maxTokens: START_MAX_TOKENS,
+    allowIsolation: false,
+    startMaxTokens: DEFAULT_START_MAX_TOKENS,
   }));
+  const start = startResolution.startResult;
 
   const gate = evaluateRunnerGate({ startResult: start });
   let preflightSummary = null;
@@ -485,7 +268,7 @@ const runCheckpointCommand = async ({
     sessionId,
     event,
     update,
-    maxTokens: END_MAX_TOKENS,
+    maxTokens: DEFAULT_END_MAX_TOKENS,
   }));
   await recordRunnerMetrics({
     commandName: 'checkpoint',
