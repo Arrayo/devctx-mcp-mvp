@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.1] - 2026-04-01
+
+### Fixed
+- **Client Detection:** Auto-detect client from environment variables (`CURSOR_AGENT=1`, `CLAUDE_AGENT=1`, etc.)
+  - `task-runner` and `headless-wrapper` now detect client automatically instead of defaulting to `generic`
+  - Metrics now correctly distinguish `cursor` from `generic` based on `CURSOR_AGENT` env var
+  - Added `detectClient()` utility with caching and reset capability
+  - CLI scripts (`task-runner.js`, `headless-wrapper.js`) use auto-detection by default
+  - Supports cursor, claude, gemini, codex, with fallback to generic
+
+### Tests
+- Added 8 unit tests for client detection
+- Added 2 integration tests validating client metrics
+- Added validation script: `scripts/validate-client-detection.sh`
+- Total: 715/715 tests passing
+
 ## [1.7.0] - 2026-04-01
 
 ### Added

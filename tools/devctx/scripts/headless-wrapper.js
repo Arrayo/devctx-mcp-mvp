@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runHeadlessWrapper } from '../src/orchestration/headless-wrapper.js';
+import { detectClient } from '../src/utils/client-detection.js';
 
 const requireValue = (argv, index, flag) => {
   const value = argv[index + 1];
@@ -11,7 +12,7 @@ const requireValue = (argv, index, flag) => {
 
 const parseArgs = (argv) => {
   const options = {
-    client: 'generic',
+    client: null,
     prompt: '',
     sessionId: undefined,
     event: undefined,

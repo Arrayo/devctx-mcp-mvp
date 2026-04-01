@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { runTaskRunner } from '../src/task-runner.js';
 import { checkNodeVersion } from '../src/utils/runtime-check.js';
+import { detectClient } from '../src/utils/client-detection.js';
 
 const runtimeCheck = checkNodeVersion();
 if (!runtimeCheck.ok) {
@@ -28,7 +29,7 @@ const parseArgs = (argv) => {
   const rest = argv[0] && !argv[0].startsWith('--') ? argv.slice(1) : argv;
   const options = {
     commandName: subcommand,
-    client: 'generic',
+    client: null,
     prompt: '',
     sessionId: undefined,
     event: undefined,

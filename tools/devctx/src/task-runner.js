@@ -27,6 +27,7 @@ import {
   buildWorkflowPrompt,
   evaluateRunnerGate,
 } from './task-runner/policy.js';
+import { detectClient } from './utils/client-detection.js';
 
 const RUNNER_LOCK_RETRY_ATTEMPTS = 3;
 const RUNNER_LOCK_RETRY_DELAY_MS = 100;
@@ -414,7 +415,7 @@ const runCleanupCommand = async ({
 
 export const runTaskRunner = async ({
   commandName = 'task',
-  client = 'generic',
+  client = null,
   prompt = '',
   sessionId,
   event,
@@ -436,6 +437,8 @@ export const runTaskRunner = async ({
   vacuum = false,
   update = {},
 } = {}) => {
+  const resolvedClient = client ?? detectClient();
+
   if (!RUNNER_COMMANDS.includes(commandName)) {
     throw new Error(`Unsupported task-runner command: ${commandName}`);
   }
@@ -443,7 +446,7 @@ export const runTaskRunner = async ({
   if (WORKFLOW_COMMANDS.has(commandName)) {
     return runWorkflowCommand({
       commandName,
-      client,
+      client: resolvedClient,
       prompt,
       sessionId,
       event,
@@ -458,16 +461,16 @@ export const runTaskRunner = async ({
   }
 
   if (commandName === 'doctor') {
-    return runDoctorCommand({ verifyIntegrity, client });
+    return runDoctorCommand({ verifyIntegrity, client: resolvedClient });
   }
 
   if (commandName === 'status') {
-    return runStatusCommand({ format, maxItems, client });
+    return runStatusCommand({ format, maxItems, client: resolvedClient });
   }
 
   if (commandName === 'checkpoint') {
     return runCheckpointCommand({
-      client,
+      client: resolvedClient,
       sessionId,
       event,
       update,
@@ -476,7 +479,7 @@ export const runTaskRunner = async ({
 
   if (commandName === 'cleanup') {
     return runCleanupCommand({
-      client,
+      client: resolvedClient,
       cleanupMode,
       apply,
       retentionDays,

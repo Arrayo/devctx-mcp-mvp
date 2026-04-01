@@ -7,6 +7,7 @@ import {
   resolveManagedStart,
 } from './base-orchestrator.js';
 import { normalizeWhitespace } from './policy/event-policy.js';
+import { detectClient } from '../utils/client-detection.js';
 
 const runChildProcess = ({ command, args, env, stdinText, streamOutput }) => new Promise((resolve, reject) => {
   const child = spawn(command, args, {
@@ -44,7 +45,7 @@ const runChildProcess = ({ command, args, env, stdinText, streamOutput }) => new
 });
 
 export const runHeadlessWrapper = async ({
-  client = 'generic',
+  client = null,
   prompt,
   command,
   args = [],
@@ -56,6 +57,8 @@ export const runHeadlessWrapper = async ({
   runCommand = runChildProcess,
   preparedStartResult = null,
 } = {}) => {
+  const resolvedClient = client ?? detectClient();
+
   if (!normalizeWhitespace(prompt)) {
     throw new Error('prompt is required');
   }
@@ -77,7 +80,7 @@ export const runHeadlessWrapper = async ({
 
   await recordAgentWrapperMetric({
     phase: 'start',
-    client,
+    client: resolvedClient,
     sessionId: effectiveStart.sessionId ?? null,
     dryRun,
     overheadTokens,
@@ -89,7 +92,7 @@ export const runHeadlessWrapper = async ({
   const finalArgs = stdinPrompt ? [...args] : [...args, wrappedPrompt];
   if (dryRun) {
     return {
-      client,
+      client: resolvedClient,
       dryRun: true,
       command,
       args: finalArgs,
@@ -123,7 +126,7 @@ export const runHeadlessWrapper = async ({
 
   await recordAgentWrapperMetric({
     phase: 'end',
-    client,
+    client: resolvedClient,
     sessionId: effectiveStart.sessionId ?? null,
     isolatedSession: sessionResolution.isolated,
     exitCode: childResult.exitCode,
@@ -132,7 +135,7 @@ export const runHeadlessWrapper = async ({
   });
 
   return {
-    client,
+    client: resolvedClient,
     command,
     args: finalArgs,
     wrappedPrompt,

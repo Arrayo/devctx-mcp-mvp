@@ -648,3 +648,81 @@ test('smart_metrics - returns storage diagnostics when sqlite state is corrupted
     fs.rmSync(tmpRoot, { recursive: true, force: true });
   }
 });
+
+test('smart_metrics - client adapter metrics distinguish cursor from generic', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-metrics-client-'));
+  const previousProjectRoot = projectRoot;
+  const metricsFile = path.join(tmpRoot, 'metrics.jsonl');
+
+  try {
+    setProjectRoot(tmpRoot);
+
+    fs.writeFileSync(
+      metricsFile,
+      [
+        {
+          tool: 'task_runner',
+          action: 'status',
+          sessionId: 'client-test',
+          rawTokens: 0,
+          compressedTokens: 100,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'task_runner_quality',
+            client: 'cursor',
+            managedByClientAdapter: false,
+          },
+          timestamp: '2026-04-01T10:00:00.000Z',
+        },
+        {
+          tool: 'task_runner',
+          action: 'doctor',
+          sessionId: 'client-test',
+          rawTokens: 0,
+          compressedTokens: 200,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'task_runner_quality',
+            client: 'cursor',
+            managedByClientAdapter: false,
+          },
+          timestamp: '2026-04-01T10:05:00.000Z',
+        },
+        {
+          tool: 'task_runner',
+          action: 'cleanup',
+          sessionId: 'client-test',
+          rawTokens: 0,
+          compressedTokens: 50,
+          savedTokens: 0,
+          metadata: {
+            analyticsKind: 'task_runner_quality',
+            client: 'generic',
+            managedByClientAdapter: false,
+          },
+          timestamp: '2026-04-01T10:10:00.000Z',
+        },
+      ].map((entry) => JSON.stringify(entry)).join('\n') + '\n',
+      'utf8',
+    );
+
+    const result = await smartMetrics({ file: metricsFile, window: 'all', latest: 10 });
+
+    assert.strictEqual(result.productQuality.clientAdapters.clientsMeasured, 2);
+    assert.strictEqual(result.productQuality.clientAdapters.entriesMeasured, 3);
+
+    const cursorClient = result.productQuality.clientAdapters.byClient.find((c) => c.client === 'cursor');
+    const genericClient = result.productQuality.clientAdapters.byClient.find((c) => c.client === 'generic');
+
+    assert.ok(cursorClient);
+    assert.strictEqual(cursorClient.entriesMeasured, 2);
+    assert.strictEqual(cursorClient.taskRunnerEvents, 2);
+
+    assert.ok(genericClient);
+    assert.strictEqual(genericClient.entriesMeasured, 1);
+    assert.strictEqual(genericClient.taskRunnerEvents, 1);
+  } finally {
+    setProjectRoot(previousProjectRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});

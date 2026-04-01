@@ -311,3 +311,24 @@ test('task runner cleanup command supports all-mode planning', { skip: SKIP_SQLI
   assert.ok(result.result.compact);
   assert.ok(result.result.legacy);
 });
+
+test('task runner auto-detects client from CURSOR_AGENT env var', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const originalCursorAgent = process.env.CURSOR_AGENT;
+  process.env.CURSOR_AGENT = '1';
+
+  try {
+    const result = await runTaskRunner({
+      commandName: 'cleanup',
+      cleanupMode: 'compact',
+    });
+
+    assert.equal(result.command, 'cleanup');
+    assert.ok(result.result);
+  } finally {
+    if (originalCursorAgent !== undefined) {
+      process.env.CURSOR_AGENT = originalCursorAgent;
+    } else {
+      delete process.env.CURSOR_AGENT;
+    }
+  }
+});
