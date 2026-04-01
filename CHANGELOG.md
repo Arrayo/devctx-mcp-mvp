@@ -2,23 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.7.1] - 2026-04-01
-
-### Fixed
-- **Client Detection:** Auto-detect client from environment variables (`CURSOR_AGENT=1`, `CLAUDE_AGENT=1`, etc.)
-  - `task-runner` and `headless-wrapper` now detect client automatically instead of defaulting to `generic`
-  - Metrics now correctly distinguish `cursor` from `generic` based on `CURSOR_AGENT` env var
-  - Added `detectClient()` utility with caching and reset capability
-  - CLI scripts (`task-runner.js`, `headless-wrapper.js`) use auto-detection by default
-  - Supports cursor, claude, gemini, codex, with fallback to generic
-
-### Tests
-- Added 8 unit tests for client detection
-- Added 2 integration tests validating client metrics
-- Added validation script: `scripts/validate-client-detection.sh`
-- Total: 715/715 tests passing
-
-## [1.7.1] - 2026-04-01
+## [1.7.2] - 2026-04-01
 
 ### Added
 - **Inline Metrics Display:** All tools now include `metricsDisplay` field with human-readable summary
@@ -28,7 +12,7 @@ All notable changes to this project will be documented in this file.
     - `✓ smart_search, buildMetrics, 10 files, 1.7K→781 tokens (2.2:1)`
     - `✓ smart_context, analyze auth flow, 8 files, 15.0K→1.5K tokens (10.0:1)`
   - Agents can surface this directly without formatting
-  - Addresses feedback: "No pude ver el proceso paso a paso, métricas ocultas"
+  - Addresses feedback: "Métricas ocultas: no hubo feedback sobre tokens consumidos"
 
 - **Top Tools Visibility:** `smart_metrics` now includes `summary.topTools` field
   - Highlights top 3 tools by net savings (e.g., smart_context: 850 tokens, smart_read: 400 tokens)
@@ -36,14 +20,27 @@ All notable changes to this project will be documented in this file.
   - Makes compression tool value immediately visible in session reports
   - Addresses feedback: "el valor práctico de smart_context y smart_read se notó durante el trabajo, pero no quedó tan visible en la métrica agregada"
 
+### Fixed
+- **Client Detection:** Auto-detect client from environment variables (`CURSOR_AGENT=1`, `CLAUDE_AGENT=1`, etc.)
+  - `task-runner` and `headless-wrapper` now detect client automatically instead of defaulting to `generic`
+  - Metrics now correctly distinguish `cursor` from `generic` based on `CURSOR_AGENT` env var
+  - Added `detectClient()` utility with caching and reset capability
+  - CLI scripts use auto-detection by default
+  - Supports cursor, claude, gemini, codex, with fallback to generic
+
 ### Changed
 - **Documentation:** Removed version-specific references from README files
 - **Repository:** Cleaned up local development files (.cursor/rules/, .cursorrules, .gitlab-ci.yml, PUBLISH.md)
 
 ### Tests
 - Added 8 unit tests for `metricsDisplay` formatting
+- Added 8 unit tests for client detection
 - Added test for `topTools` ordering and filtering
-- 40/40 tests passing (metrics-display + smart-metrics + orchestration)
+- 48/48 tests passing
+
+### Documentation
+- `docs/issues/execution-visibility-and-task-sizing.md`: Analysis of visibility and overhead issues
+- `docs/issues/tool-level-metrics-visibility.md`: Problem analysis and solution for topTools
 
 ## [1.7.0] - 2026-04-01
 
