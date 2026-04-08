@@ -410,7 +410,8 @@ export const smartContext = async ({
   if (diff) {
     const changed = await getChangedFiles(diff, root);
     
-    await ensureIndexReady({ root });
+    const isTest = process.env.NODE_ENV === 'test' || typeof process.env.NODE_TEST_CONTEXT !== 'undefined';
+    await ensureIndexReady({ root, silent: isTest });
     
     // Get detailed diff stats
     const detailedChanges = await getDetailedDiff(changed.ref, root);
@@ -558,7 +559,8 @@ export const smartContext = async ({
     } catch { /* invalid path — skip */ }
   }
 
-  await ensureIndexReady({ root });
+  const isTest = process.env.NODE_ENV === 'test' || typeof process.env.NODE_TEST_CONTEXT !== 'undefined';
+  await ensureIndexReady({ root, silent: isTest });
   
   const index = loadIndex(root);
 

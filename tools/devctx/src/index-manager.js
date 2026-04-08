@@ -66,7 +66,7 @@ const timeout = (ms, message) => {
 };
 
 export const ensureIndexReady = async (options = {}) => {
-  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot } = options;
+  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot, silent = false } = options;
   
   if (!force) {
     const existingIndex = loadIndex(root);
@@ -78,7 +78,9 @@ export const ensureIndexReady = async (options = {}) => {
     }
   }
   
-  console.log('📦 Building search index (this may take 30-60s)...');
+  if (!silent) {
+    console.log('📦 Building search index (this may take 30-60s)...');
+  }
   
   try {
     const buildPromise = buildIndexCore({ root, incremental: true });
@@ -94,10 +96,14 @@ export const ensureIndexReady = async (options = {}) => {
       version: result?.version
     }, root);
     
-    console.log('✅ Index ready');
+    if (!silent) {
+      console.log('✅ Index ready');
+    }
     return { status: 'built', cached: false, fileCount: result?.files?.length || 0 };
   } catch (error) {
-    console.warn('⚠️ Index build failed, search will use fallback mode');
+    if (!silent) {
+      console.warn('⚠️ Index build failed, search will use fallback mode');
+    }
     return { status: 'fallback', error: error.message };
   }
 };
