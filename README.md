@@ -1057,6 +1057,24 @@ npx smart-context-init --target .
 
 Restart your AI client. Done.
 
+#### Verify Installation
+
+```bash
+# Check installed version
+npm list -g smart-context-mcp
+
+# Should show: smart-context-mcp@1.7.6 (or later)
+
+# Update to latest version
+npm update -g smart-context-mcp
+
+# Or reinstall from scratch
+npm uninstall -g smart-context-mcp
+npm install -g smart-context-mcp
+```
+
+**After updating:** Restart your AI client to load the new version.
+
 ---
 
 ### Cursor
