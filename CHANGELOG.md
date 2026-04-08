@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.7.5] - 2026-04-01
+## [1.7.6] - 2026-04-01
 
 ### Added
 - **Auto-build index on first use:** `smart_search` and `smart_context` now automatically build the search index if missing or stale
