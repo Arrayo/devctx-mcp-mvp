@@ -29,14 +29,14 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.7.4`
+## Latest Release: `1.7.5`
 
 Major features:
+- **Auto-build index on first use** - Zero-configuration search (no manual `build_index` needed)
 - **Streaming progress notifications** for real-time visibility into long-running operations
 - **Fast path for simple tasks** to skip orchestration overhead (3-5x faster)
 - **Inline metrics display** with human-readable summaries in every tool response
 - **Shared orchestration layer** for automatic context management
-- **Client adapters** (Claude, Cursor) with turn tracking and checkpoint enforcement
 - **90% token reduction** through intelligent compression
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
