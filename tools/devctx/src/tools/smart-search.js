@@ -14,6 +14,7 @@ import { recordDevctxOperation } from '../missed-opportunities.js';
 import { IGNORED_DIRS, IGNORED_FILE_NAMES } from '../config/ignored-paths.js';
 import { buildMetricsDisplay } from '../utils/metrics-display.js';
 import { createProgressReporter } from '../streaming.js';
+import { ensureIndexReady } from '../index-manager.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -353,6 +354,8 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   if (progress) {
     progress.report({ phase: 'ranking', rawMatches: rawMatches.length });
   }
+  
+  await ensureIndexReady({ root: indexRoot });
   
   try {
     loadedIndex = loadIndex(indexRoot);

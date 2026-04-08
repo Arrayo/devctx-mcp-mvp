@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.5] - 2026-04-01
+
+### Added
+- **Auto-build index on first use:** `smart_search` and `smart_context` now automatically build the search index if missing or stale
+  - Eliminates manual `build_index` requirement
+  - Index freshness cached for 24h or until git HEAD changes
+  - 30-60s delay on first call, then instant on subsequent calls
+  - Graceful fallback to grep if build fails or times out
+  - Addresses feedback: "smart_search failed with indexFreshness: unavailable"
+
+### Changed
+- **Index management:** New `index-manager.js` module handles lazy index construction with intelligent caching
+- **User experience:** Zero-configuration search - works out of the box without manual index building
+
+### Tests
+- Added 4 unit tests for index manager (build, cache, status, force rebuild)
+- 72/72 tests passing (index-manager + streaming + simple-task + metrics-display + orchestration)
+
 ## [1.7.4] - 2026-04-01
 
 ### Fixed

@@ -6,6 +6,7 @@ import { smartSearch, VALID_INTENTS } from './smart-search.js';
 import { smartRead } from './smart-read.js';
 import { smartReadBatch } from './smart-read-batch.js';
 import { loadIndex, queryRelated, getGraphCoverage } from '../index.js';
+import { ensureIndexReady } from '../index-manager.js';
 import { projectRoot } from '../utils/paths.js';
 import { resolveSafePath } from '../utils/fs.js';
 import { countTokens } from '../tokenCounter.js';
@@ -409,6 +410,8 @@ export const smartContext = async ({
   if (diff) {
     const changed = await getChangedFiles(diff, root);
     
+    await ensureIndexReady({ root });
+    
     // Get detailed diff stats
     const detailedChanges = await getDetailedDiff(changed.ref, root);
     const index = loadIndex(root);
@@ -555,6 +558,8 @@ export const smartContext = async ({
     } catch { /* invalid path — skip */ }
   }
 
+  await ensureIndexReady({ root });
+  
   const index = loadIndex(root);
 
   if (prefetch && !diff) {
