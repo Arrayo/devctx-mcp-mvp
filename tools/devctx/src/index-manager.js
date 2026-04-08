@@ -65,8 +65,14 @@ const timeout = (ms, message) => {
   });
 };
 
+const isTestEnvironment = () => {
+  return process.env.NODE_ENV === 'test' || 
+         typeof process.env.NODE_TEST_CONTEXT !== 'undefined' ||
+         process.argv.some(arg => arg.includes('--test'));
+};
+
 export const ensureIndexReady = async (options = {}) => {
-  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot, silent = false } = options;
+  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot, silent = isTestEnvironment() } = options;
   
   if (!force) {
     const existingIndex = loadIndex(root);

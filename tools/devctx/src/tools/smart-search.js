@@ -355,8 +355,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     progress.report({ phase: 'ranking', rawMatches: rawMatches.length });
   }
   
-  const isTest = process.env.NODE_ENV === 'test' || typeof process.env.NODE_TEST_CONTEXT !== 'undefined';
-  await ensureIndexReady({ root: indexRoot, silent: isTest });
+  await ensureIndexReady({ root: indexRoot });
   
   try {
     loadedIndex = loadIndex(indexRoot);
