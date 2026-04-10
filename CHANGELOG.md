@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.8] - 2026-04-10
+
+### Fixed
+- **Search Quality:** Eliminated noise from data files and node_modules in results
+  - Added `--max-filesize 1M` to ripgrep — files like 50k-line JSONs are now skipped
+  - Added `**/{dir}/**` glob pattern to reliably exclude nested node_modules
+  - Added `IGNORED_FILE_PATTERNS` to filter minified files (.min.js, .map, .snap) and data fixtures
+  - Addresses feedback: "node_modules/fraction.js/README.md appearing as top result"
+  - Addresses feedback: "questions.json (50k lines) returned instead of source code"
+
 ## [1.7.7] - 2026-04-01
 
 ### Fixed

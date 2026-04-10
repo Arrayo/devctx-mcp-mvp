@@ -19,3 +19,9 @@ export const IGNORED_FILE_NAMES = [
   'bun.lockb',
   'npm-shrinkwrap.json',
 ];
+
+export const IGNORED_FILE_PATTERNS = [
+  /\.min\.(js|css)$/,
+  /\.(map|snap)$/,
+  /^(questions|answers|fixtures|seed|dump|data)\.(json|jsonl|ndjson)$/i,
+];

@@ -11,7 +11,7 @@ import { truncate } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
-import { IGNORED_DIRS, IGNORED_FILE_NAMES } from '../config/ignored-paths.js';
+import { IGNORED_DIRS, IGNORED_FILE_NAMES, IGNORED_FILE_PATTERNS } from '../config/ignored-paths.js';
 import { buildMetricsDisplay } from '../utils/metrics-display.js';
 import { createProgressReporter } from '../streaming.js';
 import { ensureIndexReady } from '../index-manager.js';
@@ -44,7 +44,12 @@ export const intentWeights = {
 
 const defaultWeights = intentWeights.explore;
 
-const shouldIgnoreFile = (filePath) => ignoredFileNames.has(path.basename(filePath));
+const shouldIgnoreFile = (filePath) => {
+  const base = path.basename(filePath);
+  if (ignoredFileNames.has(base)) return true;
+  if (IGNORED_FILE_PATTERNS.some((p) => p.test(base))) return true;
+  return false;
+};
 
 const isSearchableFile = (entryName, fullPath) => fallbackExtensions.has(path.extname(entryName)) || isDockerfile(fullPath);
 
@@ -92,6 +97,8 @@ const parseRgLine = (line, root) => {
   };
 };
 
+const MAX_FILE_SIZE = '1M';
+
 const searchWithRipgrep = async (root, query) => {
   const args = [
     '--line-number',
@@ -100,10 +107,12 @@ const searchWithRipgrep = async (root, query) => {
     'never',
     '--smart-case',
     '--fixed-strings',
+    '--max-filesize', MAX_FILE_SIZE,
   ];
 
   for (const dir of ignoredDirs) {
     args.push('--glob', `!${dir}/**`);
+    args.push('--glob', `!**/${dir}/**`);
   }
 
   for (const fileName of ignoredFileNames) {
