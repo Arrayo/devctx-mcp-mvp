@@ -71,8 +71,25 @@ const isTestEnvironment = () => {
          process.argv.some(arg => arg.includes('--test'));
 };
 
+const isMcpEnvironment = () => {
+  return process.env.MCP_SERVER === 'true' || 
+         process.argv.some(arg => arg.includes('devctx-server'));
+};
+
+const log = (message, level = 'info') => {
+  if (isTestEnvironment() || isMcpEnvironment()) {
+    return;
+  }
+  
+  if (level === 'warn') {
+    console.warn(message);
+  } else {
+    console.log(message);
+  }
+};
+
 export const ensureIndexReady = async (options = {}) => {
-  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot, silent = isTestEnvironment() } = options;
+  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot, silent = false } = options;
   
   if (!force) {
     const existingIndex = loadIndex(root);
@@ -85,7 +102,7 @@ export const ensureIndexReady = async (options = {}) => {
   }
   
   if (!silent) {
-    console.log('📦 Building search index (this may take 30-60s)...');
+    log('📦 Building search index (this may take 30-60s)...');
   }
   
   try {
@@ -103,12 +120,12 @@ export const ensureIndexReady = async (options = {}) => {
     }, root);
     
     if (!silent) {
-      console.log('✅ Index ready');
+      log('✅ Index ready');
     }
     return { status: 'built', cached: false, fileCount: result?.files?.length || 0 };
   } catch (error) {
     if (!silent) {
-      console.warn('⚠️ Index build failed, search will use fallback mode');
+      log('⚠️ Index build failed, search will use fallback mode', 'warn');
     }
     return { status: 'fallback', error: error.message };
   }
