@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.7] - 2026-04-01
+
+### Fixed
+- **MCP Protocol Pollution:** Console.log messages from auto-index build were breaking MCP JSON protocol
+  - Error: `Client error: Unexpected token '📦', "📦 Buildin"... is not valid JSON`
+  - Logs now silenced in MCP server mode (only shown in CLI usage)
+  - Fixes connection failures in Cursor when building index automatically
+
 ## [1.7.6] - 2026-04-01
 
 ### Added
