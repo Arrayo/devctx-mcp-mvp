@@ -41,6 +41,29 @@ Major features:
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
+## When to Use (and When Not To)
+
+**Use devctx when:**
+- You're exploring an unfamiliar codebase
+- The task spans multiple sessions (checkpoints save context)
+- You need to understand how files relate to each other (graph/imports)
+- The context is too large to manage manually
+- You're doing complex multi-file refactors or debugging across layers
+
+**Skip devctx when:**
+- You already know exactly which files to touch
+- It's a single-file or surgical change (2-3 edits max)
+- You have the full mental map from a recent exploration
+- Native tools (Grep, Read, StrReplace) are more direct for the task
+
+**Honest verdict from real users:**
+
+> "The MCP shines in long, multi-session tasks or when you don't know the codebase. For contained refactors where you already know what to touch, native tools are just as fast or faster. The real value was `smart_read(outline)` for the initial analysis and checkpoints to not lose the thread between sessions."
+
+The 90% token savings are real, but they require the right task type to materialize.
+
+---
+
 ## Why it exists
 
 AI agents waste tokens in three ways:
