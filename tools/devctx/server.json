@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Arrayo/smart-context-mcp",
+  "description": "MCP server that reduces AI agent token usage by 90% with intelligent context compression, task checkpoint persistence, and workflow-aware agent guidance. Works with Cursor, Claude Desktop, Codex CLI, and Windsurf.",
+  "repository": {
+    "url": "https://github.com/Arrayo/smart-context-mcp",
+    "source": "github"
+  },
+  "version": "1.8.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "smart-context-mcp",
+      "version": "1.8.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "installationInstructions": "npm install -g smart-context-mcp && npx smart-context-init --target . --clients cursor"
+    }
+  ]
+}
