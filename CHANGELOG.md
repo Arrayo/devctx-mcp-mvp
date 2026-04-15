@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.1] - 2026-04-15
+
+### Changed
+- **MCP Registry:** Added `mcpName` field to package.json for official registry listing
+- **MCP Registry:** Added `server.json` with registry metadata
+
 ## [1.8.0] - 2026-04-15
 
 ### Changed

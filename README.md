@@ -29,7 +29,7 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.8.0`
+## Latest Release: `1.8.1`
 
 Major features:
 - **Auto-build index on first use** - Zero-configuration search (no manual `build_index` needed)
