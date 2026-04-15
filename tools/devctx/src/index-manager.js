@@ -33,7 +33,7 @@ const saveIndexMetadata = (meta, root = projectRoot) => {
     }
     fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
   } catch (error) {
-    console.warn('Failed to save index metadata:', error.message);
+    process.stderr.write(`[devctx] Failed to save index metadata: ${error.message}\n`);
   }
 };
 
@@ -65,31 +65,12 @@ const timeout = (ms, message) => {
   });
 };
 
-const isTestEnvironment = () => {
-  return process.env.NODE_ENV === 'test' || 
-         typeof process.env.NODE_TEST_CONTEXT !== 'undefined' ||
-         process.argv.some(arg => arg.includes('--test'));
-};
-
-const isMcpEnvironment = () => {
-  return process.env.MCP_SERVER === 'true' || 
-         process.argv.some(arg => arg.includes('devctx-server'));
-};
-
-const log = (message, level = 'info') => {
-  if (isTestEnvironment() || isMcpEnvironment()) {
-    return;
-  }
-  
-  if (level === 'warn') {
-    console.warn(message);
-  } else {
-    console.log(message);
-  }
+const log = (message) => {
+  process.stderr.write(`[devctx] ${message}\n`);
 };
 
 export const ensureIndexReady = async (options = {}) => {
-  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot, silent = false } = options;
+  const { force = false, timeoutMs = INDEX_BUILD_TIMEOUT_MS, root = projectRoot } = options;
   
   if (!force) {
     const existingIndex = loadIndex(root);
@@ -101,9 +82,7 @@ export const ensureIndexReady = async (options = {}) => {
     }
   }
   
-  if (!silent) {
-    log('📦 Building search index (this may take 30-60s)...');
-  }
+  log('Building search index...');
   
   try {
     const buildPromise = buildIndexCore({ root, incremental: true });
@@ -119,14 +98,10 @@ export const ensureIndexReady = async (options = {}) => {
       version: result?.version
     }, root);
     
-    if (!silent) {
-      log('✅ Index ready');
-    }
+    log('Index ready');
     return { status: 'built', cached: false, fileCount: result?.files?.length || 0 };
   } catch (error) {
-    if (!silent) {
-      log('⚠️ Index build failed, search will use fallback mode', 'warn');
-    }
+    log(`Index build failed: ${error.message}`);
     return { status: 'fallback', error: error.message };
   }
 };

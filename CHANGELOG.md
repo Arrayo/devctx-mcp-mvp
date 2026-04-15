@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.9] - 2026-04-15
+
+### Fixed
+- **MCP Protocol Broken:** Replaced `console.log` with `process.stderr.write` in index-manager
+  - The previous fix (environment detection) was fragile and didn't cover all cases
+  - `stderr` is the correct channel for diagnostics — stdout is reserved for MCP JSON protocol
+  - Eliminates "Unexpected token '📦'" errors in Cursor permanently
+
 ## [1.7.8] - 2026-04-10
 
 ### Fixed
