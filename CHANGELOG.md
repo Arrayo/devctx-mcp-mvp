@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.8.0] - 2026-04-15
+
+### Changed
+- **README:** Added honest "When to Use / When Not To" section based on real user feedback
+  - Documents when devctx adds value vs when native tools are faster
+  - Includes real user quotes from production usage
+
 ## [1.7.9] - 2026-04-15
 
 ### Fixed
