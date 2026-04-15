@@ -56,7 +56,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.7.6 (or later)
+# Should show: smart-context-mcp@1.8.1 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
