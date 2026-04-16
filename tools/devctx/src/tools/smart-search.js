@@ -507,6 +507,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   if (dedupedMatches.length === 0) retrievalConfidence = 'none';
   else if (searchMode === 'terms') retrievalConfidence = 'low';
   else if (searchMode === 'regex') retrievalConfidence = 'medium';
+  else if (usedFallback) retrievalConfidence = provenance?.skippedItemsTotal > 0 ? 'low' : 'medium';
   else if (provenance?.skippedItemsTotal > 0) retrievalConfidence = 'low';
 
   const confidence = { level: retrievalConfidence, indexFreshness };
