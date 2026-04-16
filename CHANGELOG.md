@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.10.0] - 2026-04-16
+
+### Fixed
+- **smart_search zero results:** Implemented three-pass search cascade to eliminate "0 results" failures:
+  1. **Pass 1 (exact):** `--fixed-strings` literal match (original behavior)
+  2. **Pass 2 (regex fallback):** If exact returns 0, retries without `--fixed-strings` to handle camelCase fragments, partial words, and phrases
+  3. **Pass 3 (term expansion):** If regex also returns 0 and the query has multiple words, splits into individual terms (≥3 chars), searches each independently, and merges with deduplication
+- **smart_search 0-result message:** When all passes return 0, now shows actionable message explaining what was tried and suggesting alternatives (shorter term, Grep, build_index)
+- **smart_search confidence:** `retrievalConfidence` now correctly reports `none` (0 results), `low` (term expansion), `medium` (regex), or `high` (exact match)
+- **MCP protocol safety:** Replaced `console.error` in ripgrep error path with `process.stderr.write`
+
 ## [1.9.0] - 2026-04-16
 
 ### Fixed

@@ -99,39 +99,35 @@ const parseRgLine = (line, root) => {
 
 const MAX_FILE_SIZE = '1M';
 
-const searchWithRipgrep = async (root, query) => {
+const buildRgBaseArgs = () => {
   const args = [
     '--line-number',
     '--no-heading',
-    '--color',
-    'never',
+    '--color', 'never',
     '--smart-case',
-    '--fixed-strings',
     '--max-filesize', MAX_FILE_SIZE,
   ];
-
   for (const dir of ignoredDirs) {
     args.push('--glob', `!${dir}/**`);
     args.push('--glob', `!**/${dir}/**`);
   }
-
   for (const fileName of ignoredFileNames) {
     args.push('--glob', `!${fileName}`);
   }
-
   for (const extension of supportedGlobs) {
     args.push('--glob', extension);
   }
+  return args;
+};
 
-  args.push(query, '.');
-
+const runRg = async (root, pattern, extraArgs = []) => {
+  const args = [...buildRgBaseArgs(), ...extraArgs, pattern, '.'];
   try {
     const { stdout } = await execFile(rgPath, args, {
       cwd: root,
       maxBuffer: 1024 * 1024 * 10,
       timeout: 15000,
     });
-
     return stdout
       .split('\n')
       .filter(Boolean)
@@ -140,9 +136,45 @@ const searchWithRipgrep = async (root, query) => {
       .filter((match) => !shouldIgnoreFile(match.file));
   } catch (error) {
     if (error.code === 1) return [];
-    console.error('[smart-search] ripgrep failed:', error.message, { code: error.code, signal: error.signal });
+    process.stderr.write(`[smart-search] ripgrep failed: ${error.message}\n`);
     return null;
   }
+};
+
+const extractTerms = (query) =>
+  query
+    .split(/[\s,;|/\\]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3);
+
+const searchWithRipgrep = async (root, query) => {
+  // Pass 1: exact literal match
+  const exact = await runRg(root, query, ['--fixed-strings']);
+  if (exact === null) return null;
+  if (exact.length > 0) return { matches: exact, searchMode: 'exact' };
+
+  // Pass 2: regex (handles partial words, snake_case, camelCase fragments)
+  const escaped = query.replace(/[$()*+.?[\\\]^{|}]/g, '\\$&');
+  const regex = await runRg(root, escaped);
+  if (regex === null) return null;
+  if (regex.length > 0) return { matches: regex, searchMode: 'regex' };
+
+  // Pass 3: term expansion — search each significant word independently and merge
+  const terms = extractTerms(query);
+  if (terms.length < 2) return { matches: [], searchMode: 'exact', zeroReason: 'no_matches' };
+
+  const seen = new Set();
+  const merged = [];
+  for (const term of terms) {
+    const hits = await runRg(root, term, ['--fixed-strings']);
+    if (!hits) continue;
+    for (const hit of hits) {
+      const key = `${hit.file}:${hit.lineNumber}`;
+      if (!seen.has(key)) { seen.add(key); merged.push({ ...hit, matchedTerm: term }); }
+    }
+  }
+
+  return { matches: merged, searchMode: 'terms', terms };
 };
 
 const MAX_FALLBACK_FILE_BYTES = 1024 * 1024;
@@ -273,16 +305,43 @@ const groupMatches = (matches, query, intent, indexHits, graphHits) => {
   return { groups: sorted, breakdown };
 };
 
-const buildCompactResult = (groups, totalMatches, query, root) => {
+const buildZeroResultsMessage = (query, searchMode, provenance) => {
+  const lines = [`No matches found for: "${query}"`];
+
+  if (searchMode === 'exact') {
+    lines.push('• Tried: exact literal match (--fixed-strings)');
+    lines.push('• Tried: regex match');
+  } else if (searchMode === 'terms') {
+    const terms = provenance?.expandedTerms ?? [];
+    lines.push(`• Tried: exact, regex, and term expansion (${terms.join(', ')})`);
+  }
+
+  lines.push('');
+  lines.push('Suggestions:');
+  lines.push('  – Use a shorter, more specific term (e.g. a function name, not a phrase)');
+  lines.push('  – Try Grep for raw text: the query may be in a file type not indexed by smart_search');
+  lines.push('  – Run build_index to enable symbol-level search if the codebase is new');
+
+  return lines.join('\n');
+};
+
+const buildCompactResult = (groups, totalMatches, query, root, searchMode, provenance) => {
+  if (totalMatches === 0) {
+    return buildZeroResultsMessage(query, searchMode, provenance);
+  }
+
+  const modeLabel = searchMode === 'exact' ? '' : searchMode === 'regex' ? ' [regex fallback]' : ` [term expansion: ${(provenance?.expandedTerms ?? []).join(', ')}]`;
+
   if (totalMatches <= 20) {
-    return groups
+    const header = modeLabel ? `# Search mode:${modeLabel}\n\n` : '';
+    return header + groups
       .flatMap((group) => group.matches)
       .map(formatMatch)
       .join('\n');
   }
 
   const lines = [
-    `query: ${query}`,
+    `query: ${query}${modeLabel}`,
     `root: ${root}`,
     `total matches: ${totalMatches}`,
     `matched files: ${groups.length}`,
@@ -314,12 +373,13 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   }
   
   const root = resolveSafePath(cwd);
-  const rgMatches = _testForceWalk ? null : await searchWithRipgrep(root, query);
-  const usedFallback = rgMatches === null;
+  const rgResult = _testForceWalk ? null : await searchWithRipgrep(root, query);
+  const usedFallback = rgResult === null;
   const engine = usedFallback ? 'walk' : 'rg';
 
   let rawMatches;
   let provenance;
+  let searchMode = 'exact';
 
   if (usedFallback) {
     const fallback = searchWithFallback(root, query);
@@ -340,7 +400,9 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
       warnings,
     };
   } else {
-    rawMatches = rgMatches;
+    rawMatches = rgResult.matches;
+    searchMode = rgResult.searchMode;
+    if (rgResult.terms) provenance = { expandedTerms: rgResult.terms };
   }
 
   rawMatches = rawMatches.filter((match) => !shouldIgnoreFile(match.file));
@@ -403,7 +465,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   }
 
   const rawText = dedupedMatches.map(formatMatch).join('\n');
-  const compressedText = truncate(buildCompactResult(groups, dedupedMatches.length, query, root), 5000);
+  const compressedText = truncate(buildCompactResult(groups, dedupedMatches.length, query, root, searchMode, provenance), 5000);
   const metrics = buildMetrics({
     tool: 'smart_search',
     target: `${root} :: ${query}`,
@@ -442,9 +504,10 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   });
 
   let retrievalConfidence = 'high';
-  if (provenance) {
-    retrievalConfidence = provenance.skippedItemsTotal > 0 ? 'low' : 'medium';
-  }
+  if (dedupedMatches.length === 0) retrievalConfidence = 'none';
+  else if (searchMode === 'terms') retrievalConfidence = 'low';
+  else if (searchMode === 'regex') retrievalConfidence = 'medium';
+  else if (provenance?.skippedItemsTotal > 0) retrievalConfidence = 'low';
 
   const confidence = { level: retrievalConfidence, indexFreshness };
 
