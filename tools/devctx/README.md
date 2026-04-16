@@ -2,7 +2,7 @@
 
 MCP server that reduces AI agent token usage by up to 90% with intelligent context compression (measured on this project).
 
-[![npm version](https://badge.fury.io/js/smart-context-mcp.svg)](https://www.npmjs.com/package/smart-context-mcp)
+[![npm version](https://img.shields.io/npm/v/smart-context-mcp.svg)](https://www.npmjs.com/package/smart-context-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Installation
@@ -56,7 +56,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.8.1 (or later)
+# Should show: smart-context-mcp@1.9.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp

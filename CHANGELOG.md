@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0] - 2026-04-16
+
+### Fixed
+- **smart_read outline:** IIFEs (userscripts, legacy bundles) now expose internal functions and consts instead of returning just `(function () {`. Each symbol lists name and line number.
+- **build_index:** Symbols inside IIFEs are now indexed correctly. Previously a `.user.js` file would produce 0 symbols; now all internal `function` declarations and `const fn = () =>` are extracted.
+- **Snippets:** Symbols extracted from IIFEs get an AST-scoped snippet (only their own node body, capped at 280 chars) instead of a runaway snippet that included the rest of the IIFE.
+
+### Changed
+- **npm version badge:** Switched from `badge.fury.io` (slow CDN cache, showed stale version) to `shields.io/npm/v/` which reflects the published version within minutes.
+
 ## [1.8.1] - 2026-04-15
 
 ### Changed

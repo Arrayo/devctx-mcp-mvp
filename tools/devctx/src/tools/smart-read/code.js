@@ -19,6 +19,50 @@ const getNodeName = (node) => {
   return 'anonymous';
 };
 
+const isIIFE = (node) => {
+  if (!ts.isExpressionStatement(node)) return false;
+  const expr = node.expression;
+  if (ts.isCallExpression(expr)) {
+    const callee = expr.expression;
+    return ts.isParenthesizedExpression(callee) || ts.isFunctionExpression(callee) || ts.isArrowFunction(callee);
+  }
+  return false;
+};
+
+const extractIIFEMembers = (node, sourceFile) => {
+  const results = [];
+  const expr = node.expression;
+  const fn = ts.isCallExpression(expr)
+    ? (ts.isParenthesizedExpression(expr.expression) ? expr.expression.expression : expr.expression)
+    : null;
+
+  if (!fn || !fn.body) return ['(IIFE)'];
+
+  const visit = (child) => {
+    if (ts.isFunctionDeclaration(child) || ts.isFunctionExpression(child)) {
+      const name = child.name?.text;
+      if (name) {
+        const { line } = sourceFile.getLineAndCharacterOfPosition(child.getStart(sourceFile));
+        results.push(`  function ${name}() → line ${line + 1}`);
+      }
+    }
+    if (ts.isVariableStatement(child)) {
+      for (const decl of child.declarationList.declarations) {
+        const name = ts.isIdentifier(decl.name) ? decl.name.text : null;
+        const init = decl.initializer;
+        if (name && init && (ts.isFunctionExpression(init) || ts.isArrowFunction(init))) {
+          const { line } = sourceFile.getLineAndCharacterOfPosition(child.getStart(sourceFile));
+          results.push(`  const ${name} = () → line ${line + 1}`);
+        }
+      }
+    }
+    ts.forEachChild(child, visit);
+  };
+
+  ts.forEachChild(fn.body, visit);
+  return results.length > 0 ? ['(IIFE)', ...results] : ['(IIFE)'];
+};
+
 const formatImport = (statement) => {
   const moduleName = statement.moduleSpecifier.getText();
   const clause = statement.importClause;
@@ -202,7 +246,10 @@ export const extractCodeSymbol = (fullPath, content, symbolName) => {
 
 export const summarizeCode = (fullPath, content, mode) => {
   const sourceFile = parseSource(fullPath, content);
-  const topLevel = sourceFile.statements.map((statement) => formatTopLevelStatement(statement, sourceFile));
+  const topLevel = sourceFile.statements.flatMap((statement) => {
+    if (isIIFE(statement)) return extractIIFEMembers(statement, sourceFile);
+    return [formatTopLevelStatement(statement, sourceFile)];
+  });
   const hooks = collectHooks(sourceFile);
 
   if (mode === 'signatures') {

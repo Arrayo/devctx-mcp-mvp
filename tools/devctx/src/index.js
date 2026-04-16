@@ -91,14 +91,22 @@ const getNodeSignature = (node, sourceFile) => {
   return trimSignature(raw);
 };
 
+const getNodeSnippet = (node, sourceFile) => {
+  const start = node.getStart(sourceFile);
+  const end = node.getEnd();
+  const raw = sourceFile.text.substring(start, end);
+  return trimSnippet(raw);
+};
+
 const extractJsSymbolsFromAst = (sourceFile) => {
   const symbols = [];
 
-  const addSymbol = (name, symbolKind, line, parent, signature) => {
+  const addSymbol = (name, symbolKind, line, parent, signature, snippet) => {
     if (!name) return;
     const entry = { name, kind: symbolKind, line };
     if (parent) entry.parent = parent;
     if (signature) entry.signature = signature;
+    if (snippet) entry.snippet = snippet;
     symbols.push(entry);
   };
 
@@ -116,31 +124,51 @@ const extractJsSymbolsFromAst = (sourceFile) => {
     });
   };
 
-  for (const stmt of sourceFile.statements) {
+  const visitNode = (stmt, insideIIFE = false) => {
     const line = sourceFile.getLineAndCharacterOfPosition(stmt.getStart(sourceFile)).line + 1;
     const sig = getNodeSignature(stmt, sourceFile);
+    const nodeSnippet = insideIIFE ? getNodeSnippet(stmt, sourceFile) : undefined;
 
     if (ts.isFunctionDeclaration(stmt)) {
-      addSymbol(stmt.name?.text, 'function', line, undefined, sig);
+      addSymbol(stmt.name?.text, 'function', line, undefined, sig, nodeSnippet);
     } else if (ts.isClassDeclaration(stmt)) {
       const className = stmt.name?.text;
-      addSymbol(className, 'class', line, undefined, sig);
+      addSymbol(className, 'class', line, undefined, sig, nodeSnippet);
       if (className) visitMembers(stmt, className);
     } else if (ts.isInterfaceDeclaration(stmt)) {
       const ifName = stmt.name?.text;
-      addSymbol(ifName, 'interface', line, undefined, sig);
+      addSymbol(ifName, 'interface', line, undefined, sig, nodeSnippet);
       if (ifName) visitMembers(stmt, ifName);
     } else if (ts.isTypeAliasDeclaration(stmt)) {
-      addSymbol(stmt.name?.text, 'type', line, undefined, sig);
+      addSymbol(stmt.name?.text, 'type', line, undefined, sig, nodeSnippet);
     } else if (ts.isEnumDeclaration(stmt)) {
-      addSymbol(stmt.name?.text, 'enum', line, undefined, sig);
+      addSymbol(stmt.name?.text, 'enum', line, undefined, sig, nodeSnippet);
     } else if (ts.isVariableStatement(stmt)) {
       for (const decl of stmt.declarationList.declarations) {
         if (ts.isIdentifier(decl.name)) {
-          addSymbol(decl.name.text, 'const', line, undefined, sig);
+          addSymbol(decl.name.text, 'const', line, undefined, sig, nodeSnippet);
+        }
+      }
+    } else if (ts.isExpressionStatement(stmt)) {
+      const expr = stmt.expression;
+      const isIIFE = ts.isCallExpression(expr) && (
+        ts.isParenthesizedExpression(expr.expression) ||
+        ts.isFunctionExpression(expr.expression) ||
+        ts.isArrowFunction(expr.expression)
+      );
+      if (isIIFE) {
+        const fn = ts.isParenthesizedExpression(expr.expression)
+          ? expr.expression.expression
+          : expr.expression;
+        if (fn.body) {
+          ts.forEachChild(fn.body, (child) => visitNode(child, true));
         }
       }
     }
+  };
+
+  for (const stmt of sourceFile.statements) {
+    visitNode(stmt);
   }
 
   return symbols;
