@@ -126,7 +126,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_read',
-    'Read a file with token-efficient modes. outline/signatures: compact structure (~90% savings). range: specific line range with line numbers. symbol: extract function/class/method by name (string or array for batch). full: file content capped at 12k chars. maxTokens: token budget — auto-selects the most detailed mode that fits (full -> outline -> signatures -> truncated). context=true (symbol mode only): includes callers, tests, and referenced types from the dependency graph; returns graphCoverage (imports/tests: full|partial|none) so the agent knows how reliable the cross-file context is. Responses are cached in memory per session and invalidated by file mtime; cached=true when served from cache. Every response includes a unified confidence block: { parser, truncated, cached, graphCoverage? }. Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
+    'Read a file with token-efficient modes. PREFER outline/signatures/symbol — full mode saves 0 tokens (same content as native Read, capped at 12k chars). Mode guide: outline (~90% savings): file structure, exports, top-level symbols — use for orientation, code review, deciding what to read next. signatures (~85% savings): function/method signatures only — use when you need parameter names and return types without bodies. symbol: extract one or more functions/classes/methods by name (string or array for batch) — use when you know exactly what to read; add context=true to include callers, tests, and referenced types from the dependency graph (returns graphCoverage: full|partial|none). range: specific line range with line numbers — use only when you need exact lines. full: raw file content, no compression, no savings — only use when the exact byte-for-byte content is required (e.g. config files, lock files). maxTokens: token budget — auto-selects the most detailed mode that fits (full → outline → signatures → truncated). Responses are cached in memory per session and invalidated by file mtime; cached=true when served from cache. Every response includes a unified confidence block: { parser, truncated, cached, graphCoverage? }. Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
     {
       filePath: z.string(),
       mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol']).optional(),
@@ -142,7 +142,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_read_batch',
-    'Read multiple files in one call. Each item accepts path, mode, symbol, startLine, endLine, maxTokens (per-file budget). Optional global maxTokens budget with early stop when exceeded. Max 20 files per call.',
+    'Read multiple files in one call. Each item accepts path, mode (prefer outline/signatures/symbol — full saves 0 tokens), symbol, startLine, endLine, maxTokens (per-file budget). Optional global maxTokens budget with early stop when exceeded. Max 20 files per call.',
     {
       files: z.array(z.object({
         path: z.string(),
