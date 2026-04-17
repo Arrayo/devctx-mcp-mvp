@@ -176,6 +176,52 @@ const validateCommand = (command, tokens) => {
   return null;
 };
 
+const DIFF_FILE_HEADER = /^diff --git a\/.+ b\/.+/;
+const DIFF_HUNK_HEADER = /^@@ /;
+const MAX_DIFF_FILES = 8;
+const MAX_LINES_PER_FILE = 60;
+const DIFF_TOTAL_LIMIT = 4000;
+
+const splitDiffByFile = (text) => {
+  const files = [];
+  let current = null;
+
+  for (const line of text.split('\n')) {
+    if (DIFF_FILE_HEADER.test(line)) {
+      if (current) files.push(current);
+      current = { header: line, lines: [] };
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+  if (current) files.push(current);
+  return files;
+};
+
+const compressDiff = (text) => {
+  if (!DIFF_FILE_HEADER.test(text)) return text;
+
+  const files = splitDiffByFile(text);
+  if (files.length === 0) return text;
+
+  const shown = files.slice(0, MAX_DIFF_FILES);
+  const skipped = files.length - shown.length;
+
+  const parts = shown.map(({ header, lines }) => {
+    const truncatedLines = lines.slice(0, MAX_LINES_PER_FILE);
+    const skippedLines = lines.length - truncatedLines.length;
+    const hunkCount = lines.filter((l) => DIFF_HUNK_HEADER.test(l)).length;
+    const suffix = skippedLines > 0 ? [`... (${skippedLines} more lines — use smart_read(symbol) for full body)`] : [];
+    return [header, `# ${hunkCount} hunk(s)`, ...truncatedLines, ...suffix].join('\n');
+  });
+
+  const footer = skipped > 0
+    ? `\n# ${skipped} more file(s) not shown — run git show -- <file> for each`
+    : '';
+
+  return truncate(parts.join('\n\n'), DIFF_TOTAL_LIMIT) + footer;
+};
+
 const buildBlockedResult = async (command, message) => {
   const metrics = buildMetrics({
     tool: 'smart_shell',
@@ -254,7 +300,7 @@ export const smartShell = async ({ command }) => {
   ]);
   const shouldPrioritizeRelevant = execution.code !== 0 || execution.timedOut;
   const compressedSource = shouldPrioritizeRelevant && relevant ? relevant : rawText;
-  const compressedText = truncate(uniqueLines(compressedSource), 5000);
+  const compressedText = truncate(compressDiff(uniqueLines(compressedSource)), 5000);
   const metrics = buildMetrics({
     tool: 'smart_shell',
     target: command,

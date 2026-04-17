@@ -188,7 +188,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_shell',
-    'Run a diagnostic shell command from an allowlist. Allowed: pwd, ls, find, rg, git (status/diff/show/log/branch/rev-parse), npm/pnpm/yarn/bun (test/run/lint/build/typecheck/check). Blocks shell operators, pipes, and unsafe commands. Includes a unified confidence block: { blocked, timedOut }.',
+    'Run a diagnostic shell command from an allowlist. Allowed: pwd, ls, find, rg, git (status/diff/show/log/branch/rev-parse), npm/pnpm/yarn/bun (test/run/lint/build/typecheck/check). Blocks shell operators, pipes, and unsafe commands. For large diffs: output is split by file (up to 8 files, 60 lines each) with a hint to run git show -- <file> for the full body of any truncated file; prefer git diff --stat first to see which files changed, then git show -- <file> per file for targeted reading. Includes a unified confidence block: { blocked, timedOut }.',
     {
       command: z.string(),
     },
@@ -485,7 +485,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_turn',
-    'Orchestrate start/end of a meaningful agent turn so context usage becomes almost mandatory with low token overhead. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, returns `recommendedPath` guidance for the next safe devctx actions, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary, returns follow-up `recommendedPath` guidance, and can optionally include compact metrics. Both phases expose `mutationSafety` when repo-safety blocks persisted writes and now surface `storageHealth` when SQLite state is missing, oversized, locked, or corrupted. Use this instead of manually chaining `smart_summary(get)` and `smart_summary(checkpoint)` when you want a single context-first turn workflow.',
+    'Orchestrate start/end of a meaningful agent turn for multi-session tasks where context continuity matters. SKIP for single-session point-in-time tasks (reviewing a specific commit, answering a quick question, one-off lookup) — the setup overhead exceeds the benefit if the session will never be resumed. USE when: the task spans multiple chat sessions, you may return to it the next day, or the codebase context is large enough that re-reading is expensive. `phase: "start"` rehydrates persisted context, classifies prompt continuity against the saved session, optionally auto-creates a planning session for a new substantial task, returns `recommendedPath` guidance for the next safe devctx actions, and can include compact metrics. `phase: "end"` writes a checkpoint through smart_summary, returns follow-up `recommendedPath` guidance, and can optionally include compact metrics. Both phases expose `mutationSafety` when repo-safety blocks persisted writes and surface `storageHealth` when SQLite state is missing, oversized, locked, or corrupted.',
     {
       phase: z.enum(['start', 'end']),
       sessionId: z.string().optional(),
