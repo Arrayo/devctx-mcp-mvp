@@ -33,7 +33,7 @@ describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite test
 
     assert.ok(result.context);
     assert.ok(result.context.length > 0);
-    assert.ok(!result.metrics.prefetch);
+    assert.ok(!result.stats.prefetch);
   });
 
   it('should enable prefetch and return metadata', async () => {
@@ -46,10 +46,10 @@ describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite test
 
     assert.ok(result.context);
     assert.ok(result.context.length > 0);
-    assert.ok(result.metrics.prefetch);
-    assert.equal(result.metrics.prefetch.enabled, true);
-    assert.ok(typeof result.metrics.prefetch.confidence === 'number');
-    assert.ok(typeof result.metrics.prefetch.predictedFiles === 'number');
+    assert.ok(result.stats.prefetch);
+    assert.equal(result.stats.prefetch.enabled, true);
+    assert.ok(typeof result.stats.prefetch.confidence === 'number');
+    assert.ok(typeof result.stats.prefetch.predictedFiles === 'number');
   });
 
   it('should use historical patterns when available', async () => {
@@ -90,10 +90,10 @@ describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite test
       prefetch: true
     });
 
-    assert.ok(result.metrics.prefetch.confidence > 0.6);
-    assert.ok(result.metrics.prefetch.predictedFiles > 0);
-    assert.ok(result.metrics.prefetch.matchedPattern);
-    assert.ok(result.metrics.prefetch.matchedPattern.occurrences >= 3);
+    assert.ok(result.stats.prefetch.confidence > 0.6);
+    assert.ok(result.stats.prefetch.predictedFiles > 0);
+    assert.ok(result.stats.prefetch.matchedPattern);
+    assert.ok(result.stats.prefetch.matchedPattern.occurrences >= 3);
   });
 
   it('should include prefetch evidence in context items when files not found by search', async () => {
@@ -133,7 +133,7 @@ describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite test
       prefetch: true
     });
 
-    assert.ok(result.metrics.prefetch.confidence > 0.6);
-    assert.ok(result.metrics.prefetch.predictedFiles > 0);
+    assert.ok(result.stats.prefetch.confidence > 0.6);
+    assert.ok(result.stats.prefetch.predictedFiles > 0);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -23,6 +23,22 @@ const execFile = promisify(execFileCallback);
 // ---------------------------------------------------------------------------
 
 describe('smart_shell find hardening', () => {
+  let findRoot;
+
+  beforeEach(() => {
+    findRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-find-'));
+    fs.mkdirSync(path.join(findRoot, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(findRoot, 'index.js'), '// stub\n');
+    fs.writeFileSync(path.join(findRoot, 'src', 'app.js'), '// stub\n');
+    fs.writeFileSync(path.join(findRoot, 'package.json'), '{"name":"test"}\n');
+    setProjectRoot(findRoot);
+  });
+
+  afterEach(() => {
+    setProjectRoot(path.resolve(__dirname, '..'));
+    fs.rmSync(findRoot, { recursive: true, force: true });
+  });
+
   it('blocks -exec', async () => {
     const result = await smartShell({ command: 'find . -exec rm {} \\;' });
     assert.equal(result.blocked, true);
@@ -71,23 +87,19 @@ describe('smart_shell find hardening', () => {
   });
 
   it('does not collapse successful output just because a line contains error text', async () => {
-    const fixtureDir = path.resolve(__dirname, '..', 'fixtures', 'formats');
+    const fixtureDir = path.join(findRoot, 'fixtures', 'formats');
+    fs.mkdirSync(fixtureDir, { recursive: true });
     const errorFixture = path.join(fixtureDir, '_smart_shell_error.txt');
     const plainFixture = path.join(fixtureDir, '_smart_shell_plain.txt');
 
     fs.writeFileSync(errorFixture, 'error fixture\n', 'utf8');
     fs.writeFileSync(plainFixture, 'plain fixture\n', 'utf8');
 
-    try {
-      const result = await smartShell({ command: 'find fixtures/formats -name "*error*" -o -name "*plain*"' });
-      assert.equal(result.blocked, false);
-      assert.equal(result.exitCode, 0);
-      assert.match(result.output, /_smart_shell_error\.txt/);
-      assert.match(result.output, /_smart_shell_plain\.txt/);
-    } finally {
-      try { fs.unlinkSync(errorFixture); } catch {}
-      try { fs.unlinkSync(plainFixture); } catch {}
-    }
+    const result = await smartShell({ command: 'find fixtures/formats -name "*error*" -o -name "*plain*"' });
+    assert.equal(result.blocked, false);
+    assert.equal(result.exitCode, 0);
+    assert.match(result.output, /_smart_shell_error\.txt/);
+    assert.match(result.output, /_smart_shell_plain\.txt/);
   });
 
   it('allows pipe character inside quoted arguments', async () => {
@@ -96,6 +108,8 @@ describe('smart_shell find hardening', () => {
   });
 
   it('allows eval in path names', async () => {
+    fs.mkdirSync(path.join(findRoot, 'evals'), { recursive: true });
+    fs.writeFileSync(path.join(findRoot, 'evals', 'test.json'), '{}');
     const result = await smartShell({ command: 'find evals -name "*.json"' });
     assert.equal(result.blocked, false);
   });
@@ -1905,14 +1919,19 @@ describe('subdirectory search uses projectRoot index', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -1968,14 +1987,19 @@ describe('smart_context response contract', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2142,14 +2166,19 @@ describe('smart_context natural prompt retrieval', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2205,14 +2234,19 @@ describe('smart_context entry file', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2233,14 +2267,19 @@ describe('smart_context graph expansion', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2270,14 +2309,19 @@ describe('smart_context maxTokens budget', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2305,14 +2349,19 @@ describe('smart_context partial symbol hits', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2338,14 +2387,19 @@ describe('smart_context filesIncluded uniqueness', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -2365,14 +2419,19 @@ describe('smart_context budget enforcement', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 
@@ -3043,14 +3102,19 @@ describe('smart_context detail and include modes', () => {
   const fixtureRoot = path.resolve(__dirname, '..', 'evals', 'fixtures', 'sample-project');
   let originalRoot;
 
-  beforeEach(async () => {
+  before(async () => {
     originalRoot = (await import('../src/utils/paths.js')).projectRoot;
     setProjectRoot(fixtureRoot);
     const index = buildIndex(fixtureRoot);
     await persistIndex(index, fixtureRoot);
   });
 
-  afterEach(() => {
+  beforeEach(() => {
+    setProjectRoot(fixtureRoot);
+    clearReadCache();
+  });
+
+  after(() => {
     setProjectRoot(originalRoot);
   });
 

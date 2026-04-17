@@ -161,6 +161,6 @@ export function newHandler() {
     });
 
     assert.ok(result.success);
-    assert.ok(result.metrics.totalTokens <= 1000 + 200);
+    assert.ok(result.stats.totalTokens <= 1000 + 200);
   });
 });

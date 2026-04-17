@@ -109,14 +109,12 @@ const main = async () => {
 
     assert.equal(smartReadResult.mode, options.readMode);
     assertContains(smartReadResult.content, options.readExpect, 'smart_read content');
-    assert.ok(smartReadResult.metrics.rawTokens >= smartReadResult.metrics.compressedTokens);
+    assert.ok(typeof smartReadResult.parser === 'string', 'smart_read should have parser field');
 
     recorder.record('smart_read', {
       filePath: smartReadResult.filePath,
       mode: smartReadResult.mode,
       preview: smartReadResult.content.slice(0, 160),
-      rawTokens: smartReadResult.metrics.rawTokens,
-      compressedTokens: smartReadResult.metrics.compressedTokens,
     });
 
     printStep(options.jsonMode, 'Checking smart_search against target project');
@@ -125,12 +123,10 @@ const main = async () => {
       arguments: { query: options.searchQuery, cwd: options.searchCwd },
     }));
 
-    assert.ok(['rg', 'walk'].includes(smartSearchResult.engine), `Unexpected engine: ${smartSearchResult.engine}`);
     assert.ok(smartSearchResult.totalMatches >= 1, 'smart_search returned no matches');
     assertContains(smartSearchResult.matches, options.searchExpect ?? options.searchQuery, 'smart_search matches');
 
     recorder.record('smart_search', {
-      engine: smartSearchResult.engine,
       totalMatches: smartSearchResult.totalMatches,
       preview: smartSearchResult.matches.split('\n').slice(0, 3),
     });

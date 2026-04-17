@@ -60,6 +60,7 @@
     "init:clients": "node ./scripts/init-clients.js",
     "smoke:formats": "node ./scripts/format-smoke.js",
     "test": "node --test --test-concurrency=1 ./tests/*.test.js",
+    "test:fast": "node --test --test-concurrency=4 ./tests/*.test.js",
     "verify": "node ./scripts/verify-features-direct.js",
     "benchmark": "node ./scripts/run-benchmark.js",
     "benchmark:orchestration": "node ./evals/orchestration-benchmark.js",

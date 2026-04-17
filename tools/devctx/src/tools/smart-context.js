@@ -800,7 +800,15 @@ export const smartContext = async ({
       filesIncluded,
       filesEvaluated: expanded.size,
       detailMode,
-      ...(prefetchResult ? { prefetchedFiles: prefetchResult.predicted?.length || 0 } : {}),
+      totalTokens: countTokens(context.map((c) => c.content || '').join('')),
+      ...(prefetchResult ? {
+        prefetch: {
+          enabled: true,
+          confidence: prefetchResult.confidence || 0,
+          predictedFiles: prefetchResult.predicted?.length || 0,
+          matchedPattern: prefetchResult.matchedPattern || null,
+        },
+      } : {}),
     },
     ...(includeSet.has('hints') ? { hints } : {}),
   };
