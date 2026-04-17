@@ -73,7 +73,6 @@ const calculateAdoptionMetrics = (days = 30) => {
   return withStateDb((db) => {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    // Get all sessions since cutoff
     const sessions = db
       .prepare(
         `
@@ -94,7 +93,6 @@ const calculateAdoptionMetrics = (days = 30) => {
       toolUsage: {},
     };
 
-    // Initialize workflow stats
     Object.keys(WORKFLOW_DEFINITIONS).forEach((type) => {
       results.byWorkflow[type] = {
         total: 0,
@@ -103,12 +101,10 @@ const calculateAdoptionMetrics = (days = 30) => {
       };
     });
 
-    // Analyze each session
     sessions.forEach((session) => {
       const snapshot = JSON.parse(session.snapshot_json || '{}');
       const sessionId = session.session_id;
 
-      // Get events for this session
       const sessionEvents = db
         .prepare('SELECT * FROM session_events WHERE session_id = ?')
         .all(sessionId);
@@ -117,25 +113,21 @@ const calculateAdoptionMetrics = (days = 30) => {
         .prepare('SELECT * FROM metrics_events WHERE session_id = ?')
         .all(sessionId);
 
-      // Check if non-trivial
       if (!isNonTrivialTask(sessionEvents, metricsEvents)) {
         return;
       }
 
       results.nonTrivialTasks++;
 
-      // Check if used devctx
       const hasDevctx = usedDevctx(metricsEvents);
       if (hasDevctx) {
         results.tasksWithDevctx++;
       }
 
-      // Track tool usage
       metricsEvents.forEach((m) => {
         results.toolUsage[m.tool] = (results.toolUsage[m.tool] || 0) + 1;
       });
 
-      // Classify by workflow if possible
       const goal = snapshot.goal || '';
       let workflowType = null;
 
@@ -154,7 +146,6 @@ const calculateAdoptionMetrics = (days = 30) => {
       }
     });
 
-    // Calculate rates
     if (results.nonTrivialTasks > 0) {
       results.adoptionRate = (results.tasksWithDevctx / results.nonTrivialTasks) * 100;
     }

@@ -41,7 +41,6 @@ console.log('🔍 Verificando todas las funcionalidades del MCP...\n');
 const runTests = async () => {
   console.log('📦 1. Verificando herramientas básicas...\n');
 
-  // Test 1: build_index
   try {
     const index = buildIndex(projectRoot);
     await persistIndex(index, projectRoot);
@@ -52,7 +51,6 @@ const runTests = async () => {
     fail('build_index', error);
   }
 
-  // Test 2: smart_read
   try {
     const result = await smartRead({
       filePath: 'tools/devctx/src/server.js',
@@ -68,7 +66,6 @@ const runTests = async () => {
     fail('smart_read', error);
   }
 
-  // Test 3: smart_search
   try {
     const result = await smartSearch({
       query: 'export function',
@@ -84,7 +81,6 @@ const runTests = async () => {
     fail('smart_search', error);
   }
 
-  // Test 4: smart_context
   try {
     const result = await smartContext({
       task: 'understand the MCP server',
@@ -101,7 +97,6 @@ const runTests = async () => {
     fail('smart_context', error);
   }
 
-  // Test 5: smart_read_batch
   try {
     const result = await smartReadBatch({
       files: [
@@ -121,7 +116,6 @@ const runTests = async () => {
 
   console.log('\n🆕 2. Verificando nuevas funcionalidades...\n');
 
-  // Test 6: warm_cache
   try {
     const result = await warmCache(projectRoot);
     
@@ -134,7 +128,6 @@ const runTests = async () => {
     fail('warm_cache', error);
   }
 
-  // Test 7: git_blame (symbol mode)
   try {
     const result = await getSymbolBlame('tools/devctx/src/server.js', projectRoot);
     
@@ -147,7 +140,6 @@ const runTests = async () => {
     fail('git_blame (symbol)', error);
   }
 
-  // Test 8: git_blame (file mode)
   try {
     const result = await getFileAuthorshipStats('tools/devctx/src/server.js', projectRoot);
     
@@ -160,7 +152,6 @@ const runTests = async () => {
     fail('git_blame (file)', error);
   }
 
-  // Test 9: git_blame (recent mode)
   try {
     const result = await getRecentlyModifiedSymbols(projectRoot, 10, 30);
     
@@ -173,7 +164,6 @@ const runTests = async () => {
     fail('git_blame (recent)', error);
   }
 
-  // Test 10: cross_project (discover)
   try {
     const result = discoverRelatedProjects(projectRoot);
     
@@ -189,7 +179,6 @@ const runTests = async () => {
     fail('cross_project (discover)', error);
   }
 
-  // Test 11: cross_project (stats)
   try {
     const result = getCrossProjectStats(projectRoot);
     
@@ -204,7 +193,6 @@ const runTests = async () => {
 
   console.log('\n📊 3. Verificando funcionalidades avanzadas...\n');
 
-  // Test 12: smart_context con diff
   try {
     const result = await smartContext({
       task: 'review recent changes',
@@ -223,7 +211,6 @@ const runTests = async () => {
     fail('smart_context (diff)', error);
   }
 
-  // Test 13: smart_context con prefetch
   try {
     const result = await smartContext({
       task: 'understand server implementation',
@@ -242,7 +229,6 @@ const runTests = async () => {
     fail('smart_context (prefetch)', error);
   }
 
-  // Test 14: build_index incremental con warmCache
   try {
     const { index, stats } = buildIndexIncremental(projectRoot);
     await persistIndex(index, projectRoot);

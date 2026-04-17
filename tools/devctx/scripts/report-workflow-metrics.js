@@ -171,7 +171,6 @@ const printSummary = (summary) => {
   console.log('─'.repeat(120));
   console.log('');
 
-  // Show detailed breakdown for each workflow type
   console.log('Detailed Breakdown:');
   console.log('');
 

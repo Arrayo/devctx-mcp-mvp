@@ -4,7 +4,6 @@ import { startWorkflow, endWorkflow, getWorkflowSummaryByType } from '../src/wor
 
 const generateExampleData = () => {
   withStateDb((db) => {
-    // Create example session
     const sessionId = 'example-debugging-session';
     const now = new Date().toISOString();
 
@@ -16,7 +15,6 @@ const generateExampleData = () => {
     `,
     ).run(sessionId, 'Fix TypeError in loginHandler', 'completed', 'Verified fix works', now, now);
 
-    // Start workflow
     const workflowId = startWorkflow('debugging', sessionId, {
       autoDetected: true,
       goal: 'Fix TypeError in loginHandler',
@@ -24,7 +22,6 @@ const generateExampleData = () => {
 
     console.log(`Started workflow ${workflowId}`);
 
-    // Simulate tool calls with metrics
     const tools = [
       { tool: 'smart_turn', raw: 0, compressed: 0 },
       { tool: 'smart_search', raw: 15000, compressed: 800 },
@@ -57,13 +54,11 @@ const generateExampleData = () => {
       // Busy wait
     }
 
-    // End workflow
     const summary = endWorkflow(workflowId);
 
     console.log('\nWorkflow Summary:');
     console.log(JSON.stringify(summary, null, 2));
 
-    // Get summary by type
     const typeSummary = getWorkflowSummaryByType();
 
     console.log('\nSummary by Type:');

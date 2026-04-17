@@ -461,11 +461,9 @@ const updateCursorRule = (targetDir, dryRun) => {
   const rulesDir = path.join(targetDir, '.cursor', 'rules');
   const profilesDir = path.join(rulesDir, 'profiles-compact');
   
-  // Write base rule (always active)
   const baseFilePath = path.join(rulesDir, 'devctx.mdc');
   writeFile(baseFilePath, cursorRuleContent, dryRun);
-  
-  // Write profiles README
+
   const profilesReadmePath = path.join(profilesDir, 'README.md');
   writeFile(profilesReadmePath, cursorProfilesNote, dryRun);
   

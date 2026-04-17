@@ -98,7 +98,6 @@ const suite5 = runCommand(
   ['./evals/orchestration-benchmark.js', '--baseline=./evals/orchestration-release-baseline.json']
 );
 
-// Generate summary
 console.log(`\n${'='.repeat(60)}`);
 console.log('📈 BENCHMARK SUMMARY');
 console.log('='.repeat(60));
@@ -129,14 +128,12 @@ results.suites.forEach(suite => {
   console.log(`  ${status} ${suite.name} (${duration}s)`);
 });
 
-// Save results
 const resultsPath = path.join(rootDir, 'evals', 'results', `benchmark-${Date.now()}.json`);
 fs.mkdirSync(path.dirname(resultsPath), { recursive: true });
 fs.writeFileSync(resultsPath, JSON.stringify(results, null, 2));
 
 console.log(`\n📄 Results saved to: ${path.relative(rootDir, resultsPath)}`);
 
-// Show metrics if available
 console.log(`\n${'='.repeat(60)}`);
 console.log('💾 PRODUCTION METRICS');
 console.log('='.repeat(60));
