@@ -475,17 +475,13 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
 
   await persistMetrics(metrics);
   
-  // Record usage for feedback
   recordToolUsage({
     tool: 'smart_search',
     savedTokens: metrics.savedTokens,
     target: query,
   });
-  
-  // Record devctx operation for missed opportunity detection
   recordDevctxOperation();
-  
-  // Record decision explanation
+
   let reason = DECISION_REASONS.MULTIPLE_FILES;
   if (validIntent) {
     reason = DECISION_REASONS.INTENT_AWARE;

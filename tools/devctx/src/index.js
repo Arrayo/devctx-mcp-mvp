@@ -726,9 +726,7 @@ export const buildIndex = (root, progress = null) => {
         if (sym.snippet) entry.snippet = sym.snippet;
         invertedIndex[key].push(entry);
       }
-    } catch {
-      // skip unreadable files
-    }
+    } catch { /* unreadable */ }
 
     processed++;
     

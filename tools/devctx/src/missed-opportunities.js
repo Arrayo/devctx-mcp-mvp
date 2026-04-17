@@ -141,7 +141,6 @@ export const formatMissedOpportunities = () => {
   lines.push('⚠️ **Missed devctx opportunities detected:**');
   lines.push('');
   
-  // Show session stats
   lines.push(`**Session stats:**`);
   lines.push(`- Duration: ${analysis.sessionDuration}s`);
   lines.push(`- devctx operations: ${analysis.devctxOperations}`);

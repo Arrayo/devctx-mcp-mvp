@@ -536,17 +536,12 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
 
   await persistMetrics(metrics);
   
-  // Record usage for feedback
   recordToolUsage({
     tool: 'smart_read',
     savedTokens: metrics.savedTokens,
     target: path.relative(effectiveRoot, fullPath),
   });
-  
-  // Record devctx operation for missed opportunity detection
   recordDevctxOperation();
-  
-  // Record decision explanation
   const lineCount = content.split('\n').length;
   let reason = DECISION_REASONS.LARGE_FILE;
   let expectedBenefit = EXPECTED_BENEFITS.TOKEN_SAVINGS(metrics.savedTokens);

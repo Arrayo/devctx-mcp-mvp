@@ -264,17 +264,12 @@ export const smartShell = async ({ command }) => {
 
   await persistMetrics(metrics);
   
-  // Record usage for feedback
   recordToolUsage({
     tool: 'smart_shell',
     savedTokens: metrics.savedTokens,
     target: command,
   });
-  
-  // Record devctx operation for missed opportunity detection
   recordDevctxOperation();
-  
-  // Record decision explanation
   const outputLines = rawText.split('\n').length;
   let reason = DECISION_REASONS.COMMAND_OUTPUT;
   if (shouldPrioritizeRelevant && relevant) {

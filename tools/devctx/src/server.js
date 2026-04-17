@@ -57,10 +57,8 @@ export const createDevctxServer = () => {
     version,
   });
 
-  // Enable streaming progress notifications
   setServerForStreaming(server);
 
-  // Register prompts
   server.prompt(
     'use-devctx',
     'Force the agent to use devctx tools for the current task. Use this prompt at the start of your message to ensure devctx is used instead of native tools.',

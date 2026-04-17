@@ -183,7 +183,6 @@ export const endWorkflow = (workflowId) => {
         return null;
       }
 
-    // Get workflow start time and session
     const workflow = db
       .prepare(
         `
@@ -203,7 +202,6 @@ export const endWorkflow = (workflowId) => {
     const endTime = new Date(now);
     const durationMs = endTime - startTime;
 
-    // Get all metrics for this session since workflow start
     const metrics = db
       .prepare(
         `
@@ -215,7 +213,6 @@ export const endWorkflow = (workflowId) => {
       )
       .all(workflow.session_id, workflow.start_time);
 
-    // Calculate totals
     const rawTokens = metrics.reduce((sum, m) => sum + (m.raw_tokens || 0), 0);
     const compressedTokens = metrics.reduce((sum, m) => sum + (m.compressed_tokens || 0), 0);
     const savedTokens = metrics.reduce((sum, m) => sum + (m.saved_tokens || 0), 0);
@@ -231,7 +228,6 @@ export const endWorkflow = (workflowId) => {
     const savingsPct = rawTokens > 0 ? ((savedTokens / rawTokens) * 100).toFixed(2) : 0;
     const netSavingsPct = rawTokens > 0 ? ((netSavedTokens / rawTokens) * 100).toFixed(2) : 0;
 
-    // Calculate vs baseline
     const baselineTokens = workflow.baseline_tokens || 0;
     const vsBaselinePct = baselineTokens > 0 ? (((baselineTokens - compressedTokens) / baselineTokens) * 100).toFixed(2) : 0;
     const vsBaselineNetPct = baselineTokens > 0 ? (((baselineTokens - (compressedTokens + overheadTokens)) / baselineTokens) * 100).toFixed(2) : 0;
@@ -247,10 +243,7 @@ export const endWorkflow = (workflowId) => {
       },
     };
 
-    // Get unique tools used
     const toolsUsed = [...new Set(metrics.map((m) => m.tool))];
-
-    // Update workflow
     const stmt = db.prepare(`
       UPDATE workflow_metrics
       SET end_time = ?,
@@ -584,7 +577,6 @@ export const autoTrackWorkflow = (sessionId, sessionGoal) => {
         return null;
       }
 
-    // Check if workflow already tracked for this session
     const existing = db
       .prepare(
         `
@@ -601,7 +593,6 @@ export const autoTrackWorkflow = (sessionId, sessionGoal) => {
       return existing.workflow_id;
     }
 
-    // Get tools used so far in this session
     const metrics = db
       .prepare(
         `
@@ -621,7 +612,6 @@ export const autoTrackWorkflow = (sessionId, sessionGoal) => {
       return null;
     }
 
-      // Start tracking
       return startWorkflow(workflowType, sessionId, { autoDetected: true, goal: sessionGoal });
     });
   } catch {

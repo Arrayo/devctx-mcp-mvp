@@ -412,17 +412,11 @@ export const smartContext = async ({
     
     await ensureIndexReady({ root });
     
-    // Get detailed diff stats
     const detailedChanges = await getDetailedDiff(changed.ref, root);
     const index = loadIndex(root);
-    
-    // Analyze impact and prioritize
     const prioritized = analyzeChangeImpact(detailedChanges, index);
-    
-    // Expand to include related files (importers, dependencies, tests)
     const expandedFiles = expandChangedContext(changed.files, index, 10);
-    
-    // Build primary seeds with priority and impact data
+
     primarySeeds = Array.from(expandedFiles).map(rel => {
       const changeInfo = prioritized.find(c => c.file === rel);
       const evidence = [{ 
@@ -432,7 +426,6 @@ export const smartContext = async ({
         impact: changeInfo?.impactScore || 0,
       }];
       
-      // Mark files that were expanded (not directly changed)
       if (!changed.files.includes(rel)) {
         evidence[0].expanded = true;
       }
@@ -444,7 +437,6 @@ export const smartContext = async ({
       };
     });
     
-    // Sort by impact (critical changes first)
     primarySeeds.sort((a, b) => {
       const impactA = a.evidence[0].impact || 0;
       const impactB = b.evidence[0].impact || 0;
@@ -771,17 +763,13 @@ export const smartContext = async ({
     timestamp: new Date().toISOString(),
   });
   
-  // Record usage for feedback
   recordToolUsage({
     tool: 'smart_context',
     savedTokens,
     target: task,
   });
-  
-  // Record devctx operation for missed opportunity detection
   recordDevctxOperation();
-  
-  // Record decision explanation
+
   let reason = DECISION_REASONS.TASK_CONTEXT;
   if (diff) {
     reason = DECISION_REASONS.DIFF_ANALYSIS;

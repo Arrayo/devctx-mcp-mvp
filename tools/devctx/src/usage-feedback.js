@@ -60,7 +60,6 @@ export const formatUsageFeedback = () => {
   lines.push('');
   lines.push('📊 **devctx usage this session:**');
   
-  // Sort by count descending
   const sorted = usage.tools.sort((a, b) => b.count - a.count);
   
   for (const { tool, count, savedTokens, targets } of sorted) {
