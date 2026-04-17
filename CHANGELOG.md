@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.11.0] - 2026-04-17
+
+### Fixed
+- **smart_shell:** Diff-aware compression — unified diff output is now split by file (max 8 files, 60 lines each) with a hint to run `git show -- <file>` for truncated bodies; avoids mid-hunk truncation
+- **smart_turn:** Added explicit skip guidance for single-session point-in-time tasks (commit review, quick lookup) — setup overhead only pays off when the session will be resumed later
+- **smart_shell description:** Documents diff behaviour and recommends `git diff --stat` first, then `git show -- <file>` per file for targeted reading
+- **smart_read/smart_read_batch descriptions:** `full` mode now starts with `PREFER outline/signatures/symbol — full saves 0 tokens`; each mode documented with savings estimate and exact use case
+
+### Changed
+- **comment cleanup:** Removed 100+ redundant narrating comments across `src/` and `scripts/`; translated remaining Spanish strings to English
+
 ## [1.10.0] - 2026-04-16
 
 ### Fixed
