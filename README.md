@@ -29,10 +29,10 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.11.0`
+## Latest Release: `1.13.0`
 
 Major features:
-- **Auto-build index on first use** - Zero-configuration search (no manual `build_index` needed)
+- **Auto-build index on first use** - Zero-configuration search (bug fixed in v1.12.0)
 - **Streaming progress notifications** for real-time visibility into long-running operations
 - **Fast path for simple tasks** to skip orchestration overhead (3-5x faster)
 - **Inline metrics display** with human-readable summaries in every tool response
@@ -529,7 +529,7 @@ smart_turn({
 // 2. Get changed files context
 smart_context({ 
   diff: true,
-  detail: 'moderate'
+  detail: 'balanced'
 })
 // → Returns: Changed files with graph, prioritizes API surface
 
@@ -583,7 +583,7 @@ smart_turn({
 // 2. Build dependency graph
 smart_context({ 
   entryFile: 'src/routes/login.js',
-  detail: 'moderate'
+  detail: 'balanced'
 })
 // → Returns: Dependencies, imports, exports
 
@@ -1973,7 +1973,6 @@ export DEVCTX_CACHE_WARMING=false
   query: string;
   intent?: 'implementation' | 'debug' | 'tests' | 'config' | 'docs' | 'explore';
   cwd?: string;
-  maxResults?: number;
 }
 ```
 
@@ -2052,7 +2051,6 @@ export DEVCTX_CACHE_WARMING=false
 ```typescript
 {
   command: string;
-  cwd?: string;
 }
 ```
 

@@ -4,7 +4,6 @@ import { countTokens } from '../tokenCounter.js';
 export const smartReadBatch = async ({ files, maxTokens }) => {
   const results = [];
   let totalTokens = 0;
-  let totalRawTokens = 0;
   let filesSkipped = 0;
 
   for (const item of files) {
@@ -40,13 +39,11 @@ export const smartReadBatch = async ({ files, maxTokens }) => {
         parser: readResult.parser,
         truncated: readResult.truncated,
         content: readResult.content,
-        ...(readResult.confidence ? { confidence: readResult.confidence } : {}),
         ...(readResult.indexHint !== undefined ? { indexHint: readResult.indexHint } : {}),
         ...(readResult.chosenMode ? { chosenMode: readResult.chosenMode, budgetApplied: true } : {}),
       });
 
       totalTokens += itemTokens;
-      totalRawTokens += readResult.metrics?.rawTokens ?? 0;
     } catch (err) {
       results.push({
         filePath: item.path,
@@ -56,17 +53,12 @@ export const smartReadBatch = async ({ files, maxTokens }) => {
     }
   }
 
-  const totalSavingsPct = totalRawTokens > 0
-    ? Math.max(0, Math.round(((totalRawTokens - totalTokens) / totalRawTokens) * 100))
-    : 0;
-
   return {
     results,
     metrics: {
       totalTokens,
       filesRead: results.length,
       filesSkipped,
-      totalSavingsPct,
     },
   };
 };

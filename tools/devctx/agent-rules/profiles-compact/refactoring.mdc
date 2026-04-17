@@ -5,37 +5,15 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ## Refactoring Workflow
 
-**Always start with `smart_turn(start)` to track refactor progress:**
-
 ```
-1. smart_turn(start, userPrompt='Extract auth logic', ensureSession=true)
-   → Recovers checkpoint: Previous refactor state (if exists)
-   
-2. smart_context(entryFile=<target>, detail=moderate)
-   → Builds: Dependency graph
-   
-3. smart_read(mode=signatures, filePath=<files>)
-   → Understands: API surface before changes
-   
-4. smart_read(mode=symbol, symbol=<function to refactor>)
-   → Extracts: Target function
-   
-5. git_blame({ mode: 'symbol', filePath: <file> })
-   → Checks: Authorship
-   
-6. [refactor code]
-
-7. smart_shell('npm test')
-   → Verifies: Tests still pass
-   
-8. smart_turn(end, event=milestone, summary='...', nextStep='...')
-   → Checkpoints: Refactor progress
+1. smart_turn(start, userPrompt='Extract auth logic')
+2. smart_context(entryFile=<target>, detail=balanced, include=['content','graph'])
+   → Dependency graph + file content in one call
+3. smart_read(mode=symbol, symbol=<function to refactor>)
+   → Only if smart_context didn't include the target
+4. [refactor code]
+5. smart_shell('npm test') → verify
+6. smart_turn(end, summary='...')
 ```
 
-**Why this flow?**
-- `smart_turn(start)` recovers refactor checkpoint
-- `smart_context` reveals impact
-- `mode=signatures` preserves API
-- `smart_turn(end)` tracks multi-step refactors
-
-**Token savings:** 89% (180K → 20K typical)
+**Key:** `smart_context(entryFile=...)` gives you the dependency graph and relevant content. Only call `smart_read(symbol)` for functions not covered. Always verify tests after refactoring.

@@ -38,9 +38,9 @@ export function add(a, b) { return a + b; }
 class MyService {}
 `;
 
-  it('outline includes imports and exports', () => {
+  it('outline includes exports but omits imports', () => {
     const result = summarizeCode('test.ts', source, 'outline');
-    assertContains(result, /import.*foo.*from.*bar/, 'import');
+    assert.ok(!/import.*foo.*from.*bar/.test(result), 'imports should be excluded from outline');
     assertContains(result, /export const greet/, 'const');
     assertContains(result, /export function add/, 'function');
     assertContains(result, /class MyService/, 'class');

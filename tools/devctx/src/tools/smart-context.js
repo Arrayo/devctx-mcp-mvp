@@ -15,7 +15,6 @@ import { predictContextFiles, recordContextAccess } from '../context-patterns.js
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
-import { buildMetricsDisplay } from '../utils/metrics-display.js';
 import { createProgressReporter } from '../streaming.js';
 import { 
   getDetailedDiff, 
@@ -35,7 +34,6 @@ import {
 } from '../utils/query-extraction.js';
 import {
   dedupeEvidence,
-  formatReasonIncluded,
   buildSymbolPreviews,
   attachSymbolEvidence,
   computeStaticUtility,
@@ -226,29 +224,6 @@ const getSymbolSignatureLimit = (item, detailMode, readMode) => {
 const getSymbolSignatures = (entries, maxItems = 10) =>
   entries.filter((entry) => entry.signature).slice(0, maxItems).map((entry) => entry.signature);
 
-const serializeEvidencePayload = (item) => {
-  const evidence = dedupeEvidence(item.evidence ?? []);
-  if (evidence.length === 0) return [];
-
-  const limit = item.role === 'primary' ? 2 : 1;
-  const preferred = item.role === 'primary'
-    ? evidence
-    : [
-      evidence.find((entry) => ['testOf', 'dependencyOf', 'dependentOf'].includes(entry.type)),
-      evidence[0],
-    ].filter(Boolean);
-
-  return uniqueList(preferred)
-    .slice(0, limit)
-    .map((entry) => ({
-      type: entry.type,
-      ...(entry.via ? { via: entry.via } : {}),
-      ...(entry.query && item.role === 'primary' ? { query: entry.query } : {}),
-      ...(entry.ref && item.role === 'primary' ? { ref: entry.ref } : {}),
-      ...(Array.isArray(entry.symbols) && entry.symbols.length > 0 ? { symbols: entry.symbols.slice(0, 2) } : {}),
-    }));
-};
-
 const shouldIncludeSymbolNames = (item, symbolPreviews, readMode) => {
   if (item.role === 'primary') return true;
   if (readMode === 'full') return true;
@@ -273,14 +248,10 @@ const buildContextItemPayload = (item, index, detailMode, readMode = 'index-only
   const symbolSignatures = shouldIncludeSymbolSignatures(item, symbolPreviews)
     ? getSymbolSignatures(fileSymbolEntries, getSymbolSignatureLimit(item, detailMode, readMode))
     : [];
-  const evidence = serializeEvidencePayload(item);
 
   return {
     file: item.rel,
     role: item.role,
-    readMode,
-    reasonIncluded: formatReasonIncluded(item.evidence),
-    evidence,
     ...(fileSymbols.length > 0 ? { symbols: fileSymbols } : {}),
     ...(symbolSignatures.length > 0 ? { symbolSignatures } : {}),
     ...(symbolPreviews.length > 0 ? { symbolPreviews } : {}),
@@ -669,16 +640,9 @@ export const smartContext = async ({
 
         const filtered = filterFoundSymbols(symbolResult.content, symbolCandidates);
         if (filtered) {
-          const symbolEvidence = dedupeEvidence([{
-            type: 'symbolDetail',
-            symbols: symbolCandidates.slice(0, 3),
-          }]);
           const symbolPayload = {
             file: topPrimary.rel,
             role: 'symbolDetail',
-            readMode: 'symbol',
-            reasonIncluded: formatReasonIncluded(symbolEvidence),
-            evidence: symbolEvidence,
             content: filtered,
           };
           const symbolTokens = countTokens(JSON.stringify(symbolPayload));
@@ -692,7 +656,6 @@ export const smartContext = async ({
                 const existing = context[existingIdx];
                 const signaturesOnly = {
                   ...existing,
-                  readMode: 'signatures-only',
                   content: '(omitted — see symbolDetail)',
                 };
                 const oldTokens = countTokens(JSON.stringify(existing));
@@ -747,7 +710,6 @@ export const smartContext = async ({
 
   const contentTokens = countTokens(context.map((c) => c.content).join('\n'));
   const previewTokens = context.reduce((sum, item) => sum + countTokens(JSON.stringify(item.symbolPreviews ?? [])), 0);
-  const indexOnlyItems = context.filter((item) => item.readMode === 'index-only').length;
   const contentItems = context.filter((item) => typeof item.content === 'string' && item.content.length > 0).length;
   const primaryItem = context.find((item) => item.role === 'primary');
 
@@ -816,17 +778,6 @@ export const smartContext = async ({
   };
 
   const filesIncluded = new Set(context.map((c) => c.file)).size;
-  const metricsDisplay = buildMetricsDisplay({
-    tool: 'smart_context',
-    target: task,
-    metrics: {
-      rawTokens: totalRawTokens,
-      compressedTokens: totalCompressedTokens,
-      savedTokens,
-    },
-    startTime: enableProgress ? startTime : null,
-    filesCount: filesIncluded,
-  });
 
   if (progress) {
     progress.complete({
@@ -845,28 +796,12 @@ export const smartContext = async ({
     confidence: { indexFreshness, graphCoverage: graphCov },
     context,
     ...(includeSet.has('graph') ? { graph: graphSummary, graphCoverage: graphCov } : {}),
-    metrics: {
-      contentTokens,
-      totalTokens: 0,
+    stats: {
       filesIncluded,
       filesEvaluated: expanded.size,
-      savingsPct,
       detailMode,
-      include: [...includeSet],
-      previewTokens,
-      indexOnlyItems,
-      contentItems,
-      primaryReadMode: primaryItem?.readMode ?? null,
-      ...(prefetchResult ? {
-        prefetch: {
-          enabled: true,
-          confidence: prefetchResult.confidence || 0,
-          predictedFiles: prefetchResult.predicted?.length || 0,
-          matchedPattern: prefetchResult.matchedPattern || null
-        }
-      } : {})
+      ...(prefetchResult ? { prefetchedFiles: prefetchResult.predicted?.length || 0 } : {}),
     },
-    metricsDisplay,
     ...(includeSet.has('hints') ? { hints } : {}),
   };
 
@@ -874,8 +809,6 @@ export const smartContext = async ({
     diffSummary.included = context.filter((c) => c.role === 'primary').length;
     result.diffSummary = diffSummary;
   }
-
-  result.metrics.totalTokens = countTokens(JSON.stringify(result));
 
   return result;
 };

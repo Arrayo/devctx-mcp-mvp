@@ -7,10 +7,13 @@ import { pickRelevantLines, truncate, uniqueLines } from '../utils/text.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
-import { buildMetricsDisplay } from '../utils/metrics-display.js';
-
 const execFile = promisify(execFileCallback);
 const isShellDisabled = () => process.env.DEVCTX_SHELL_DISABLED === 'true';
+const DEFAULT_TIMEOUT_MS = 15000;
+const getTimeoutMs = () => {
+  const env = parseInt(process.env.DEVCTX_SHELL_TIMEOUT_MS, 10);
+  return Number.isFinite(env) && env > 0 ? env : DEFAULT_TIMEOUT_MS;
+};
 const allowedCommands = new Set(['pwd', 'ls', 'find', 'rg', 'git', 'npm', 'pnpm', 'yarn', 'bun']);
 const allowedGitSubcommands = new Set(['status', 'diff', 'show', 'log', 'branch', 'rev-parse', 'blame']);
 const allowedPackageManagerSubcommands = new Set(['test', 'run', 'lint', 'build', 'typecheck', 'check']);
@@ -237,8 +240,6 @@ const buildBlockedResult = async (command, message) => {
     exitCode: 126,
     blocked: true,
     output: message,
-    confidence: { blocked: true, timedOut: false },
-    metrics,
   };
 };
 
@@ -273,16 +274,17 @@ export const smartShell = async ({ command }) => {
   }
 
   const resolvedFile = file === 'rg' ? rgPath : file;
+  const timeoutMs = getTimeoutMs();
   const execution = await execFile(resolvedFile, args, {
     cwd: projectRoot,
     maxBuffer: 1024 * 1024 * 10,
-    timeout: 15000,
+    timeout: timeoutMs,
   }).then(
     ({ stdout, stderr }) => ({ stdout, stderr, code: 0 }),
     (error) => ({
       stdout: error.stdout ?? '',
       stderr: error.killed
-        ? `Command timed out after 15s: ${command}`
+        ? `Command timed out after ${timeoutMs / 1000}s: ${command}`
         : (error.stderr ?? error.message ?? ''),
       code: Number.isInteger(error.code) ? error.code : 1,
       timedOut: !!error.killed,
@@ -331,24 +333,13 @@ export const smartShell = async ({ command }) => {
     context: `${outputLines} lines → ${compressedText.split('\n').length} lines (relevant only)`,
   });
 
-  const metricsDisplay = buildMetricsDisplay({
-    tool: 'smart_shell',
-    target: command,
-    metrics,
-    startTime: null,
-  });
-
   const result = {
     command,
     exitCode: execution.code,
     blocked: false,
     output: compressedText,
-    confidence: { blocked: false, timedOut: !!execution.timedOut },
-    metrics,
-    metricsDisplay,
+    ...(execution.timedOut ? { timedOut: true } : {}),
   };
-
-  if (execution.timedOut) result.timedOut = true;
 
   return result;
 };

@@ -5,34 +5,17 @@ globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**"]
 
 ## Testing Workflow
 
-**Always start with `smart_turn(start)` to track test coverage:**
-
 ```
-1. smart_turn(start, userPrompt='Write tests for validateToken', ensureSession=true)
-   → Recovers checkpoint: Previous test state (if exists)
-   
+1. smart_turn(start, userPrompt='Write tests for validateToken')
 2. smart_search(intent=tests, query=<feature>)
-   → Finds: Existing test patterns
-   
+   → Find existing test patterns to follow
 3. smart_read(mode=symbol, symbol=<function to test>)
-   → Extracts: Function to test
-   
+   → Extract the function you're testing
 4. smart_context(entryFile=<function file>, detail=minimal)
-   → Reveals: Dependencies (jwt, bcrypt, db)
-   
+   → Reveals dependencies to mock (jwt, bcrypt, db)
 5. [write test]
-
-6. smart_shell('npm test')
-   → Runs: Tests immediately
-   
-7. smart_turn(end, event=milestone, summary='Added 5 tests', nextStep='...')
-   → Checkpoints: Test coverage progress
+6. smart_shell('npm test') → verify
+7. smart_turn(end, summary='Added 5 tests for validateToken')
 ```
 
-**Why this flow?**
-- `smart_turn(start)` tracks test coverage
-- `intent=tests` finds patterns
-- `mode=symbol` reads only what's tested
-- `smart_turn(end)` records coverage progress
-
-**Token savings:** 90% (120K → 12K typical)
+**Key:** Use `intent=tests` in smart_search to find test patterns. Use `smart_context(detail=minimal)` to discover dependencies without reading full files.

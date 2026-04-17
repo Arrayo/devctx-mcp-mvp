@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.13.0] - 2026-04-17
+
+### Changed — Token Optimization (8K-30K tokens/session saved)
+
+- **JSON compacto:** `asTextResult` now uses `JSON.stringify(result)` without indentation (~15-25% fewer tokens globally on every tool call)
+- **Remove `metrics`/`metricsDisplay` from tool responses:** Telemetry is persisted internally; agent responses no longer include raw token counts, savings percentages, or display strings. Affects `smart_read`, `smart_search`, `smart_context`, `smart_shell` (~100-500 tokens/call)
+- **`smart_context` lean stats:** Replaced verbose `metrics` object with compact `stats: { filesIncluded, filesEvaluated, detailMode }`; removed `metricsDisplay` and `totalTokens` computation
+- **Outline/signatures: imports excluded:** `summarizeCode` no longer emits `import` lines in `outline` or `signatures` mode — imports are noise for structural analysis (~40-60 tokens per file, biggest impact on `smart_read` which has 850+ uses)
+- **Export default truncated:** `export default <expr>` expressions capped at 60 chars to avoid HOC/compose() lines bloating the outline
+- **`uniqueLines` collapses consecutive blank lines:** Prevents repeated empty lines from accumulating tokens in compressed text
+- **`smart_turn` continuity compact:** Removed debug fields `sharedTerms`, `promptTermCount`, `summaryTermCount`, `matchScore` from `continuity` object — agent only needs `state`, `shouldReuseContext`, `reason`
+- **`smart_turn` recommendedPath compact:** `steps[]` array of objects replaced by `instructions` string (concatenated tool:instruction pairs)
+- **`smart_turn` conditional fields:** `storageHealth` only included when status is not ok; `mutationSafety` only included when `blocked === true`; `repoSafety` only included when blocked or side effects suppressed (~200-800 tokens/call)
+- **`smart_read` signatures mode with real signatures:** `formatTopLevelStatement` now extracts full function signature (params + return type) up to 120 chars instead of just the name — reduces follow-up `smart_read(symbol)` calls
+
+## [1.12.0] - 2026-04-17
+
+### Fixed
+- **index-manager:** Critical bug — `ensureIndexReady` was calling `buildIndexCore({ root, incremental: true })` (wrong signature) causing auto-index build to fail silently and always return `status: 'fallback'`. Now uses `buildIndexIncremental(root)` + `persistIndex` (correct call).
+- **README:** Corrected `detail: 'moderate'` examples to `detail: 'balanced'` (valid schema value)
+- **README:** Removed `maxResults` from `smart_search` API reference (not in schema)
+- **README:** Removed `cwd` from `smart_shell` API reference (not in schema)
+
+### Added
+- **smart_shell:** Timeout configurable via `DEVCTX_SHELL_TIMEOUT_MS` env var (default 15 000 ms). Set to e.g. `60000` for large test suites.
+- **tokenCounter:** Encoder configurable via `DEVCTX_TOKEN_MODEL` env var. Supports any model name accepted by `js-tiktoken` (e.g. `gpt-4o`, `gpt-4`). Use `claude` as alias for `gpt-4o` encoding (±15-20% accuracy vs native Claude tokenizer).
+
 ## [1.11.0] - 2026-04-17
 
 ### Fixed

@@ -77,9 +77,9 @@ export const attachSafetyMetadata = (
 
   return {
     ...result,
-    ...(mutationSafety ? { mutationSafety } : {}),
-    repoSafety,
-    sideEffectsSuppressed: Boolean(sideEffectsSuppressed),
+    ...(mutationSafety?.blocked ? { mutationSafety } : {}),
+    ...(repoSafety && (mutationSafety?.blocked || sideEffectsSuppressed) ? { repoSafety } : {}),
+    ...(sideEffectsSuppressed ? { sideEffectsSuppressed: true } : {}),
     ...(degraded ? { degradedMode: degraded } : {}),
   };
 };

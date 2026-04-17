@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { projectRoot } from './utils/paths.js';
-import { loadIndex, buildIndex as buildIndexCore } from './index.js';
+import { loadIndex, buildIndexIncremental, persistIndex } from './index.js';
 
 const execFile = promisify(execFileCallback);
 
@@ -83,23 +83,28 @@ export const ensureIndexReady = async (options = {}) => {
   }
   
   log('Building search index...');
-  
+
   try {
-    const buildPromise = buildIndexCore({ root, incremental: true });
+    const buildPromise = (async () => {
+      const { index, stats } = buildIndexIncremental(root);
+      await persistIndex(index, root);
+      return { stats, fileCount: Object.keys(index.files).length, version: index.version };
+    })();
+
     const result = await Promise.race([
       buildPromise,
-      timeout(timeoutMs, 'Index build timeout')
+      timeout(timeoutMs, 'Index build timeout'),
     ]);
-    
+
     saveIndexMetadata({
       builtAt: Date.now(),
       gitHead: getGitHead(root),
-      fileCount: result?.files?.length || 0,
-      version: result?.version
+      fileCount: result.fileCount,
+      version: result.version,
     }, root);
-    
+
     log('Index ready');
-    return { status: 'built', cached: false, fileCount: result?.files?.length || 0 };
+    return { status: 'built', cached: false, fileCount: result.fileCount };
   } catch (error) {
     log(`Index build failed: ${error.message}`);
     return { status: 'fallback', error: error.message };

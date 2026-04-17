@@ -5,34 +5,16 @@ globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**"]
 
 ## Debugging Workflow
 
-**Always start with `smart_turn(start)` to recover previous context:**
-
 ```
-1. smart_turn(start, userPrompt, ensureSession=true)
-   → Recovers checkpoint: "Last worked on auth, checked validateToken()"
-   
+1. smart_turn(start, userPrompt)
 2. smart_search(intent=debug, query=<error message>)
-   → Prioritizes: errors, exceptions, logs, recent changes
-   
+   → Finds error sources, prioritizes exceptions and recent changes
 3. smart_read(mode=symbol, symbol=<failing function>)
-   → Extracts: Failing function only (95% savings)
-   
-4. smart_shell('npm test')
-   → Reproduces: Error safely
-   
+   → Extracts only the failing function
+4. smart_shell('npm test') → reproduce
 5. [fix bug]
-
-6. smart_shell('npm test')
-   → Verifies: Fix works
-   
-7. smart_turn(end, event=milestone, summary='...', nextStep='...')
-   → Checkpoints: Progress for recovery
+6. smart_shell('npm test') → verify
+7. smart_turn(end, summary='...')
 ```
 
-**Why this flow?**
-- `smart_turn(start)` recovers where you left off
-- `intent=debug` finds errors fast
-- `mode=symbol` reads only what's needed
-- `smart_turn(end)` enables recovery if interrupted
-
-**Token savings:** 90% (150K → 15K typical)
+**Key:** Use `intent=debug` to rank error-related results higher. Use `mode=symbol` — never read full files to debug a single function.

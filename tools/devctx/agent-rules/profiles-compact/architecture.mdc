@@ -5,32 +5,14 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 
 ## Architecture Exploration Workflow
 
-**Always start with `smart_turn(start)` to track exploration:**
-
 ```
-1. smart_turn(start, userPrompt='Understand auth flow', ensureSession=true)
-   → Recovers checkpoint: Previous exploration state (if exists)
-   
-2. smart_context(detail=minimal)
-   → Returns: High-level project structure
-   
-3. smart_search(intent=explore, query=<concept>)
-   → Finds: Architectural patterns
-   
-4. smart_read(mode=signatures, filePath=<key files>)
-   → Reveals: API surface only
-   
-5. cross_project({ mode: 'search', query: <shared concept> })
-   → Discovers: Cross-project patterns (if monorepo)
-   
-6. smart_turn(end, event=milestone, summary='Auth uses JWT...', nextStep='...')
-   → Checkpoints: Architecture understanding
+1. smart_turn(start, userPrompt='Understand auth flow')
+2. smart_context(task='understand auth architecture', detail=minimal)
+   → High-level project structure + relevant files in one call
+3. smart_read(mode=signatures, filePath=<key files>)
+   → API surface only — for files smart_context flagged as important
+4. cross_project(mode='search', query=<concept>) — if monorepo
+5. smart_turn(end, summary='Auth uses JWT with...')
 ```
 
-**Why this flow?**
-- `smart_turn(start)` recovers exploration progress
-- `detail=minimal` provides overview
-- `mode=signatures` reveals API
-- `smart_turn(end)` documents findings
-
-**Token savings:** 90% (300K → 30K typical)
+**Key:** Start with `smart_context(detail=minimal)` — it gives you the project map. Only use `smart_read(signatures)` for files you need to understand deeper. Never read full files during exploration.

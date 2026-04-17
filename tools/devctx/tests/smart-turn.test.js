@@ -64,7 +64,7 @@ test('smart_turn start reuses aligned persisted context', { skip: SKIP_SQLITE_TE
   assert.equal(result.refreshedContext, undefined);
   assert.equal(result.recommendedPath.mode, 'guided_context');
   assert.deepEqual(result.recommendedPath.nextTools, ['smart_context', 'smart_read', 'smart_turn']);
-  assert.match(result.recommendedPath.steps[0].instruction, /smart_context/i);
+  assert.match(result.recommendedPath.instructions, /smart_context/i);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-aligned' });
 });
@@ -117,7 +117,7 @@ test('smart_turn start refreshes lightweight context for the new prompt', { skip
   assert.ok(result.refreshedContext.topFiles.some((item) => item.file.includes('src/auth.js')));
   assert.equal(result.recommendedPath.mode, 'guided_refresh');
   assert.deepEqual(result.recommendedPath.nextTools, ['smart_read', 'smart_turn']);
-  assert.match(result.recommendedPath.steps[0].instruction, /refreshedContext\.topFiles/i);
+  assert.match(result.recommendedPath.instructions, /refreshedContext\.topFiles/i);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
@@ -261,7 +261,7 @@ test('smart_turn reports workflow tracking blocked when state sqlite is staged',
       });
       assert.equal(result.recommendedPath.mode, 'blocked_guided');
       assert.equal(result.recommendedPath.nextTools[0], 'repo_safety');
-      assert.match(result.recommendedPath.steps[0].instruction, /recommendedActions/i);
+      assert.match(result.recommendedPath.instructions, /recommendedActions/i);
 
       const active = await getWorkflowMetrics({ sessionId: 'turn-workflow-blocked', completed: false, limit: 1 });
       assert.equal(active.length, 0);
@@ -374,6 +374,7 @@ test('smart_turn end does not close workflow when checkpoint is skipped', { skip
 test('smart_turn start refreshes context when the index is unavailable', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
   const stateDir = path.join(turnTestRoot, '.devctx');
   fs.rmSync(path.join(stateDir, 'index.json'), { force: true });
+  fs.rmSync(path.join(stateDir, 'index-meta.json'), { force: true });
 
   const srcDir = path.join(turnTestRoot, 'src');
   fs.mkdirSync(srcDir, { recursive: true });
@@ -390,7 +391,13 @@ test('smart_turn start refreshes context when the index is unavailable', { skip:
   });
 
   assert.ok(result.refreshedContext);
-  assert.equal(result.refreshedContext.indexRefreshed, true);
+  // With the fixed ensureIndexReady auto-build, the index is built inside
+  // smartContext before refreshPromptContext checks indexFreshness, so the
+  // redundant rebuild path in refreshPromptContext no longer triggers.
+  // The important invariant is that context is returned with a fresh index.
+  const freshness = result.refreshedContext.indexFreshness;
+  assert.ok(freshness === 'fresh' || result.refreshedContext.indexRefreshed === true,
+    `Expected fresh index or indexRefreshed=true, got freshness=${freshness}`);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
@@ -426,7 +433,7 @@ test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_
   assert.ok(result.checkpoint.summary.recentCompleted.includes('Implemented smart_turn orchestration flow'));
   assert.equal(result.recommendedPath.mode, 'checkpointed');
   assert.deepEqual(result.recommendedPath.nextTools, ['smart_turn']);
-  assert.match(result.recommendedPath.steps[0].instruction, /restart with smart_turn\(start/i);
+  assert.match(result.recommendedPath.instructions, /restart with smart_turn\(start/i);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-end' });
 });

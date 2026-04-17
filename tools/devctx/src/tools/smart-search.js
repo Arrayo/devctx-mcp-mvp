@@ -12,7 +12,6 @@ import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
 import { IGNORED_DIRS, IGNORED_FILE_NAMES, IGNORED_FILE_PATTERNS } from '../config/ignored-paths.js';
-import { buildMetricsDisplay } from '../utils/metrics-display.js';
 import { createProgressReporter } from '../streaming.js';
 import { ensureIndexReady } from '../index-manager.js';
 
@@ -506,16 +505,6 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
   else if (usedFallback) retrievalConfidence = provenance?.skippedItemsTotal > 0 ? 'low' : 'medium';
   else if (provenance?.skippedItemsTotal > 0) retrievalConfidence = 'low';
 
-  const confidence = { level: retrievalConfidence, indexFreshness };
-
-  const metricsDisplay = buildMetricsDisplay({
-    tool: 'smart_search',
-    target: query,
-    metrics,
-    startTime: enableProgress ? startTime : null,
-    filesCount: groups.length,
-  });
-
   if (progress) {
     progress.complete({
       query,
@@ -528,23 +517,17 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
 
   const result = {
     query,
-    root,
-    engine,
-    retrievalConfidence,
     indexFreshness,
-    sourceBreakdown: breakdown,
-    confidence,
     ...(validIntent ? { intent: validIntent } : {}),
     ...(indexHits ? { indexBoosted: indexHits.size } : {}),
     totalMatches: dedupedMatches.length,
     matchedFiles: groups.length,
     topFiles: groups.slice(0, 10).map((group) => ({ file: group.file, count: group.count, score: group.score })),
     matches: compressedText,
-    metrics,
-    metricsDisplay,
   };
 
-  if (provenance) result.provenance = provenance;
+  if (provenance?.fallbackReason) result.searchMode = provenance.fallbackReason;
+  if (retrievalConfidence !== 'high') result.retrievalConfidence = retrievalConfidence;
 
   return result;
 };

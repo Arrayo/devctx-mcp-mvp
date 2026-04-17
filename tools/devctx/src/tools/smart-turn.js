@@ -13,6 +13,9 @@ import { smartContext } from './smart-context.js';
 import { smartMetrics } from './smart-metrics.js';
 import { smartSummary } from './smart-summary.js';
 
+const isStorageUnhealthy = (health) =>
+  health && health.status !== 'ok' && health.status !== null && health.status !== undefined;
+
 const DEFAULT_START_MAX_TOKENS = 400;
 const DEFAULT_END_MAX_TOKENS = 500;
 const DEFAULT_END_EVENT = 'milestone';
@@ -129,10 +132,6 @@ const classifyContinuity = ({ prompt, summaryResult }) => {
       state: 'resume',
       shouldReuseContext: true,
       reason: 'A persisted session was found and no prompt terms were available for comparison.',
-      sharedTerms: [],
-      promptTermCount: 0,
-      summaryTermCount: 0,
-      matchScore: 1,
     };
   }
 
@@ -147,10 +146,6 @@ const classifyContinuity = ({ prompt, summaryResult }) => {
       state: 'aligned',
       shouldReuseContext: true,
       reason: 'Prompt terms align with persisted task context.',
-      sharedTerms: sharedTerms.slice(0, 8),
-      promptTermCount: promptTerms.length,
-      summaryTermCount: summaryTerms.length,
-      matchScore,
     };
   }
 
@@ -159,10 +154,6 @@ const classifyContinuity = ({ prompt, summaryResult }) => {
       state: 'possible_shift',
       shouldReuseContext: true,
       reason: 'Prompt partially overlaps the persisted context; review before continuing.',
-      sharedTerms: sharedTerms.slice(0, 8),
-      promptTermCount: promptTerms.length,
-      summaryTermCount: summaryTerms.length,
-      matchScore,
     };
   }
 
@@ -170,10 +161,6 @@ const classifyContinuity = ({ prompt, summaryResult }) => {
     state: 'context_mismatch',
     shouldReuseContext: false,
     reason: 'Prompt terms do not align with the persisted session summary.',
-    sharedTerms: [],
-    promptTermCount: promptTerms.length,
-    summaryTermCount: summaryTerms.length,
-    matchScore,
   };
 };
 
@@ -342,7 +329,7 @@ const buildStartRecommendedPath = ({
     autoCreated,
     isolatedSession,
     nextTools: [...new Set(nextTools)],
-    steps,
+    instructions: steps.map((s) => `${s.tool}: ${s.instruction}`).join(' | '),
   };
 };
 
@@ -389,7 +376,7 @@ const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow }
         : 'checkpointed',
     checkpointEvent: event,
     nextTools: [...new Set(nextTools)],
-    steps,
+    instructions: steps.map((s) => `${s.tool}: ${s.instruction}`).join(' | '),
   };
 };
 
@@ -579,7 +566,7 @@ const startTurn = async ({
     ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
     ...(summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
-    storageHealth: summaryResult.storageHealth ?? metrics?.storageHealth ?? null,
+    ...(isStorageUnhealthy(summaryResult.storageHealth ?? metrics?.storageHealth) ? { storageHealth: summaryResult.storageHealth ?? metrics?.storageHealth } : {}),
     recommendedPath,
     message: mutationSafety?.blocked
       ? mutationSafety.message
@@ -694,7 +681,7 @@ const endTurn = async ({
     checkpoint,
     ...(workflow ? { workflow } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
-    storageHealth: checkpoint.storageHealth ?? metrics?.storageHealth ?? null,
+    ...(isStorageUnhealthy(checkpoint.storageHealth ?? metrics?.storageHealth) ? { storageHealth: checkpoint.storageHealth ?? metrics?.storageHealth } : {}),
     recommendedPath,
     message: mutationSafety?.blocked ? mutationSafety.message : checkpoint.message,
   }, {

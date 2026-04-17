@@ -12,7 +12,6 @@ import { countTokens } from '../tokenCounter.js';
 import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
-import { buildMetricsDisplay } from '../utils/metrics-display.js';
 import { createProgressReporter } from '../streaming.js';
 
 const execFile = promisify(execFileCb);
@@ -563,16 +562,6 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     context: `${lineCount} lines, ${metrics.rawTokens} tokens → ${metrics.compressedTokens} tokens`,
   });
 
-  const confidence = { parser, truncated, cached: cacheHit && !contextResult };
-  if (contextResult) confidence.graphCoverage = contextResult.graphCoverage;
-
-  const metricsDisplay = buildMetricsDisplay({
-    tool: 'smart_read',
-    target: path.relative(effectiveRoot, fullPath),
-    metrics,
-    startTime: enableProgress ? startTime : null,
-  });
-
   if (progress) {
     progress.complete({
       file: path.relative(effectiveRoot, fullPath),
@@ -588,12 +577,7 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     parser,
     truncated,
     content: compressedText,
-    confidence,
-    metrics,
-    metricsDisplay,
   };
-
-  if (cacheHit && !contextResult) result.cached = true;
   if (mode === 'symbol') result.indexHint = indexHintUsed;
   if (validBudget && effectiveMode !== mode) {
     result.chosenMode = effectiveMode;

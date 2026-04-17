@@ -105,15 +105,25 @@ const formatDeclarationName = (name) => {
 
 const collectVariableNames = (declarationList) => declarationList.declarations.map((declaration) => formatDeclarationName(declaration.name));
 
-const formatTopLevelStatement = (statement, sourceFile) => {
+const getFunctionSignature = (statement, sourceFile) => {
+  const body = statement.body;
+  if (!body) return statement.getText(sourceFile).split('\n')[0];
+  const fullText = statement.getText(sourceFile);
+  const bodyOffset = body.getStart(sourceFile) - statement.getStart(sourceFile);
+  const sig = fullText.slice(0, bodyOffset).replace(/\s+$/, '');
+  return sig.length > 120 ? `${sig.slice(0, 120)}...` : sig;
+};
+
+const formatTopLevelStatement = (statement, sourceFile, mode = 'outline') => {
   const exported = statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
   const prefix = exported ? 'export ' : '';
 
   if (ts.isImportDeclaration(statement)) {
-    return formatImport(statement);
+    return null;
   }
 
   if (ts.isFunctionDeclaration(statement)) {
+    if (mode === 'signatures') return getFunctionSignature(statement, sourceFile);
     return `${prefix}function ${getNodeName(statement)}()`;
   }
 
@@ -143,7 +153,8 @@ const formatTopLevelStatement = (statement, sourceFile) => {
   }
 
   if (ts.isExportAssignment(statement)) {
-    return `export default ${statement.expression.getText(sourceFile)}`;
+    const text = statement.expression.getText(sourceFile);
+    return `export default ${text.length > 60 ? `${text.slice(0, 60)}...` : text}`;
   }
 
   return statement.getText(sourceFile).split('\n')[0];
@@ -248,7 +259,8 @@ export const summarizeCode = (fullPath, content, mode) => {
   const sourceFile = parseSource(fullPath, content);
   const topLevel = sourceFile.statements.flatMap((statement) => {
     if (isIIFE(statement)) return extractIIFEMembers(statement, sourceFile);
-    return [formatTopLevelStatement(statement, sourceFile)];
+    const formatted = formatTopLevelStatement(statement, sourceFile, mode);
+    return formatted !== null ? [formatted] : [];
   });
   const hooks = collectHooks(sourceFile);
 

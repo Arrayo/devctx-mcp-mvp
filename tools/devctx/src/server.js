@@ -39,7 +39,7 @@ export const asTextResult = (result) => ({
   content: [
     {
       type: 'text',
-      text: JSON.stringify(result, null, 2),
+      text: JSON.stringify(result),
     },
   ],
 });
@@ -61,7 +61,7 @@ export const createDevctxServer = () => {
 
   server.prompt(
     'use-devctx',
-    'Force the agent to use devctx tools for the current task. Use this prompt at the start of your message to ensure devctx is used instead of native tools.',
+    'Force the agent to use devctx tools for the current task.',
     {},
     async () => ({
       messages: [
@@ -69,7 +69,7 @@ export const createDevctxServer = () => {
           role: 'user',
           content: {
             type: 'text',
-            text: 'Use devctx: smart_turn(start) → smart_context/smart_search → smart_read → smart_turn(end)',
+            text: 'Use devctx MCP tools for this task. Start with smart_context(task) for multi-file context. Use smart_read(outline) → smart_read(symbol) cascade for individual files. Never use native Read on large files.',
           },
         },
       ],
@@ -78,7 +78,7 @@ export const createDevctxServer = () => {
 
   server.prompt(
     'devctx-workflow',
-    'Complete devctx workflow template with all recommended steps. Includes session start, context building, file reading, and session end.',
+    'Complete devctx workflow for complex tasks with session continuity.',
     {},
     async () => ({
       messages: [
@@ -86,15 +86,7 @@ export const createDevctxServer = () => {
           role: 'user',
           content: {
             type: 'text',
-            text: `Follow this devctx workflow:
-
-1. smart_turn(start) - Start session and recover previous context
-2. smart_context(task) - Build complete context for the task
-3. smart_search(query) - Search for specific patterns if needed
-4. smart_read(file) - Read files with appropriate mode (outline/signatures/symbol)
-5. smart_turn(end) - Save checkpoint for next session
-
-Use devctx tools instead of native Read/Grep/Shell when possible.`,
+            text: 'Follow devctx workflow: 1) smart_turn(start) to recover session 2) smart_context(task) for curated context (replaces search+read cycle) 3) smart_read(symbol) only for specific functions not covered by smart_context 4) smart_turn(end) to checkpoint. Never skip to smart_read(full) — use the cascade: outline → signatures → symbol → full.',
           },
         },
       ],
@@ -103,7 +95,7 @@ Use devctx tools instead of native Read/Grep/Shell when possible.`,
 
   server.prompt(
     'devctx-preflight',
-    'Preflight checklist before starting work. Ensures index is built and session is initialized.',
+    'Preflight: build index and initialize session before work.',
     {},
     async () => ({
       messages: [
@@ -111,13 +103,7 @@ Use devctx tools instead of native Read/Grep/Shell when possible.`,
           role: 'user',
           content: {
             type: 'text',
-            text: `Preflight checklist:
-
-1. build_index(incremental=true) - Build/update symbol index
-2. smart_turn(start) - Initialize session and recover context
-3. Proceed with your task using devctx tools
-
-This ensures optimal performance and context recovery.`,
+            text: 'Preflight: 1) build_index(incremental=true) 2) smart_turn(start) 3) Proceed with devctx tools.',
           },
         },
       ],
@@ -126,7 +112,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_read',
-    'Read a file with token-efficient modes. PREFER outline/signatures/symbol — full mode saves 0 tokens (same content as native Read, capped at 12k chars). Mode guide: outline (~90% savings): file structure, exports, top-level symbols — use for orientation, code review, deciding what to read next. signatures (~85% savings): function/method signatures only — use when you need parameter names and return types without bodies. symbol: extract one or more functions/classes/methods by name (string or array for batch) — use when you know exactly what to read; add context=true to include callers, tests, and referenced types from the dependency graph (returns graphCoverage: full|partial|none). range: specific line range with line numbers — use only when you need exact lines. full: raw file content, no compression, no savings — only use when the exact byte-for-byte content is required (e.g. config files, lock files). maxTokens: token budget — auto-selects the most detailed mode that fits (full → outline → signatures → truncated). Responses are cached in memory per session and invalidated by file mtime; cached=true when served from cache. Every response includes a unified confidence block: { parser, truncated, cached, graphCoverage? }. Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
+    'Read a file with token-efficient modes. ALWAYS prefer outline/signatures/symbol over full. Reading cascade: outline → signatures → symbol → range → full (last resort). Mode guide: outline (~90% savings): file structure, exports, top-level symbols — use first for orientation. signatures (~85% savings): function signatures with parameters and return types — use when you need the API surface. symbol: extract specific functions/classes by name (string or array) — use when you know what to read; add context=true for callers, tests, and dependencies. range: specific line range — use only when you need exact lines. full: raw content, no savings — only for config/lock files. maxTokens: token budget — auto-cascades to fit (outline → signatures → truncated). Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
     {
       filePath: z.string(),
       mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol']).optional(),
@@ -160,7 +146,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_search',
-    'Search code across the project using ripgrep (with filesystem fallback). Returns grouped, ranked results. Optional intent (implementation/debug/tests/config/docs/explore) adjusts ranking: tests boosts test files, config boosts config files, docs reduces penalty on READMEs. Includes a unified confidence block: { level, indexFreshness } plus retrievalConfidence and provenance metadata.',
+    'Search code across the project using ripgrep (with filesystem fallback). Returns grouped, ranked results. Optional intent (implementation/debug/tests/config/docs/explore) adjusts ranking. Use instead of native Grep for ranked, deduplicated results with index boosting.',
     {
       query: z.string(),
       cwd: z.string().optional(),
@@ -171,7 +157,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_context',
-    'Get curated context for a task in one call. Combines smart_search + smart_read + graph expansion. Returns relevant files, evidence for why each file was included, related tests, dependencies, symbol previews from the index, and symbol details — optimized for tokens. Includes a unified confidence block: { indexFreshness, graphCoverage } indicating index state and how complete the relational context is. Replaces the manual search → read → read cycle. Optional intent override, token budget, diff mode (pass diff=true for HEAD or diff="main" to scope context to changed files only), detail mode (minimal=index+signatures+snippets, balanced=default, deep=full content), include array to control which fields are returned (["content","graph","hints","symbolDetail"]), and prefetch=true to enable intelligent context prediction based on historical patterns (reduces round-trips by 40-60%).',
+    'PREFERRED for multi-file tasks. Gets curated context in one call — replaces the manual search → read → read cycle. Combines search + graph expansion + selective reading. Returns relevant files with symbols and content, optimized for tokens. Options: intent, maxTokens (budget), diff (true for HEAD or branch name), detail (minimal/balanced/deep), include (content/graph/hints/symbolDetail), prefetch (true for predictive loading). Call this FIRST before individual smart_read/smart_search calls.',
     {
       task: z.string(),
       intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
@@ -188,7 +174,7 @@ This ensures optimal performance and context recovery.`,
 
   server.tool(
     'smart_shell',
-    'Run a diagnostic shell command from an allowlist. Allowed: pwd, ls, find, rg, git (status/diff/show/log/branch/rev-parse), npm/pnpm/yarn/bun (test/run/lint/build/typecheck/check). Blocks shell operators, pipes, and unsafe commands. For large diffs: output is split by file (up to 8 files, 60 lines each) with a hint to run git show -- <file> for the full body of any truncated file; prefer git diff --stat first to see which files changed, then git show -- <file> per file for targeted reading. Includes a unified confidence block: { blocked, timedOut }.',
+    'Run a diagnostic shell command from an allowlist. Allowed: pwd, ls, find, rg, git (status/diff/show/log/branch/rev-parse), npm/pnpm/yarn/bun (test/run/lint/build/typecheck/check). Blocks shell operators, pipes, and unsafe commands. For large diffs: output is split by file (up to 8 files, 60 lines each); prefer git diff --stat first, then git show -- <file> per file.',
     {
       command: z.string(),
     },

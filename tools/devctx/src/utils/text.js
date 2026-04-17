@@ -8,6 +8,7 @@ export const truncate = (text = '', maxChars = 4000) => {
 
 export const uniqueLines = (text = '') => {
   const seen = new Set();
+  let prevEmpty = false;
 
   return text
     .split('\n')
@@ -15,8 +16,12 @@ export const uniqueLines = (text = '') => {
       const key = line.trim();
 
       if (!key) {
+        if (prevEmpty) return false;
+        prevEmpty = true;
         return true;
       }
+
+      prevEmpty = false;
 
       if (seen.has(key)) {
         return false;
