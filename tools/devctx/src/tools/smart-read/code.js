@@ -114,6 +114,18 @@ const getFunctionSignature = (statement, sourceFile) => {
   return sig.length > 120 ? `${sig.slice(0, 120)}...` : sig;
 };
 
+const getVariableFunctionSignature = (declaration, sourceFile) => {
+  const init = declaration.initializer;
+  if (!init) return null;
+  if (!ts.isArrowFunction(init) && !ts.isFunctionExpression(init)) return null;
+  const body = init.body;
+  if (!body) return null;
+  const fullText = declaration.getText(sourceFile);
+  const bodyOffset = body.getStart(sourceFile) - declaration.getStart(sourceFile);
+  const sig = fullText.slice(0, bodyOffset).replace(/\s+$/, '');
+  return sig.length > 120 ? `${sig.slice(0, 120)}...` : sig;
+};
+
 const formatTopLevelStatement = (statement, sourceFile, mode = 'outline') => {
   const exported = statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
   const prefix = exported ? 'export ' : '';
@@ -149,6 +161,12 @@ const formatTopLevelStatement = (statement, sourceFile, mode = 'outline') => {
       : statement.declarationList.flags & ts.NodeFlags.Let
         ? 'let'
         : 'var';
+
+    if (mode === 'signatures' && statement.declarationList.declarations.length === 1) {
+      const sig = getVariableFunctionSignature(statement.declarationList.declarations[0], sourceFile);
+      if (sig) return `${prefix}${declarationKind} ${sig}`;
+    }
+
     return `${prefix}${declarationKind} ${collectVariableNames(statement.declarationList).join(', ')}`;
   }
 

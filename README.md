@@ -29,13 +29,13 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.15.0`
+## Latest Release: `1.16.0`
 
-- **Self-sufficient `smart_context`:** Primary files always include content (signatures with params and types) in balanced mode. Budget raised to 12K tokens. Eliminates 3-5 follow-up `smart_read` calls per task — net ~25-30% fewer tokens per task.
-- **`entryFile` guarantee:** Entry file always stays in top results after reranking (+100 score).
-- **Diagnostic logging:** Silent `catch {}` blocks in `smart_context` now log to stderr.
-- **smart_search noise reduction (v1.14.0):** Results capped to top 15 files, `maxFiles` parameter, broad-query hints.
-- **Token optimization (v1.13.0):** JSON compact output, removed metrics from responses, signatures with real params — 8K-30K tokens/session saved.
+- **Arrow function signatures:** `signatures` mode now extracts full parameter signatures from `const fn = (params) => {}` declarations (was names-only). Agents see the API surface of every function, not just named `function` declarations.
+- **Dependencies with matched symbols always read content:** When `smart_context` finds a dependency file containing query-relevant symbols, it reads its content even if the index signal is strong — eliminates follow-up `smart_read` calls.
+- **`matchedFiles` reflects capped count:** `smart_search` now reports the number of files actually shown (capped), with `totalFiles` for the uncapped count when it differs.
+- **Real-world eval harness:** New `npm run eval:realworld` — 10 scenario battery testing self-sufficiency, token efficiency, and search noise against the MCP's own codebase.
+- **Self-sufficiency rate: 63% → 88%** (7/8 context scenarios). Follow-up reads dropped from 5 to 0.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 

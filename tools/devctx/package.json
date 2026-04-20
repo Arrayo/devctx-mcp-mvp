@@ -1,7 +1,7 @@
 {
   "name": "smart-context-mcp",
   "mcpName": "io.github.Arrayo/smart-context-mcp",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "MCP server that reduces agent token usage by 90% with intelligent context compression, task checkpoint persistence, and workflow-aware agent guidance.",
   "author": "Francisco Caballero Portero <fcp1978@hotmail.com>",
   "type": "module",
@@ -69,6 +69,8 @@
     "eval:context": "node ./evals/harness.js --tool=context",
     "eval:both": "node ./evals/harness.js --tool=both",
     "eval:self": "node ./evals/harness.js --root=../.. --corpus=./evals/corpus/self-tasks.json",
+    "eval:realworld": "node ./evals/realworld-eval.js",
+    "eval:realworld:json": "node ./evals/realworld-eval.js --json",
     "eval:report": "node ./evals/report.js",
     "report:metrics": "node ./scripts/report-metrics.js",
     "report:workflows": "node ./scripts/report-workflow-metrics.js",

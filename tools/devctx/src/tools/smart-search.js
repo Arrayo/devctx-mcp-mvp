@@ -533,7 +533,8 @@ export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, _testFor
     ...(validIntent ? { intent: validIntent } : {}),
     ...(indexHits ? { indexBoosted: indexHits.size } : {}),
     totalMatches: dedupedMatches.length,
-    matchedFiles: groups.length,
+    matchedFiles: cappedGroups.length,
+    ...(groups.length > cappedGroups.length ? { totalFiles: groups.length } : {}),
     topFiles: cappedGroups.slice(0, 10).map((group) => ({ file: group.file, count: group.count, score: group.score })),
     matches: compressedText,
   };

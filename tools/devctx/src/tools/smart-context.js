@@ -275,6 +275,7 @@ const shouldReadContentForItem = (item, payload, detailMode, includeSet, intent)
   }
 
   if (item.role === 'dependency') {
+    if ((item.matchedSymbols?.length ?? 0) > 0) return true;
     return !strongIndexSignal && (payload.symbols?.length ?? 0) === 0;
   }
 

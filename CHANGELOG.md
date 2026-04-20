@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.0] - 2026-04-20
+
+### Changed — signatures quality + context self-sufficiency
+
+- **Arrow function signatures in `signatures` mode.** `const fn = (a, b) => {}` now shows parameters instead of just the name. Applies to all arrow functions and function expressions assigned to variables. (~70% of JS/TS functions are written this way.)
+- **Dependencies with `matchedSymbols` always read content.** `shouldReadContentForItem` now returns `true` for dependency files that contain query-relevant symbols, even when the index signal is strong. Previously these files were returned as symbol lists only, forcing follow-up `smart_read` calls.
+- **`matchedFiles` reflects capped output.** `smart_search` now reports the number of files actually shown (after cap). `totalFiles` is added only when uncapped count differs, keeping the response compact.
+- **Real-world eval harness** (`npm run eval:realworld`). 10 diverse scenarios (debug, code-review, refactoring, testing, architecture, search comparison, entryFile, tight budget) run against the MCP's own codebase. Measures self-sufficiency, follow-up reads, token usage, and search noise. Fully read-only.
+
+### Impact
+
+Self-sufficiency rate rises from 63% to 88% (7/8 context scenarios pass without follow-up reads). Follow-up `smart_read` calls drop from 5 to 0. Token waste from follow-ups drops to 0%.
+
 ## [1.15.0] - 2026-04-20
 
 ### Changed — smart_context self-sufficiency
