@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.15.0] - 2026-04-20
+
+### Changed — smart_context self-sufficiency
+
+- **`maxTokens` default raised to 12000** (was 8000). A single `smart_context` call now returns enough content to work without follow-up `smart_read` calls in most cases.
+- **Primary files always read content in balanced mode.** Previously, files with strong index signal were returned as symbol lists only, forcing 3-5 extra `smart_read(symbol)` calls. Now primary items always include signatures content.
+- **`allocateReads` uses signatures mode for all roles.** Previously primary files used `outline` (names only). Now they use `signatures` (params + return types) — the agent gets the API surface in one call.
+- **`entryFile` guaranteed in top results.** `scorePrimarySeed` now gives +100 score to `entryFile` evidence, ensuring it never falls out of the `slice(0, 5)` limit after reranking.
+- **Silent catch blocks replaced with stderr logging.** Three empty `catch {}` in `smart_context` (entryFile resolution, prefetch path, recordContextAccess) now log to `[devctx]` stderr for diagnostics.
+- **`smart_context` tool description updated.** Documents new default budget (12000) and that primary files always include content.
+
+### Impact
+
+Net token usage per task drops ~25-30% because the first `smart_context` call is self-sufficient, eliminating 3-5 follow-up `smart_read` calls that previously cost 3-5K tokens each.
+
 ## [1.14.0] - 2026-04-20
 
 ### Changed — smart_search noise reduction

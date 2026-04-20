@@ -158,7 +158,7 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_context',
-    'PREFERRED for multi-file tasks. Gets curated context in one call — replaces the manual search → read → read cycle. Combines search + graph expansion + selective reading. Returns relevant files with symbols and content, optimized for tokens. Options: intent, maxTokens (budget), diff (true for HEAD or branch name), detail (minimal/balanced/deep), include (content/graph/hints/symbolDetail), prefetch (true for predictive loading). Call this FIRST before individual smart_read/smart_search calls.',
+    'PREFERRED for multi-file tasks. Gets curated context in one call — replaces the manual search → read → read cycle. Combines search + graph expansion + selective reading. Primary files always include content (signatures) in balanced mode — reduces follow-up smart_read calls. Options: intent, maxTokens (budget, default 12000), diff (true for HEAD or branch name), detail (minimal/balanced/deep), include (content/graph/hints/symbolDetail), prefetch (true for predictive loading). Call this FIRST before individual smart_read/smart_search calls.',
     {
       task: z.string(),
       intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),

@@ -277,6 +277,7 @@ export const scorePrimarySeed = (seed, task, intent) => {
   let score = 0;
 
   for (const evidence of seed.evidence ?? []) {
+    if (evidence.type === 'entryFile') { score += 100; continue; }
     if (evidence.type !== 'searchHit') continue;
     score += Math.max(0, 40 - ((evidence.rank ?? 1) - 1) * 8);
     if (!evidence.query) continue;

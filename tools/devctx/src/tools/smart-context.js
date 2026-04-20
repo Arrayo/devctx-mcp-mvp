@@ -196,9 +196,7 @@ export const allocateReads = (files, maxTokens, intent, detailMode = 'balanced')
 
     const mode = detailMode === 'deep'
       ? 'full'
-      : best.role === 'primary' && !tightBudget
-        ? 'outline'
-        : 'signatures';
+      : 'signatures';
 
     roleLimits[best.role]--;
     selected.push(best);
@@ -269,8 +267,7 @@ const shouldReadContentForItem = (item, payload, detailMode, includeSet, intent)
   const strongIndexSignal = hasStrongIndexSignal(payload);
 
   if (item.role === 'primary') {
-    if ((item.matchedSymbols?.length ?? 0) > 0) return false;
-    return !strongIndexSignal;
+    return true;
   }
 
   if (item.role === 'test' && intent === 'tests') {
@@ -353,7 +350,7 @@ const DEFAULT_INCLUDE = ['content', 'graph', 'hints', 'symbolDetail'];
 export const smartContext = async ({
   task,
   intent,
-  maxTokens = 8000,
+  maxTokens = 12000,
   entryFile,
   diff,
   detail = 'balanced',
@@ -518,7 +515,7 @@ export const smartContext = async ({
           primarySeeds.unshift({ rel, absPath: abs, evidence: [{ type: 'entryFile' }] });
         }
       }
-    } catch { /* invalid path — skip */ }
+    } catch (err) { process.stderr.write(`[devctx] smart_context: entryFile "${entryFile}" skipped: ${err.message}\n`); }
   }
 
   await ensureIndexReady({ root });
@@ -549,7 +546,7 @@ export const smartContext = async ({
                 });
               }
             }
-          } catch {}
+          } catch (err) { process.stderr.write(`[devctx] smart_context: prefetch path "${predicted.path}" skipped: ${err.message}\n`); }
         }
       }
     } catch (error) {
@@ -759,7 +756,7 @@ export const smartContext = async ({
           order: idx
         }))
       });
-    } catch {}
+    } catch (err) { process.stderr.write(`[devctx] smart_context: recordContextAccess failed: ${err.message}\n`); }
   }
 
   const COVERAGE_RANK = { full: 2, partial: 1, none: 0 };

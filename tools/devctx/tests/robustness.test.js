@@ -3169,14 +3169,14 @@ describe('smart_context detail and include modes', () => {
     assert.ok(result.stats.detailMode === 'balanced');
   });
 
-  it('balanced mode keeps strong entry-file primaries index-first when previews already cover the file well', async () => {
+  it('balanced mode always reads content for primary entry-file items', async () => {
     const result = await smartContext({
       task: 'review the auth flow entry point and main middleware',
       entryFile: 'src/auth/middleware.js',
     });
     const primary = result.context.find((c) => c.role === 'primary' && c.file === 'src/auth/middleware.js');
     assert.ok(primary, 'should include the entry file as primary');
-    assert.ok(!primary.content, 'balanced mode should skip content when index previews are already strong');
+    assert.ok(primary.content && primary.content.length > 0, 'balanced mode should always read content for primaries');
   });
 
   it('balanced mode still reads content for primaries with weak index metadata', async () => {

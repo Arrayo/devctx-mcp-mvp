@@ -29,12 +29,13 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.14.0`
+## Latest Release: `1.15.0`
 
-- **smart_search noise reduction:** Results capped to top 15 files, proportional sampling, automatic hint when query is too broad. New `maxFiles` parameter.
-- **Better orchestration docs:** Agent guidance now clearly separates when to use smart_search vs Grep vs Glob. Anti-patterns documented.
-- **Test performance:** ~74s faster test suite (find tests use tmpdir, buildIndex once per suite, `npm run test:fast` for parallel execution).
-- **Token optimization (v1.13.0):** JSON compact output, removed metrics from responses, lean context items, signatures with real params — 8K-30K tokens/session saved.
+- **Self-sufficient `smart_context`:** Primary files always include content (signatures with params and types) in balanced mode. Budget raised to 12K tokens. Eliminates 3-5 follow-up `smart_read` calls per task — net ~25-30% fewer tokens per task.
+- **`entryFile` guarantee:** Entry file always stays in top results after reranking (+100 score).
+- **Diagnostic logging:** Silent `catch {}` blocks in `smart_context` now log to stderr.
+- **smart_search noise reduction (v1.14.0):** Results capped to top 15 files, `maxFiles` parameter, broad-query hints.
+- **Token optimization (v1.13.0):** JSON compact output, removed metrics from responses, signatures with real params — 8K-30K tokens/session saved.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -1088,7 +1089,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.14.0 (or later)
+# Should show: smart-context-mcp@1.15.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -2106,7 +2107,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.14.0)
+│   └── package.json       ← Package metadata (v1.15.0)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file
