@@ -29,15 +29,12 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.13.0`
+## Latest Release: `1.14.0`
 
-Major features:
-- **Auto-build index on first use** - Zero-configuration search (bug fixed in v1.12.0)
-- **Streaming progress notifications** for real-time visibility into long-running operations
-- **Fast path for simple tasks** to skip orchestration overhead (3-5x faster)
-- **Inline metrics display** with human-readable summaries in every tool response
-- **Shared orchestration layer** for automatic context management
-- **90% token reduction** through intelligent compression
+- **smart_search noise reduction:** Results capped to top 15 files, proportional sampling, automatic hint when query is too broad. New `maxFiles` parameter.
+- **Better orchestration docs:** Agent guidance now clearly separates when to use smart_search vs Grep vs Glob. Anti-patterns documented.
+- **Test performance:** ~74s faster test suite (find tests use tmpdir, buildIndex once per suite, `npm run test:fast` for parallel execution).
+- **Token optimization (v1.13.0):** JSON compact output, removed metrics from responses, lean context items, signatures with real params — 8K-30K tokens/session saved.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -750,19 +747,24 @@ Read files in compressed modes instead of loading full content.
 
 ### smart_search
 
-Intent-aware code search with automatic ranking.
+Intent-aware code search with ranked, deduplicated results and index boosting.
 
 ```javascript
+// Find where a symbol is used
+{ query: 'validateToken', intent: 'implementation' }
+
 // Debug intent: prioritizes errors, logs, exception handling
 { query: 'authentication error', intent: 'debug' }
 
-// Implementation intent: prioritizes source files, changed files
-{ query: 'UserModel', intent: 'implementation' }
+// Limit results
+{ query: 'UserModel', maxFiles: 5 }
 ```
 
 **Intents:** `implementation`, `debug`, `tests`, `config`, `docs`, `explore`
 
-**When to use:** Searching for code, errors, or patterns. Much better than grep.
+**Best for:** Finding symbol definitions/usages, understanding call chains, locating implementations.
+
+**NOT ideal for:** Exact string matching (use Grep), finding files by name (use Glob), broad multi-word queries (generates noise — results include a hint when >30 files match).
 
 ---
 
@@ -1086,7 +1088,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.7.6 (or later)
+# Should show: smart-context-mcp@1.14.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -1350,7 +1352,7 @@ npm run benchmark
 ```
 
 Runs all verification suites:
-- 598+ unit tests (99%+ coverage)
+- 740+ unit tests
 - 14 feature verifications
 - Synthetic corpus evaluation
 - Real project evaluation
@@ -1657,7 +1659,7 @@ See [MCP Prompts Documentation](./docs/mcp-prompts.md) for complete guide.
 
 ```bash
 npm run verify  # Feature verification (14 tools)
-npm test        # Unit tests (435 tests)
+npm test        # Unit tests (740+ tests)
 npm run eval    # Synthetic corpus
 npm run eval:self  # Real project
 ```
@@ -1973,6 +1975,7 @@ export DEVCTX_CACHE_WARMING=false
   query: string;
   intent?: 'implementation' | 'debug' | 'tests' | 'config' | 'docs' | 'explore';
   cwd?: string;
+  maxFiles?: number; // 1-50, default 15
 }
 ```
 
@@ -2088,7 +2091,7 @@ export DEVCTX_CACHE_WARMING=false
 - ✅ **Workflow tracking** (debugging, code review, refactoring, testing, architecture)
 - ✅ **Task runner CLI** with continuity-aware workflows
 - ✅ **Comparative metrics** for cross-client benchmarking
-- ✅ **Production-ready** with 600+ tests and release-gated benchmarks
+- ✅ **Production-ready** with 740+ tests and release-gated benchmarks
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -2100,10 +2103,10 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 /
 ├── tools/devctx/          ← Publishable package
 │   ├── src/               ← Source code
-│   ├── tests/             ← 598+ unit tests
+│   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.7.2)
+│   └── package.json       ← Package metadata (v1.14.0)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file

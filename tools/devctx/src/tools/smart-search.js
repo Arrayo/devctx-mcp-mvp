@@ -324,16 +324,20 @@ const buildZeroResultsMessage = (query, searchMode, provenance) => {
   return lines.join('\n');
 };
 
-const buildCompactResult = (groups, totalMatches, query, root, searchMode, provenance) => {
+const MAX_RESULT_FILES = 15;
+
+const buildCompactResult = (groups, totalMatches, query, root, searchMode, provenance, totalFiles) => {
   if (totalMatches === 0) {
     return buildZeroResultsMessage(query, searchMode, provenance);
   }
 
   const modeLabel = searchMode === 'exact' ? '' : searchMode === 'regex' ? ' [regex fallback]' : ` [term expansion: ${(provenance?.expandedTerms ?? []).join(', ')}]`;
 
+  const topGroups = groups.slice(0, MAX_RESULT_FILES);
+
   if (totalMatches <= 20) {
     const header = modeLabel ? `# Search mode:${modeLabel}\n\n` : '';
-    return header + groups
+    return header + topGroups
       .flatMap((group) => group.matches)
       .map(formatMatch)
       .join('\n');
@@ -341,29 +345,34 @@ const buildCompactResult = (groups, totalMatches, query, root, searchMode, prove
 
   const lines = [
     `query: ${query}${modeLabel}`,
-    `root: ${root}`,
-    `total matches: ${totalMatches}`,
-    `matched files: ${groups.length}`,
+    `total: ${totalMatches} matches in ${totalFiles ?? groups.length} files${totalFiles && totalFiles > groups.length ? ` (showing top ${groups.length})` : ''}`,
     '',
     '# Top files',
   ];
 
-  for (const group of groups.slice(0, 10)) {
+  for (const group of topGroups.slice(0, 10)) {
     lines.push(`${group.count} match(es), score ${group.score} :: ${group.file}`);
   }
 
   lines.push('', '# Sample matches');
 
-  for (const group of groups.slice(0, 5)) {
-    for (const match of group.matches.slice(0, 3)) {
+  const topScore = topGroups[0]?.score ?? 0;
+  for (const group of topGroups.slice(0, 5)) {
+    const linesPerFile = group.score >= topScore * 0.7 ? 5 : 2;
+    for (const match of group.matches.slice(0, linesPerFile)) {
       lines.push(formatMatch(match));
     }
+  }
+
+  const fileCount = totalFiles ?? groups.length;
+  if (fileCount > 30) {
+    lines.push('', `# Note: ${fileCount} files matched — query may be too broad. Use Grep for exact pattern matching.`);
   }
 
   return lines.join('\n');
 };
 
-export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = false, progress: enableProgress = false }) => {
+export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, _testForceWalk = false, progress: enableProgress = false }) => {
   const progress = enableProgress ? createProgressReporter('smart_search') : null;
   const startTime = Date.now();
   
@@ -463,8 +472,11 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     }
   }
 
+  const effectiveMaxFiles = maxFiles ?? MAX_RESULT_FILES;
+  const cappedGroups = groups.slice(0, effectiveMaxFiles);
+
   const rawText = dedupedMatches.map(formatMatch).join('\n');
-  const compressedText = truncate(buildCompactResult(groups, dedupedMatches.length, query, root, searchMode, provenance), 5000);
+  const compressedText = truncate(buildCompactResult(cappedGroups, dedupedMatches.length, query, root, searchMode, provenance, groups.length), 5000);
   const metrics = buildMetrics({
     tool: 'smart_search',
     target: `${root} :: ${query}`,
@@ -522,7 +534,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, _testForceWalk = f
     ...(indexHits ? { indexBoosted: indexHits.size } : {}),
     totalMatches: dedupedMatches.length,
     matchedFiles: groups.length,
-    topFiles: groups.slice(0, 10).map((group) => ({ file: group.file, count: group.count, score: group.score })),
+    topFiles: cappedGroups.slice(0, 10).map((group) => ({ file: group.file, count: group.count, score: group.score })),
     matches: compressedText,
   };
 

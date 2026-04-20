@@ -15,4 +15,4 @@ globs: ["**/*.{js,ts,jsx,tsx,py,go,rs,java}"]
 6. smart_turn(end, summary='...')
 ```
 
-**Key:** `smart_context(diff=true)` replaces manual file-by-file reading. Only use `smart_read(symbol)` for functions that need deeper inspection.
+**Key:** `smart_context(diff=true)` replaces manual file-by-file reading. Only use `smart_read(symbol)` for functions that need deeper inspection. For verifying exact patterns (imports, string literals), use native Grep instead of smart_search.

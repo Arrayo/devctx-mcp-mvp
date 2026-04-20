@@ -17,4 +17,4 @@ globs: ["**/*.test.*", "**/*.spec.*", "**/tests/**"]
 7. smart_turn(end, summary='...')
 ```
 
-**Key:** Use `intent=debug` to rank error-related results higher. Use `mode=symbol` — never read full files to debug a single function.
+**Key:** Use `intent=debug` to rank error-related results higher. Use `mode=symbol` — never read full files to debug a single function. For exact error strings, native Grep is faster than smart_search.

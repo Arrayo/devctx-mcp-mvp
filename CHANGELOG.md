@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.14.0] - 2026-04-20
+
+### Changed — smart_search noise reduction
+
+- **Result cap:** Output limited to top 15 files by default (was unlimited). New `maxFiles` parameter (1-50) lets agents control this.
+- **Proportional samples:** High-scoring files get 5 sample lines, low-scoring files get 2 (was 3 for all).
+- **Broad query hint:** When >30 files match, results include a note suggesting Grep for exact pattern matching.
+- **Tool description rewritten:** Now explicitly states when NOT to use smart_search (exact matches → Grep, file lookup → Glob, broad queries → noisy).
+
+### Changed — Agent orchestration docs
+
+- **CLAUDE.md:** Added decision flow for smart_search vs Grep vs Glob. Added anti-patterns for broad queries and file-name searches.
+- **AGENTS.md:** Tool selection table now separates symbol search (smart_search) from exact search (Grep) and file lookup (Glob).
+- **Tool descriptions (server.js):** `smart_read` emphasizes reading cascade. `smart_context` marked as PREFERRED with "call this FIRST". `smart_search` lists NOT-ideal scenarios. `smart_shell` trimmed.
+- **MCP prompts:** Rewritten to be more directive — emphasize `smart_context` first, cascade, and never skip to full.
+- **Profiles-compact:** All 5 workflows updated — removed `detail=moderate` (→ `balanced`), trimmed prose, added "Key:" guidance per workflow.
+
+### Changed — Smoke test alignment
+
+- **smoke-test.js:** Removed assertions on deleted fields (`metrics.rawTokens`, `metrics.compressedTokens`, `engine`). Aligned with v1.13.0 lean responses.
+
+### Changed — Test performance (~74s faster)
+
+- **find hardening tests:** Now use a minimal tmpdir instead of the full repo (48s → 1s).
+- **10 smart_context suites:** `buildIndex` moved from `beforeEach` to `before` (index built once per suite, not per test).
+- **`test:fast` script:** New `npm run test:fast` runs with `--test-concurrency=4` (~3x faster, may have intermittent SQLite contention).
+
 ## [1.13.0] - 2026-04-17
 
 ### Changed — Token Optimization (8K-30K tokens/session saved)

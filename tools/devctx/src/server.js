@@ -146,13 +146,14 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_search',
-    'Search code across the project using ripgrep (with filesystem fallback). Returns grouped, ranked results. Optional intent (implementation/debug/tests/config/docs/explore) adjusts ranking. Use instead of native Grep for ranked, deduplicated results with index boosting.',
+    'Search code with ranked, deduplicated results and index boosting. Best for: finding where a symbol is defined/used, understanding call chains, locating implementations. NOT ideal for: exact string matching (use Grep), finding files by name (use Glob), broad multi-word queries (generates noise). Optional intent adjusts ranking. maxFiles caps the number of files returned (default 15). When >30 files match, results include a hint suggesting Grep instead.',
     {
       query: z.string(),
       cwd: z.string().optional(),
       intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
+      maxFiles: z.number().int().min(1).max(50).optional(),
     },
-    async ({ query, cwd = '.', intent }) => asTextResult(await smartSearch({ query, cwd, intent })),
+    async ({ query, cwd = '.', intent, maxFiles }) => asTextResult(await smartSearch({ query, cwd, intent, maxFiles })),
   );
 
   server.tool(
