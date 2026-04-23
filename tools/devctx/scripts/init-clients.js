@@ -373,7 +373,15 @@ const buildPreCommitHookSection = () => {
   return `${HOOK_SECTION_START}
 # Prevent committing project-local devctx state.
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-node "$(npm root -g)/smart-context-mcp/scripts/check-repo-safety.js" --project-root "$repo_root" 2>/dev/null || true
+devctx_script="$(npm root -g 2>/dev/null)/smart-context-mcp/scripts/check-repo-safety.js"
+if [ -f "$devctx_script" ]; then
+  node "$devctx_script" --project-root "$repo_root"
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "devctx: commit blocked by repo safety checks." >&2
+    exit "$status"
+  fi
+fi
 ${HOOK_SECTION_END}`;
 };
 
