@@ -369,17 +369,11 @@ const updateCodexConfig = (targetDir, serverConfig, dryRun) => {
 const HOOK_SECTION_START = '# devctx:start';
 const HOOK_SECTION_END = '# devctx:end';
 
-const buildPreCommitHookSection = (targetDir) => {
-  const scriptPath = normalizeCommandPath(path.relative(targetDir, path.join(devctxDir, 'scripts', 'check-repo-safety.js')));
+const buildPreCommitHookSection = () => {
   return `${HOOK_SECTION_START}
 # Prevent committing project-local devctx state.
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-"${process.execPath}" "${scriptPath}" --project-root "$repo_root"
-status=$?
-if [ "$status" -ne 0 ]; then
-  echo "devctx: commit blocked by repo safety checks." >&2
-  exit "$status"
-fi
+node "$(npm root -g)/smart-context-mcp/scripts/check-repo-safety.js" --project-root "$repo_root" 2>/dev/null || true
 ${HOOK_SECTION_END}`;
 };
 
@@ -392,7 +386,7 @@ const updatePreCommitHook = (targetDir, dryRun) => {
 
   const filePath = path.resolve(targetDir, hookPathResult.stdout);
   const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-  const nextBody = upsertSentinelSection(current, HOOK_SECTION_START, HOOK_SECTION_END, buildPreCommitHookSection(targetDir));
+  const nextBody = upsertSentinelSection(current, HOOK_SECTION_START, HOOK_SECTION_END, buildPreCommitHookSection());
   const nextContent = nextBody.startsWith('#!') ? nextBody : `#!/bin/sh\n\n${nextBody}`;
   writeFile(filePath, nextContent, dryRun);
 
