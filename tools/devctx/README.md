@@ -56,7 +56,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.16.0 (or later)
+# Should show: smart-context-mcp@1.16.1 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -66,7 +66,18 @@ npm uninstall -g smart-context-mcp
 npm install -g smart-context-mcp
 ```
 
-**After updating:** Restart your AI client to load the new version.
+**After updating:** The binary is updated globally, but agent rules (`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) in each project are generated from the installed version and are **not updated automatically**.
+
+Re-run init after each update to get the latest rules:
+
+```bash
+# Re-apply rules to a project after updating
+npx smart-context-init --target /path/to/your/project --clients cursor
+# or for all clients
+npx smart-context-init --target /path/to/your/project --clients all
+```
+
+Then restart your AI client to load the new version.
 
 ---
 
