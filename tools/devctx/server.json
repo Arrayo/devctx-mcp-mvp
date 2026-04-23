@@ -6,12 +6,12 @@
     "url": "https://github.com/Arrayo/smart-context-mcp",
     "source": "github"
   },
-  "version": "1.16.1",
+  "version": "1.16.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "smart-context-mcp",
-      "version": "1.16.1",
+      "version": "1.16.2",
       "transport": {
         "type": "stdio"
       },

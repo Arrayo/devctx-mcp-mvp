@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.2] - 2026-04-17
+
+### Fixed
+- **Pre-commit hook:** No longer uses hardcoded Node path (`process.execPath`) which broke after nvm upgrades. Now uses `node` from PATH + `npm root -g` to resolve the script. Added `|| true` so the hook is advisory-only — it never blocks commits if the script is unavailable.
+- **Agent rules:** Added explicit tool substitution block (`smart_search OVER Grep`, `smart_read OVER Read`, `smart_shell OVER Shell`) to `agentRuleBody` so agents consistently prefer devctx tools. Re-run `npx smart-context-init` to apply to existing projects.
+
+### Docs
+- Documented that agent rules (`.cursorrules`, `CLAUDE.md`, `AGENTS.md`) are not updated automatically on package upgrade — added explicit re-init instructions to both READMEs.
+
+## [1.16.1] - 2026-04-17
+
+### Changed
+- **Agent rules:** Stronger tool substitution guidance (`smart_search OVER Grep/SemanticSearch`, `smart_read OVER Read` for large/multi-file context, `smart_shell OVER Shell` for build/test/lint/git checks, `smart_turn(end, milestone)` after every significant change).
+
 ## [1.16.0] - 2026-04-20
 
 ### Changed — signatures quality + context self-sufficiency
