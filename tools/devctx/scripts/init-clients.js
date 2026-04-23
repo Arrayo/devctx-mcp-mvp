@@ -414,6 +414,12 @@ Prefer devctx MCP for non-trivial tasks:
 - smart_shell instead of Shell for safe diagnostics
 - smart_turn(end, event=milestone) after meaningful progress
 
+Tool substitution rules (use devctx INSTEAD of native tools):
+- smart_search OVER Grep/SemanticSearch for any codebase exploration or "how does X work" queries
+- smart_read/smart_read_batch OVER Read when reading multiple files or large files (>200 lines) for context
+- smart_shell OVER Shell for build/test/lint/git checks
+- smart_turn(end, event=milestone) after EVERY significant code change, not just at session end
+
 If devctx MCP is installed and enabled, default to devctx on every non-trivial multi-file or multi-step task. Skip it only for genuinely trivial work, and then state why it was skipped.
 
 Client contract:
