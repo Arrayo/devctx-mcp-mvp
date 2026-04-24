@@ -35,6 +35,17 @@ import {
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
 
+const SERVER_INSTRUCTIONS = `devctx — compressed context, search, and session handoff for long work (migrations, multi-file refactors, multi-session tasks).
+
+smart_turn (session continuity — read this before calling):
+- START: phase "start". Pass userPrompt (current goal). ensureSession true recommended when you want persistence. Use at the beginning of substantial work or when resuming after a break — not for one-line fixes or single-shot questions.
+- END: phase "end". Pass event: milestone | blocker | task_complete. Pass sessionId if you have it; include update (nextStep, completed, etc.) when checkpointing progress. Call after a meaningful slice of work (close a phase), not after every trivial edit.
+- SKIP smart_turn entirely for trivial or same-session point tasks (the tool schema also warns about this).
+
+Source of truth: devctx does not replace git history, PRs, or repo docs (e.g. MIGRATION.md). If end was not called or work was not committed, those remain authoritative.
+
+Other entry points: smart_context for curated multi-file context; smart_search with intent for exploration; smart_read in outline|signatures|symbol before full reads; smart_shell for safe git/npm diagnostics.`;
+
 export const asTextResult = (result) => ({
   content: [
     {
@@ -52,10 +63,10 @@ export const createDevctxServer = () => {
     process.exit(1);
   }
 
-  const server = new McpServer({
-    name: 'devctx',
-    version,
-  });
+  const server = new McpServer(
+    { name: 'devctx', version },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
 
   setServerForStreaming(server);
 

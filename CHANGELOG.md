@@ -2,10 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.3] - 2026-04-23
+
+### Added
+- **MCP server `instructions`:** Cursor and other clients that surface server instructions now get a short guide up front: when to use `smart_turn(start)` vs `smart_turn(end)`, required-ish fields (`phase`, `userPrompt`, `event`, `sessionId`), when to skip, and that git/PR/repo docs remain source of truth. Reduces need to open each tool JSON descriptor before the first call.
+
 ## [1.16.2] - 2026-04-17
 
 ### Fixed
-- **Pre-commit hook:** No longer uses hardcoded Node path (`process.execPath`) which broke after nvm upgrades. Now uses `node` from PATH + `npm root -g` to resolve the script. Added `|| true` so the hook is advisory-only — it never blocks commits if the script is unavailable.
+- **Pre-commit hook:** No longer uses hardcoded Node path (`process.execPath`) which broke after nvm upgrades. Resolves script via `npm root -g`, runs only if the file exists, and still blocks commits with the usual message when repo safety fails.
 - **Agent rules:** Added explicit tool substitution block (`smart_search OVER Grep`, `smart_read OVER Read`, `smart_shell OVER Shell`) to `agentRuleBody` so agents consistently prefer devctx tools. Re-run `npx smart-context-init` to apply to existing projects.
 
 ### Docs

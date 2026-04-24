@@ -29,7 +29,7 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.16.2`
+## Latest Release: `1.16.3`
 
 - **Arrow function signatures:** `signatures` mode now extracts full parameter signatures from `const fn = (params) => {}` declarations (was names-only). Agents see the API surface of every function, not just named `function` declarations.
 - **Dependencies with matched symbols always read content:** When `smart_context` finds a dependency file containing query-relevant symbols, it reads its content even if the index signal is strong — eliminates follow-up `smart_read` calls.
@@ -1089,7 +1089,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.16.2 (or later)
+# Should show: smart-context-mcp@1.16.3 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -2118,7 +2118,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.16.2)
+│   └── package.json       ← Package metadata (v1.16.3)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file
