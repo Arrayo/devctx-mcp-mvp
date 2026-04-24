@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.4] - 2026-04-24
+
+### Added
+- **Multi-agent continuity foundation:** SQLite schema v6 now persists `tasks`, `task_handoffs`, `agent_runs`, and links `task_id`/`agent_id` across sessions, session events, cache, and hook state.
+- **Task-aware continuity APIs:** `smart_summary` now resolves by `taskId`, persists task metadata, and surfaces latest handoff; `smart_turn(start)` now exposes `task` + `handoff` context for the next agent.
+- **Adapter handoff persistence:** Claude/Cursor adapters now persist `taskId`/`agentId`, register agent runs, and write automatic handoffs on end-of-turn carryover.
+
+### Fixed
+- **SQLite insert mismatch:** `smart_summary` session event insert now uses the correct placeholder count for the expanded v6 schema (`8 columns / 8 values`), removing cascading `ERR_SQLITE_ERROR` failures.
+- **Adapter hook key stability:** `agentId='main'` now maps to the expected `:main:` hook key (not subagent), restoring turn-state persistence and stop-flow enforcement in adapter/hook tests.
+- **Prefetch test flakiness:** Added lock-retry handling in `smart-context-prefetch` tests to tolerate transient `database is locked` conditions under full-suite load.
+
 ## [1.16.3] - 2026-04-23
 
 ### Added

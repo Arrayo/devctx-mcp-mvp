@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { projectRoot } from '../utils/runtime-config.js';
 
 export const STATE_DB_FILENAME = 'state.sqlite';
-export const SQLITE_SCHEMA_VERSION = 5;
+export const SQLITE_SCHEMA_VERSION = 6;
 export const ACTIVE_SESSION_SCOPE = 'project';
 export const STATE_DB_SOFT_MAX_BYTES = 32 * 1024 * 1024;
 const STATE_DB_BUSY_TIMEOUT_MS = 1000;
@@ -14,6 +14,7 @@ const STATE_DB_LOCK_RETRY_ATTEMPTS = 3;
 const STATE_DB_LOCK_RETRY_DELAY_MS = 75;
 export const EXPECTED_TABLES = [
   'active_session',
+  'agent_runs',
   'context_access',
   'hook_turn_state',
   'meta',
@@ -21,6 +22,8 @@ export const EXPECTED_TABLES = [
   'session_events',
   'sessions',
   'summary_cache',
+  'task_handoffs',
+  'tasks',
   'workflow_metrics',
 ];
 
@@ -177,6 +180,69 @@ const MIGRATIONS = [
         ON workflow_metrics(workflow_type, created_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_workflow_metrics_session
         ON workflow_metrics(session_id, created_at DESC)`,
+    ],
+  },
+  {
+    version: 6,
+    statements: [
+      'ALTER TABLE sessions ADD COLUMN task_id TEXT',
+      'ALTER TABLE sessions ADD COLUMN agent_id TEXT',
+      'ALTER TABLE sessions ADD COLUMN branch_name TEXT',
+      'ALTER TABLE sessions ADD COLUMN worktree_path TEXT',
+      'ALTER TABLE session_events ADD COLUMN task_id TEXT',
+      'ALTER TABLE session_events ADD COLUMN agent_id TEXT',
+      'ALTER TABLE session_events ADD COLUMN event_kind TEXT',
+      'ALTER TABLE summary_cache ADD COLUMN task_id TEXT',
+      'ALTER TABLE hook_turn_state ADD COLUMN task_id TEXT',
+      'ALTER TABLE hook_turn_state ADD COLUMN agent_id TEXT',
+      'ALTER TABLE hook_turn_state ADD COLUMN parent_agent_id TEXT',
+      'ALTER TABLE hook_turn_state ADD COLUMN conversation_id TEXT',
+      `CREATE TABLE IF NOT EXISTS tasks (
+        task_id TEXT PRIMARY KEY,
+        project_scope TEXT NOT NULL,
+        canonical_goal TEXT NOT NULL DEFAULT '',
+        normalized_goal TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'planning',
+        branch_name TEXT,
+        worktree_path TEXT,
+        last_session_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS task_handoffs (
+        handoff_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id TEXT NOT NULL,
+        session_id TEXT,
+        from_agent_id TEXT,
+        to_agent_id TEXT,
+        trigger TEXT NOT NULL,
+        summary_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS agent_runs (
+        run_id TEXT PRIMARY KEY,
+        task_id TEXT,
+        agent_id TEXT NOT NULL,
+        parent_agent_id TEXT,
+        client TEXT NOT NULL,
+        conversation_id TEXT,
+        session_id TEXT,
+        role TEXT,
+        started_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_task_updated
+        ON sessions(task_id, updated_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_session_events_task_created
+        ON session_events(task_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_summary_cache_task_updated
+        ON summary_cache(task_id, updated_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_tasks_updated
+        ON tasks(updated_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_task_handoffs_task_created
+        ON task_handoffs(task_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_agent_runs_task_updated
+        ON agent_runs(task_id, updated_at DESC)`,
     ],
   },
 ];
@@ -672,6 +738,60 @@ const parseJsonText = (value, fallback = {}) => {
 const hashLegacyPayload = (prefix, payload) =>
   `${prefix}:${createHash('sha1').update(payload).digest('hex')}`;
 
+const normalizeTaskText = (value) =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const slugTaskText = (value) =>
+  normalizeTaskText(value)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48) || 'task';
+
+export const deriveTaskId = ({ goal, branchName = '', worktreePath = '' } = {}) => {
+  const canonicalGoal = String(goal ?? '').trim();
+  const slug = slugTaskText(canonicalGoal);
+  const identity = JSON.stringify({
+    goal: normalizeTaskText(canonicalGoal),
+    branchName: normalizeTaskText(branchName),
+    worktreePath: normalizeTaskText(worktreePath),
+  });
+  const digest = createHash('sha1').update(identity).digest('hex').slice(0, 10);
+  return `${slug}-${digest}`;
+};
+
+const deriveTaskFields = ({
+  taskId = null,
+  goal = '',
+  branchName = '',
+  worktreePath = projectRoot,
+} = {}) => {
+  const canonicalGoal = typeof goal === 'string' ? goal.trim() : '';
+  const normalizedGoal = normalizeTaskText(canonicalGoal);
+  const resolvedBranchName = typeof branchName === 'string' && branchName.trim().length > 0
+    ? branchName.trim()
+    : null;
+  const resolvedWorktreePath = typeof worktreePath === 'string' && worktreePath.trim().length > 0
+    ? worktreePath.trim()
+    : projectRoot;
+
+  return {
+    taskId: typeof taskId === 'string' && taskId.trim().length > 0
+      ? taskId.trim()
+      : deriveTaskId({
+          goal: canonicalGoal,
+          branchName: resolvedBranchName ?? '',
+          worktreePath: resolvedWorktreePath,
+        }),
+    canonicalGoal,
+    normalizedGoal,
+    branchName: resolvedBranchName,
+    worktreePath: resolvedWorktreePath,
+  };
+};
+
 const buildSessionRecord = (sessionId, data) => {
   const completed = normalizeStringArray(data.completed);
   const decisions = normalizeStringArray(data.decisions);
@@ -681,10 +801,20 @@ const buildSessionRecord = (sessionId, data) => {
   const blockers = normalizeStringArray(data.blockers);
   const updatedAt = toIsoString(data.updatedAt);
   const createdAt = toIsoString(data.createdAt, updatedAt);
+  const taskFields = deriveTaskFields({
+    taskId: data.taskId,
+    goal: data.goal,
+    branchName: data.branchName,
+    worktreePath: data.worktreePath,
+  });
 
   return {
     sessionId,
     goal: typeof data.goal === 'string' ? data.goal : '',
+    taskId: taskFields.taskId,
+    agentId: typeof data.agentId === 'string' && data.agentId.trim().length > 0 ? data.agentId : null,
+    branchName: taskFields.branchName,
+    worktreePath: taskFields.worktreePath,
     status: normalizeStatus(data.status),
     currentFocus: typeof data.currentFocus === 'string' ? data.currentFocus : '',
     whyBlocked: typeof data.whyBlocked === 'string' ? data.whyBlocked : '',
@@ -710,6 +840,10 @@ const upsertSession = (db, record) => {
       current_focus,
       why_blocked,
       next_step,
+      task_id,
+      agent_id,
+      branch_name,
+      worktree_path,
       pinned_context_json,
       unresolved_questions_json,
       blockers_json,
@@ -720,13 +854,17 @@ const upsertSession = (db, record) => {
       created_at,
       updated_at
     )
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
       goal = excluded.goal,
       status = excluded.status,
       current_focus = excluded.current_focus,
       why_blocked = excluded.why_blocked,
       next_step = excluded.next_step,
+      task_id = excluded.task_id,
+      agent_id = excluded.agent_id,
+      branch_name = excluded.branch_name,
+      worktree_path = excluded.worktree_path,
       pinned_context_json = excluded.pinned_context_json,
       unresolved_questions_json = excluded.unresolved_questions_json,
       blockers_json = excluded.blockers_json,
@@ -743,6 +881,10 @@ const upsertSession = (db, record) => {
     record.currentFocus,
     record.whyBlocked,
     record.nextStep,
+    record.taskId,
+    record.agentId,
+    record.branchName,
+    record.worktreePath,
     toJsonText(record.pinnedContext, []),
     toJsonText(record.unresolvedQuestions, []),
     toJsonText(record.blockers, []),
@@ -761,14 +903,20 @@ const insertLegacySessionEvent = (db, record, sourceFile) => {
     INSERT OR IGNORE INTO session_events(
       session_id,
       event_type,
+      task_id,
+      agent_id,
+      event_kind,
       payload_json,
       token_cost,
       created_at,
       legacy_key
     )
-    VALUES(?, ?, ?, ?, ?, ?)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     record.sessionId,
+    'legacy_import',
+    record.taskId,
+    record.agentId,
     'legacy_import',
     JSON.stringify({ source: sourceFile, updatedAt: record.updatedAt }),
     0,
@@ -866,16 +1014,228 @@ const upsertActiveSession = (db, sessionId, updatedAt) => {
   `).run(ACTIVE_SESSION_SCOPE, sessionId, updatedAt);
 };
 
+const upsertTaskRow = (db, {
+  taskId,
+  canonicalGoal,
+  normalizedGoal,
+  status = 'planning',
+  branchName = null,
+  worktreePath = projectRoot,
+  lastSessionId = null,
+  createdAt = new Date().toISOString(),
+  updatedAt = createdAt,
+} = {}) => {
+  db.prepare(`
+    INSERT INTO tasks(
+      task_id,
+      project_scope,
+      canonical_goal,
+      normalized_goal,
+      status,
+      branch_name,
+      worktree_path,
+      last_session_id,
+      created_at,
+      updated_at
+    )
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(task_id) DO UPDATE SET
+      canonical_goal = excluded.canonical_goal,
+      normalized_goal = excluded.normalized_goal,
+      status = excluded.status,
+      branch_name = excluded.branch_name,
+      worktree_path = excluded.worktree_path,
+      last_session_id = excluded.last_session_id,
+      updated_at = excluded.updated_at,
+      created_at = tasks.created_at
+  `).run(
+    taskId,
+    projectRoot,
+    canonicalGoal,
+    normalizedGoal,
+    normalizeStatus(status, 'planning'),
+    branchName,
+    worktreePath,
+    lastSessionId,
+    createdAt,
+    updatedAt,
+  );
+};
+
+const getTaskRow = (db, taskId) => db.prepare(`
+  SELECT
+    task_id,
+    project_scope,
+    canonical_goal,
+    normalized_goal,
+    status,
+    branch_name,
+    worktree_path,
+    last_session_id,
+    created_at,
+    updated_at
+  FROM tasks
+  WHERE task_id = ?
+`).get(taskId);
+
+const normalizeTaskRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    taskId: row.task_id,
+    projectScope: row.project_scope,
+    canonicalGoal: row.canonical_goal,
+    normalizedGoal: row.normalized_goal,
+    status: row.status,
+    branchName: row.branch_name ?? null,
+    worktreePath: row.worktree_path ?? null,
+    lastSessionId: row.last_session_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const insertTaskHandoffRow = (db, {
+  taskId,
+  sessionId = null,
+  fromAgentId = null,
+  toAgentId = null,
+  trigger,
+  summary = {},
+  createdAt = new Date().toISOString(),
+} = {}) => {
+  const result = db.prepare(`
+    INSERT INTO task_handoffs(
+      task_id,
+      session_id,
+      from_agent_id,
+      to_agent_id,
+      trigger,
+      summary_json,
+      created_at
+    )
+    VALUES(?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    taskId,
+    sessionId,
+    fromAgentId,
+    toAgentId,
+    trigger,
+    JSON.stringify(summary ?? {}),
+    createdAt,
+  );
+
+  return result.lastInsertRowid;
+};
+
+const getLatestTaskHandoffRow = (db, taskId) => db.prepare(`
+  SELECT
+    handoff_id,
+    task_id,
+    session_id,
+    from_agent_id,
+    to_agent_id,
+    trigger,
+    summary_json,
+    created_at
+  FROM task_handoffs
+  WHERE task_id = ?
+  ORDER BY datetime(created_at) DESC, handoff_id DESC
+  LIMIT 1
+`).get(taskId);
+
+const normalizeTaskHandoffRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    handoffId: Number(row.handoff_id),
+    taskId: row.task_id,
+    sessionId: row.session_id ?? null,
+    fromAgentId: row.from_agent_id ?? null,
+    toAgentId: row.to_agent_id ?? null,
+    trigger: row.trigger,
+    summary: parseJsonText(row.summary_json, {}),
+    createdAt: row.created_at,
+  };
+};
+
+const upsertAgentRunRow = (db, {
+  runId,
+  taskId = null,
+  agentId,
+  parentAgentId = null,
+  client,
+  conversationId = null,
+  sessionId = null,
+  role = 'main',
+  startedAt = new Date().toISOString(),
+  updatedAt = startedAt,
+} = {}) => {
+  db.prepare(`
+    INSERT INTO agent_runs(
+      run_id,
+      task_id,
+      agent_id,
+      parent_agent_id,
+      client,
+      conversation_id,
+      session_id,
+      role,
+      started_at,
+      updated_at
+    )
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(run_id) DO UPDATE SET
+      task_id = excluded.task_id,
+      agent_id = excluded.agent_id,
+      parent_agent_id = excluded.parent_agent_id,
+      client = excluded.client,
+      conversation_id = excluded.conversation_id,
+      session_id = excluded.session_id,
+      role = excluded.role,
+      updated_at = excluded.updated_at,
+      started_at = agent_runs.started_at
+  `).run(
+    runId,
+    taskId,
+    agentId,
+    parentAgentId,
+    client,
+    conversationId,
+    sessionId,
+    role,
+    startedAt,
+    updatedAt,
+  );
+};
+
 const buildHookTurnRecord = (hookKey, state = {}) => {
   const startedAt = toIsoString(state.startedAt);
   const updatedAt = toIsoString(state.updatedAt, startedAt);
+  const conversationId = typeof state.conversationId === 'string' && state.conversationId.trim().length > 0
+    ? state.conversationId
+    : typeof state.cursorConversationId === 'string' && state.cursorConversationId.trim().length > 0
+      ? state.cursorConversationId
+      : typeof state.claudeSessionId === 'string' && state.claudeSessionId.trim().length > 0
+        ? state.claudeSessionId
+        : '';
 
   return {
     hookKey,
     client: typeof state.client === 'string' && state.client.trim().length > 0 ? state.client : 'claude',
-    claudeSessionId: typeof state.claudeSessionId === 'string' ? state.claudeSessionId : '',
+    claudeSessionId: conversationId,
+    conversationId,
     projectSessionId: typeof state.projectSessionId === 'string' && state.projectSessionId.trim().length > 0
       ? state.projectSessionId
+      : null,
+    taskId: typeof state.taskId === 'string' && state.taskId.trim().length > 0 ? state.taskId : null,
+    agentId: typeof state.agentId === 'string' && state.agentId.trim().length > 0 ? state.agentId : null,
+    parentAgentId: typeof state.parentAgentId === 'string' && state.parentAgentId.trim().length > 0
+      ? state.parentAgentId
       : null,
     turnId: typeof state.turnId === 'string' && state.turnId.trim().length > 0
       ? state.turnId
@@ -906,7 +1266,11 @@ const normalizeHookTurnRow = (row) => {
     hookKey: row.hook_key,
     client: row.client,
     claudeSessionId: row.claude_session_id,
+    conversationId: row.conversation_id ?? row.claude_session_id,
     projectSessionId: row.project_session_id ?? null,
+    taskId: row.task_id ?? null,
+    agentId: row.agent_id ?? null,
+    parentAgentId: row.parent_agent_id ?? null,
     turnId: row.turn_id,
     promptPreview: row.prompt_preview,
     continuityState: row.continuity_state,
@@ -927,6 +1291,10 @@ const readHookTurnRow = (db, hookKey) => db.prepare(`
     client,
     claude_session_id,
     project_session_id,
+    task_id,
+    agent_id,
+    parent_agent_id,
+    conversation_id,
     turn_id,
     prompt_preview,
     continuity_state,
@@ -949,6 +1317,10 @@ const upsertHookTurnRow = (db, record) => {
       client,
       claude_session_id,
       project_session_id,
+      task_id,
+      agent_id,
+      parent_agent_id,
+      conversation_id,
       turn_id,
       prompt_preview,
       continuity_state,
@@ -961,11 +1333,15 @@ const upsertHookTurnRow = (db, record) => {
       started_at,
       updated_at
     )
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(hook_key) DO UPDATE SET
       client = excluded.client,
       claude_session_id = excluded.claude_session_id,
       project_session_id = excluded.project_session_id,
+      task_id = excluded.task_id,
+      agent_id = excluded.agent_id,
+      parent_agent_id = excluded.parent_agent_id,
+      conversation_id = excluded.conversation_id,
       turn_id = excluded.turn_id,
       prompt_preview = excluded.prompt_preview,
       continuity_state = excluded.continuity_state,
@@ -982,6 +1358,10 @@ const upsertHookTurnRow = (db, record) => {
     record.client,
     record.claudeSessionId,
     record.projectSessionId,
+    record.taskId,
+    record.agentId,
+    record.parentAgentId,
+    record.conversationId,
     record.turnId,
     record.promptPreview,
     record.continuityState,
@@ -1012,6 +1392,69 @@ export const deleteHookTurnState = async ({ filePath = getStateDbPath(), hookKey
   db.prepare('DELETE FROM hook_turn_state WHERE hook_key = ?').run(hookKey);
   return existing;
 }, { filePath });
+
+export const getTask = async ({ filePath = getStateDbPath(), taskId, readOnly = false } = {}) => {
+  const reader = readOnly ? withStateDbSnapshot : withStateDb;
+  return reader((db) => normalizeTaskRow(getTaskRow(db, taskId)), { filePath });
+};
+
+export const persistTaskHandoff = async ({ filePath = getStateDbPath(), taskId, sessionId = null, fromAgentId = null, toAgentId = null, trigger, summary = {} } = {}) =>
+  withStateDb((db) => {
+    const createdAt = new Date().toISOString();
+    const handoffId = insertTaskHandoffRow(db, {
+      taskId,
+      sessionId,
+      fromAgentId,
+      toAgentId,
+      trigger,
+      summary,
+      createdAt,
+    });
+    return normalizeTaskHandoffRow(getLatestTaskHandoffRow(db, taskId)) ?? {
+      handoffId,
+      taskId,
+      sessionId,
+      fromAgentId,
+      toAgentId,
+      trigger,
+      summary,
+      createdAt,
+    };
+  }, { filePath });
+
+export const getLatestTaskHandoff = async ({ filePath = getStateDbPath(), taskId, readOnly = false } = {}) => {
+  const reader = readOnly ? withStateDbSnapshot : withStateDb;
+  return reader((db) => normalizeTaskHandoffRow(getLatestTaskHandoffRow(db, taskId)), { filePath });
+};
+
+export const upsertAgentRun = async ({ filePath = getStateDbPath(), runId, taskId = null, agentId, parentAgentId = null, client, conversationId = null, sessionId = null, role = 'main' } = {}) =>
+  withStateDb((db) => {
+    const now = new Date().toISOString();
+    upsertAgentRunRow(db, {
+      runId,
+      taskId,
+      agentId,
+      parentAgentId,
+      client,
+      conversationId,
+      sessionId,
+      role,
+      startedAt: now,
+      updatedAt: now,
+    });
+    return {
+      runId,
+      taskId,
+      agentId,
+      parentAgentId,
+      client,
+      conversationId,
+      sessionId,
+      role,
+      startedAt: now,
+      updatedAt: now,
+    };
+  }, { filePath });
 
 const listLegacySessionFiles = (sessionsDir) => {
   if (!fs.existsSync(sessionsDir)) {
@@ -1051,6 +1494,17 @@ export const importLegacyState = async ({
     const record = buildSessionRecord(sessionId, payload);
 
     upsertSession(db, record);
+    upsertTaskRow(db, {
+      taskId: record.taskId,
+      canonicalGoal: record.goal,
+      normalizedGoal: normalizeTaskText(record.goal),
+      status: record.status,
+      branchName: record.branchName,
+      worktreePath: record.worktreePath,
+      lastSessionId: sessionId,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    });
     insertLegacySessionEvent(db, record, fileName);
     report.sessions[exists ? 'skipped' : 'imported'] += 1;
   }

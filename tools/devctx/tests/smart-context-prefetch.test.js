@@ -9,6 +9,29 @@ const TEST_DB_PATH = path.join(process.cwd(), '.devctx', 'test-state.sqlite');
 
 const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
 const SKIP_SQLITE_TESTS = nodeMajor < 22;
+const LOCK_RETRY_ATTEMPTS = 5;
+const LOCK_RETRY_DELAY_MS = 100;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withSqliteLockRetry = async (operation) => {
+  let lastError = null;
+  for (let attempt = 0; attempt < LOCK_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      const isLocked = error?.code === 'ERR_SQLITE_ERROR'
+        && typeof error?.message === 'string'
+        && /database is locked/i.test(error.message);
+      if (!isLocked || attempt === LOCK_RETRY_ATTEMPTS - 1) {
+        throw error;
+      }
+      lastError = error;
+      await sleep(LOCK_RETRY_DELAY_MS);
+    }
+  }
+  throw lastError;
+};
 
 describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite tests require Node 22+' : false }, () => {
   before(() => {
@@ -57,31 +80,31 @@ describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite test
       fs.unlinkSync(TEST_DB_PATH);
     }
     
-    await recordContextAccess({
+    await withSqliteLockRetry(() => recordContextAccess({
       task: 'understand smart_read implementation',
       intent: 'explore',
       files: [
         { path: 'tools/devctx/src/tools/smart-read.js', relevance: 1.0 },
         { path: 'tools/devctx/src/tokenCounter.js', relevance: 0.8 }
       ]
-    });
+    }));
 
-    await recordContextAccess({
+    await withSqliteLockRetry(() => recordContextAccess({
       task: 'understand smart_read implementation',
       intent: 'explore',
       files: [
         { path: 'tools/devctx/src/tools/smart-read.js', relevance: 1.0 },
         { path: 'tools/devctx/src/tokenCounter.js', relevance: 0.8 }
       ]
-    });
+    }));
 
-    await recordContextAccess({
+    await withSqliteLockRetry(() => recordContextAccess({
       task: 'understand smart_read implementation',
       intent: 'explore',
       files: [
         { path: 'tools/devctx/src/tools/smart-read.js', relevance: 1.0 }
       ]
-    });
+    }));
 
     const result = await smartContext({
       task: 'understand smart_read implementation',
@@ -101,30 +124,30 @@ describe('smart_context with prefetch', { skip: SKIP_SQLITE_TESTS ? 'SQLite test
       fs.unlinkSync(TEST_DB_PATH);
     }
 
-    await recordContextAccess({
+    await withSqliteLockRetry(() => recordContextAccess({
       task: 'analyze tokenCounter utility',
       intent: 'explore',
       files: [
         { path: 'tools/devctx/src/tokenCounter.js', relevance: 1.0 },
         { path: 'tools/devctx/src/utils/paths.js', relevance: 0.8 }
       ]
-    });
+    }));
 
-    await recordContextAccess({
+    await withSqliteLockRetry(() => recordContextAccess({
       task: 'analyze tokenCounter utility',
       intent: 'explore',
       files: [
         { path: 'tools/devctx/src/tokenCounter.js', relevance: 1.0 }
       ]
-    });
+    }));
 
-    await recordContextAccess({
+    await withSqliteLockRetry(() => recordContextAccess({
       task: 'analyze tokenCounter utility',
       intent: 'explore',
       files: [
         { path: 'tools/devctx/src/tokenCounter.js', relevance: 1.0 }
       ]
-    });
+    }));
 
     const result = await smartContext({
       task: 'analyze tokenCounter utility',

@@ -120,6 +120,8 @@ test('cursor adapter UserMessageSubmit uses shared managed start and stores trac
     persistMetric: async (entry) => {
       persistedMetrics.push(entry);
     },
+    writeAgentRun: async () => {},
+    writeTaskHandoff: async () => {},
     writeHookState: async ({ hookKey, state }) => {
       states.set(hookKey, state);
       return state;
@@ -178,6 +180,8 @@ test('cursor adapter ConversationEnd auto-appends carryover and clears state', a
       return null;
     },
     persistMetric: async () => {},
+    writeAgentRun: async () => {},
+    writeTaskHandoff: async () => {},
   });
 
   const result = await adapter.handleEvent({
@@ -223,6 +227,8 @@ test('cursor adapter blocks ConversationEnd when checkpoint is missing', async (
       return null;
     },
     persistMetric: async () => {},
+    writeAgentRun: async () => {},
+    writeTaskHandoff: async () => {},
   });
 
   const result = await adapter.handleEvent({

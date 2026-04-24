@@ -74,10 +74,16 @@ export const buildOperationalContextLines = (
   const summary = result?.summary;
   const continuityState = result?.continuity?.state;
   const storageIssue = result?.storageHealth?.issue;
+  const task = result?.task ?? null;
+  const handoff = result?.handoff ?? null;
 
   if (result?.found && summary) {
     const label = sessionStart ? 'resume' : continuityState ?? 'resume';
     lines.push(`devctx ${label}: session ${result.sessionId}`);
+
+    if (task?.taskId) {
+      lines.push(`task: ${truncate(task.taskId, maxLineLength)}`);
+    }
 
     if (summary.goal) {
       lines.push(`goal: ${truncate(summary.goal, maxLineLength)}`);
@@ -106,8 +112,18 @@ export const buildOperationalContextLines = (
     lines.push(`devctx new task session: ${truncate(summary.goal, maxLineLength)}`);
   }
 
-  if (result?.continuity?.reason) {
+  if (!mutationSafety?.blocked && result?.continuity?.reason) {
     lines.push(`context status: ${truncate(result.continuity.reason, maxLineLength)}`);
+  }
+
+  if (handoff?.fromAgentId || handoff?.summary?.nextStep || handoff?.summary?.pending?.length > 0) {
+    lines.push(`handoff: ${truncate(`from ${handoff?.fromAgentId ?? 'previous agent'} via ${handoff?.trigger ?? 'handoff'}`, maxLineLength)}`);
+    if (handoff?.summary?.pending?.[0]) {
+      lines.push(`pending: ${truncate(handoff.summary.pending[0], maxLineLength)}`);
+    }
+    if (handoff?.summary?.nextStep) {
+      lines.push(`handoff next: ${truncate(handoff.summary.nextStep, maxLineLength)}`);
+    }
   }
 
   if (mutationSafety?.blocked) {

@@ -112,6 +112,8 @@ test('claude adapter UserPromptSubmit uses shared managed start and stores track
     persistMetric: async (entry) => {
       persistedMetrics.push(entry);
     },
+    writeAgentRun: async () => {},
+    writeTaskHandoff: async () => {},
     writeHookState: async ({ hookKey, state }) => {
       states.set(hookKey, state);
       return state;
@@ -169,6 +171,8 @@ test('claude adapter Stop auto-appends carryover and clears state on second stop
       return null;
     },
     persistMetric: async () => {},
+    writeAgentRun: async () => {},
+    writeTaskHandoff: async () => {},
   });
 
   const result = await adapter.handleEvent({

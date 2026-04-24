@@ -7,7 +7,9 @@ import { smartTurn } from '../../tools/smart-turn.js';
 import {
   deleteHookTurnState,
   getHookTurnState,
+  persistTaskHandoff,
   setHookTurnState,
+  upsertAgentRun,
 } from '../../storage/sqlite.js';
 import { DEFAULT_START_MAX_TOKENS, resolveManagedStart } from '../base-orchestrator.js';
 import { extractNextStep, normalizeWhitespace, truncate } from '../policy/event-policy.js';
@@ -25,8 +27,20 @@ export const WRITE_TOOLS = new Set(['Write', 'StrReplace', 'Delete', 'EditNotebo
 
 const uniq = (values) => [...new Set(values.filter((value) => typeof value === 'string' && value.trim().length > 0))];
 
+const resolveAgentId = (input = {}) => {
+  const value = input.agent_id ?? input.agentId ?? input.worker_id ?? null;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'main';
+};
+
+const resolveParentAgentId = (input = {}) => {
+  const value = input.parent_agent_id ?? input.parentAgentId ?? null;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
 export const buildCursorHookKey = ({ conversationId, agentId = null }) =>
-  agentId ? `${HOOK_CLIENT}:subagent:${conversationId}:${agentId}` : `${HOOK_CLIENT}:main:${conversationId}`;
+  agentId && agentId !== 'main'
+    ? `${HOOK_CLIENT}:subagent:${conversationId}:${agentId}`
+    : `${HOOK_CLIENT}:main:${conversationId}`;
 
 const countPromptTerms = (value) =>
   normalizeWhitespace(value)
@@ -151,6 +165,8 @@ export const createCursorAdapter = ({
   summaryTool = smartSummary,
   resolveStart = resolveManagedStart,
   persistMetric = persistMetrics,
+  writeAgentRun = upsertAgentRun,
+  writeTaskHandoff = persistTaskHandoff,
   getMutationSafety = getRepoMutationSafety,
   readHookState = null,
   writeHookState = ({ hookKey, state }) => setHookTurnState({ hookKey, state }),
@@ -218,7 +234,11 @@ export const createCursorAdapter = ({
   const maybeTrackTurn = async ({
     hookKey,
     cursorConversationId,
+    conversationId,
     projectSessionId,
+    taskId,
+    agentId,
+    parentAgentId,
     prompt,
     continuityState,
   }) => {
@@ -235,7 +255,11 @@ export const createCursorAdapter = ({
       state: {
         client: HOOK_CLIENT,
         cursorConversationId,
+        conversationId,
         projectSessionId,
+        taskId,
+        agentId,
+        parentAgentId,
         turnId: `${cursorConversationId}:${Date.now()}`,
         promptPreview: truncate(prompt, MAX_PROMPT_PREVIEW),
         continuityState,
@@ -265,6 +289,8 @@ export const createCursorAdapter = ({
   };
 
   const handleUserMessageSubmit = async (input) => {
+    const agentId = resolveAgentId(input);
+    const parentAgentId = resolveParentAgentId(input);
     const startResolution = await resolveStart({
       prompt: input.user_message,
       ensureSession: true,
@@ -275,10 +301,27 @@ export const createCursorAdapter = ({
     });
     const result = startResolution.startResult;
 
+    if (!getMutationSafety().shouldBlock) {
+      await writeAgentRun({
+        runId: buildCursorHookKey({ conversationId: input.conversation_id, agentId }),
+        taskId: result.task?.taskId ?? null,
+        agentId,
+        parentAgentId,
+        client: HOOK_CLIENT,
+        conversationId: input.conversation_id,
+        sessionId: result.sessionId ?? null,
+        role: agentId === 'main' ? 'main' : 'subagent',
+      });
+    }
+
     const trackedState = await maybeTrackTurn({
-      hookKey: buildCursorHookKey({ conversationId: input.conversation_id }),
+      hookKey: buildCursorHookKey({ conversationId: input.conversation_id, agentId }),
       cursorConversationId: input.conversation_id,
+      conversationId: input.conversation_id,
       projectSessionId: result.sessionId ?? null,
+      taskId: result.task?.taskId ?? null,
+      agentId,
+      parentAgentId,
       prompt: input.user_message,
       continuityState: result.continuity?.state ?? '',
     });
@@ -294,7 +337,7 @@ export const createCursorAdapter = ({
   };
 
   const handlePostToolUse = async (input) => {
-    const hookKey = buildCursorHookKey({ conversationId: input.conversation_id });
+    const hookKey = buildCursorHookKey({ conversationId: input.conversation_id, agentId: resolveAgentId(input) });
     const existing = await readTrackedState(hookKey);
     if (!existing) {
       return null;
@@ -332,7 +375,7 @@ export const createCursorAdapter = ({
   };
 
   const handleConversationEnd = async (input) => {
-    const hookKey = buildCursorHookKey({ conversationId: input.conversation_id });
+    const hookKey = buildCursorHookKey({ conversationId: input.conversation_id, agentId: resolveAgentId(input) });
     const state = await readTrackedState(hookKey);
     if (!state) {
       return null;
@@ -371,6 +414,23 @@ export const createCursorAdapter = ({
           sessionId: state.projectSessionId,
           update,
           maxTokens: STOP_MAX_TOKENS,
+        });
+      }
+
+      if (state.taskId) {
+        await writeTaskHandoff({
+          taskId: state.taskId,
+          sessionId: state.projectSessionId,
+          fromAgentId: state.agentId ?? null,
+          toAgentId: null,
+          trigger: state.agentId && state.agentId !== 'main' ? 'subagent_delegate' : 'session_end',
+          summary: {
+            currentFocus: update.currentFocus ?? state.promptPreview,
+            touchedFiles: state.touchedFiles,
+            pending: update.nextStep ? [update.nextStep] : [],
+            nextStep: update.nextStep ?? null,
+            evidence: state.touchedFiles.length > 0 ? [`Touched files: ${state.touchedFiles.join(', ')}`] : [],
+          },
         });
       }
 

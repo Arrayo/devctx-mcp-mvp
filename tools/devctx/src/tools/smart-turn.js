@@ -409,6 +409,7 @@ const persistSmartTurnQualityMetrics = async ({
 
 const startTurn = async ({
   sessionId,
+  taskId,
   prompt,
   maxTokens = DEFAULT_START_MAX_TOKENS,
   ensureSession = false,
@@ -420,6 +421,7 @@ const startTurn = async ({
   let summaryResult = await smartSummary({
     action: 'get',
     sessionId,
+    taskId,
     maxTokens,
   });
 
@@ -437,6 +439,7 @@ const startTurn = async ({
       summaryResult = await smartSummary({
         action: 'get',
         sessionId: created.sessionId,
+        taskId: created.task?.taskId ?? null,
         maxTokens,
       });
     }
@@ -457,6 +460,7 @@ const startTurn = async ({
       summaryResult = await smartSummary({
         action: 'get',
         sessionId: created.sessionId,
+        taskId: created.task?.taskId ?? null,
         maxTokens,
       });
       continuity = classifyContinuity({ prompt, summaryResult });
@@ -565,6 +569,8 @@ const startTurn = async ({
     ...(workflow ? { workflow } : {}),
     ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
     ...(summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
+    ...(summaryResult.task ? { task: summaryResult.task } : {}),
+    ...(summaryResult.handoff ? { handoff: summaryResult.handoff } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
     ...(isStorageUnhealthy(summaryResult.storageHealth ?? metrics?.storageHealth) ? { storageHealth: summaryResult.storageHealth ?? metrics?.storageHealth } : {}),
     recommendedPath,
@@ -587,6 +593,7 @@ const startTurn = async ({
 
 const endTurn = async ({
   sessionId,
+  taskId,
   event = DEFAULT_END_EVENT,
   update = {},
   force = false,
@@ -599,6 +606,7 @@ const endTurn = async ({
   const checkpoint = await smartSummary({
     action: 'checkpoint',
     sessionId,
+    taskId,
     event,
     update,
     force,
@@ -697,6 +705,7 @@ const endTurn = async ({
 export const smartTurn = async ({
   phase,
   sessionId,
+  taskId,
   prompt,
   update,
   event,
@@ -710,6 +719,7 @@ export const smartTurn = async ({
   if (phase === 'start') {
     return startTurn({
       sessionId,
+      taskId,
       prompt,
       maxTokens,
       ensureSession,
@@ -722,6 +732,7 @@ export const smartTurn = async ({
   if (phase === 'end') {
     return endTurn({
       sessionId,
+      taskId,
       event,
       update,
       force,

@@ -7,7 +7,9 @@ import { smartTurn } from '../../tools/smart-turn.js';
 import {
   deleteHookTurnState,
   getHookTurnState,
+  persistTaskHandoff,
   setHookTurnState,
+  upsertAgentRun,
 } from '../../storage/sqlite.js';
 import { DEFAULT_START_MAX_TOKENS, resolveManagedStart } from '../base-orchestrator.js';
 import { extractNextStep, normalizeWhitespace, truncate } from '../policy/event-policy.js';
@@ -25,8 +27,20 @@ export const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit']);
 
 const uniq = (values) => [...new Set(values.filter((value) => typeof value === 'string' && value.trim().length > 0))];
 
+const resolveAgentId = (input = {}) => {
+  const value = input.agent_id ?? input.agentId ?? input.assistant_id ?? input.worker_id ?? null;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : 'main';
+};
+
+const resolveParentAgentId = (input = {}) => {
+  const value = input.parent_agent_id ?? input.parentAgentId ?? null;
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+};
+
 export const buildClaudeHookKey = ({ sessionId, agentId = null }) =>
-  agentId ? `${HOOK_CLIENT}:subagent:${sessionId}:${agentId}` : `${HOOK_CLIENT}:main:${sessionId}`;
+  agentId && agentId !== 'main'
+    ? `${HOOK_CLIENT}:subagent:${sessionId}:${agentId}`
+    : `${HOOK_CLIENT}:main:${sessionId}`;
 
 const countPromptTerms = (value) =>
   normalizeWhitespace(value)
@@ -148,6 +162,8 @@ export const createClaudeAdapter = ({
   summaryTool = smartSummary,
   resolveStart = resolveManagedStart,
   persistMetric = persistMetrics,
+  writeAgentRun = upsertAgentRun,
+  writeTaskHandoff = persistTaskHandoff,
   getMutationSafety = getRepoMutationSafety,
   readHookState = null,
   writeHookState = ({ hookKey, state }) => setHookTurnState({ hookKey, state }),
@@ -215,7 +231,11 @@ export const createClaudeAdapter = ({
   const maybeTrackTurn = async ({
     hookKey,
     claudeSessionId,
+    conversationId,
     projectSessionId,
+    taskId,
+    agentId,
+    parentAgentId,
     prompt,
     continuityState,
   }) => {
@@ -232,7 +252,11 @@ export const createClaudeAdapter = ({
       state: {
         client: HOOK_CLIENT,
         claudeSessionId,
+        conversationId,
         projectSessionId,
+        taskId,
+        agentId,
+        parentAgentId,
         turnId: `${claudeSessionId}:${Date.now()}`,
         promptPreview: truncate(prompt, MAX_PROMPT_PREVIEW),
         continuityState,
@@ -262,6 +286,8 @@ export const createClaudeAdapter = ({
   };
 
   const handleUserPromptSubmit = async (input) => {
+    const agentId = resolveAgentId(input);
+    const parentAgentId = resolveParentAgentId(input);
     const startResolution = await resolveStart({
       prompt: input.prompt,
       ensureSession: true,
@@ -272,10 +298,27 @@ export const createClaudeAdapter = ({
     });
     const result = startResolution.startResult;
 
+    if (!getMutationSafety().shouldBlock) {
+      await writeAgentRun({
+        runId: buildClaudeHookKey({ sessionId: input.session_id, agentId }),
+        taskId: result.task?.taskId ?? null,
+        agentId,
+        parentAgentId,
+        client: HOOK_CLIENT,
+        conversationId: input.session_id,
+        sessionId: result.sessionId ?? null,
+        role: agentId === 'main' ? 'main' : 'subagent',
+      });
+    }
+
     const trackedState = await maybeTrackTurn({
-      hookKey: buildClaudeHookKey({ sessionId: input.session_id }),
+      hookKey: buildClaudeHookKey({ sessionId: input.session_id, agentId }),
       claudeSessionId: input.session_id,
+      conversationId: input.session_id,
       projectSessionId: result.sessionId ?? null,
+      taskId: result.task?.taskId ?? null,
+      agentId,
+      parentAgentId,
       prompt: input.prompt,
       continuityState: result.continuity?.state ?? '',
     });
@@ -291,7 +334,7 @@ export const createClaudeAdapter = ({
   };
 
   const handlePostToolUse = async (input) => {
-    const hookKey = buildClaudeHookKey({ sessionId: input.session_id });
+    const hookKey = buildClaudeHookKey({ sessionId: input.session_id, agentId: resolveAgentId(input) });
     const existing = await readTrackedState(hookKey);
     if (!existing) {
       return null;
@@ -329,7 +372,7 @@ export const createClaudeAdapter = ({
   };
 
   const handleStop = async (input) => {
-    const hookKey = buildClaudeHookKey({ sessionId: input.session_id });
+    const hookKey = buildClaudeHookKey({ sessionId: input.session_id, agentId: resolveAgentId(input) });
     const state = await readTrackedState(hookKey);
     if (!state) {
       return null;
@@ -368,6 +411,23 @@ export const createClaudeAdapter = ({
           sessionId: state.projectSessionId,
           update,
           maxTokens: STOP_MAX_TOKENS,
+        });
+      }
+
+      if (state.taskId) {
+        await writeTaskHandoff({
+          taskId: state.taskId,
+          sessionId: state.projectSessionId,
+          fromAgentId: state.agentId ?? null,
+          toAgentId: null,
+          trigger: state.agentId && state.agentId !== 'main' ? 'subagent_delegate' : 'stop',
+          summary: {
+            currentFocus: update.currentFocus ?? state.promptPreview,
+            touchedFiles: state.touchedFiles,
+            pending: update.nextStep ? [update.nextStep] : [],
+            nextStep: update.nextStep ?? null,
+            evidence: state.touchedFiles.length > 0 ? [`Touched files: ${state.touchedFiles.join(', ')}`] : [],
+          },
         });
       }
 

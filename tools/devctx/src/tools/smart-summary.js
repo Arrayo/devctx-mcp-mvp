@@ -10,6 +10,7 @@ import {
   SQLITE_SCHEMA_VERSION,
   cleanupLegacyState,
   compactState,
+  deriveTaskId,
   getStateStorageHealth,
   importLegacyState,
   withStateDb,
@@ -125,6 +126,28 @@ const generateSessionId = (goal) => {
   return `${date}-${slug}`;
 };
 
+const normalizeTaskText = (value) => String(value ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+const resolveTaskIdentity = ({ taskId, goal, branchName, worktreePath }) => {
+  const canonicalGoal = typeof goal === 'string' ? goal.trim() : '';
+  const resolvedBranchName = typeof branchName === 'string' && branchName.trim().length > 0 ? branchName.trim() : null;
+  const resolvedWorktreePath = typeof worktreePath === 'string' && worktreePath.trim().length > 0 ? worktreePath.trim() : null;
+
+  return {
+    taskId: typeof taskId === 'string' && taskId.trim().length > 0
+      ? taskId.trim()
+      : deriveTaskId({
+          goal: canonicalGoal,
+          branchName: resolvedBranchName ?? '',
+          worktreePath: resolvedWorktreePath ?? '',
+        }),
+    canonicalGoal,
+    normalizedGoal: normalizeTaskText(canonicalGoal),
+    branchName: resolvedBranchName,
+    worktreePath: resolvedWorktreePath,
+  };
+};
+
 const truncateString = (str, maxLength) => {
   if (!str || str.length <= maxLength) return str;
   if (maxLength <= 3) return '';
@@ -179,8 +202,12 @@ const mergeUniqueStrings = (...lists) => {
 };
 
 const buildComparableSessionState = (data = {}) => ({
+  taskId: typeof data.taskId === 'string' ? data.taskId : '',
+  agentId: typeof data.agentId === 'string' ? data.agentId : '',
   goal: typeof data.goal === 'string' ? data.goal : '',
   status: normalizeStatus(data.status),
+  branchName: typeof data.branchName === 'string' ? data.branchName : '',
+  worktreePath: typeof data.worktreePath === 'string' ? data.worktreePath : '',
   pinnedContext: mergeUniqueStrings(data.pinnedContext),
   unresolvedQuestions: mergeUniqueStrings(data.unresolvedQuestions),
   currentFocus: typeof data.currentFocus === 'string' ? data.currentFocus : '',
@@ -198,8 +225,16 @@ const buildAppendData = (existingData, update) => {
   const touchedFiles = mergeUniqueStrings(existingData.touchedFiles, update.touchedFiles);
 
   return {
+    taskId: update.taskId || existingData.taskId || resolveTaskIdentity({
+      goal: update.goal || existingData.goal || 'Untitled session',
+      branchName: update.branchName || existingData.branchName,
+      worktreePath: update.worktreePath || existingData.worktreePath,
+    }).taskId,
+    agentId: update.agentId || existingData.agentId || null,
     goal: update.goal || existingData.goal || 'Untitled session',
     status: normalizeStatus(update.status, normalizeStatus(existingData.status)),
+    branchName: update.branchName || existingData.branchName || null,
+    worktreePath: update.worktreePath || existingData.worktreePath || null,
     pinnedContext: mergeUniqueStrings(existingData.pinnedContext, update.pinnedContext),
     unresolvedQuestions: mergeUniqueStrings(existingData.unresolvedQuestions, update.unresolvedQuestions),
     currentFocus: update.currentFocus || existingData.currentFocus || '',
@@ -221,8 +256,16 @@ const buildReplaceData = (update) => {
   const touchedFiles = mergeUniqueStrings(update.touchedFiles);
 
   return {
+    taskId: update.taskId || resolveTaskIdentity({
+      goal: update.goal || 'Untitled session',
+      branchName: update.branchName,
+      worktreePath: update.worktreePath,
+    }).taskId,
+    agentId: update.agentId || null,
     goal: update.goal || 'Untitled session',
     status: normalizeStatus(update.status),
+    branchName: update.branchName ?? null,
+    worktreePath: update.worktreePath ?? null,
     pinnedContext: mergeUniqueStrings(update.pinnedContext),
     unresolvedQuestions: mergeUniqueStrings(update.unresolvedQuestions),
     currentFocus: update.currentFocus ?? '',
@@ -252,8 +295,12 @@ const getAutoAppendChanges = (existingData, mergedData) => {
   const comparableAfter = buildComparableSessionState(mergedData);
   const changes = [];
 
+  if (comparableAfter.taskId !== comparableBefore.taskId) changes.push('taskId');
+  if (comparableAfter.agentId !== comparableBefore.agentId) changes.push('agentId');
   if (comparableAfter.goal !== comparableBefore.goal) changes.push('goal');
   if (comparableAfter.status !== comparableBefore.status) changes.push('status');
+  if (comparableAfter.branchName !== comparableBefore.branchName) changes.push('branchName');
+  if (comparableAfter.worktreePath !== comparableBefore.worktreePath) changes.push('worktreePath');
   if (comparableAfter.currentFocus !== comparableBefore.currentFocus) changes.push('currentFocus');
   if (comparableAfter.whyBlocked !== comparableBefore.whyBlocked) changes.push('whyBlocked');
   if (comparableAfter.nextStep !== comparableBefore.nextStep) changes.push('nextStep');
@@ -546,6 +593,10 @@ const getSessionRow = (db, sessionId) => db.prepare(`
     current_focus,
     why_blocked,
     next_step,
+    task_id,
+    agent_id,
+    branch_name,
+    worktree_path,
     pinned_context_json,
     unresolved_questions_json,
     blockers_json,
@@ -566,6 +617,141 @@ const getActiveSessionId = (db) =>
     WHERE scope = ?
   `).get(ACTIVE_SESSION_SCOPE)?.session_id ?? null;
 
+const getTaskRow = (db, taskId) => db.prepare(`
+  SELECT
+    task_id,
+    project_scope,
+    canonical_goal,
+    normalized_goal,
+    status,
+    branch_name,
+    worktree_path,
+    last_session_id,
+    created_at,
+    updated_at
+  FROM tasks
+  WHERE task_id = ?
+`).get(taskId);
+
+const getTaskRowForSession = (db, sessionId) => db.prepare(`
+  SELECT
+    t.task_id,
+    t.project_scope,
+    t.canonical_goal,
+    t.normalized_goal,
+    t.status,
+    t.branch_name,
+    t.worktree_path,
+    t.last_session_id,
+    t.created_at,
+    t.updated_at
+  FROM tasks t
+  JOIN sessions s ON s.task_id = t.task_id
+  WHERE s.session_id = ?
+`).get(sessionId);
+
+const normalizeTaskRow = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    taskId: row.task_id,
+    projectScope: row.project_scope,
+    canonicalGoal: row.canonical_goal,
+    normalizedGoal: row.normalized_goal,
+    status: row.status,
+    branchName: row.branch_name ?? null,
+    worktreePath: row.worktree_path ?? null,
+    lastSessionId: row.last_session_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
+
+const upsertTask = (db, {
+  taskId,
+  goal,
+  status,
+  branchName = null,
+  worktreePath = null,
+  lastSessionId = null,
+  createdAt = new Date().toISOString(),
+  updatedAt = createdAt,
+} = {}) => {
+  const task = resolveTaskIdentity({ taskId, goal, branchName, worktreePath });
+  db.prepare(`
+    INSERT INTO tasks(
+      task_id,
+      project_scope,
+      canonical_goal,
+      normalized_goal,
+      status,
+      branch_name,
+      worktree_path,
+      last_session_id,
+      created_at,
+      updated_at
+    )
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(task_id) DO UPDATE SET
+      canonical_goal = excluded.canonical_goal,
+      normalized_goal = excluded.normalized_goal,
+      status = excluded.status,
+      branch_name = excluded.branch_name,
+      worktree_path = excluded.worktree_path,
+      last_session_id = excluded.last_session_id,
+      updated_at = excluded.updated_at,
+      created_at = tasks.created_at
+  `).run(
+    task.taskId,
+    'project',
+    task.canonicalGoal,
+    task.normalizedGoal,
+    normalizeStatus(status, 'planning'),
+    task.branchName,
+    task.worktreePath,
+    lastSessionId,
+    createdAt,
+    updatedAt,
+  );
+
+  return normalizeTaskRow(getTaskRow(db, task.taskId));
+};
+
+const getLatestTaskHandoffRow = (db, taskId) => db.prepare(`
+  SELECT
+    handoff_id,
+    task_id,
+    session_id,
+    from_agent_id,
+    to_agent_id,
+    trigger,
+    summary_json,
+    created_at
+  FROM task_handoffs
+  WHERE task_id = ?
+  ORDER BY datetime(created_at) DESC, handoff_id DESC
+  LIMIT 1
+`).get(taskId);
+
+const normalizeTaskHandoff = (row) => {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    handoffId: Number(row.handoff_id),
+    taskId: row.task_id,
+    sessionId: row.session_id ?? null,
+    fromAgentId: row.from_agent_id ?? null,
+    toAgentId: row.to_agent_id ?? null,
+    trigger: row.trigger,
+    summary: parseJsonText(row.summary_json, {}),
+    createdAt: row.created_at,
+  };
+};
+
 const hydrateSession = (row) => {
   if (!row) {
     return null;
@@ -583,8 +769,12 @@ const hydrateSession = (row) => {
     ...snapshot,
     schemaVersion: Number(snapshot.schemaVersion ?? 1),
     sessionId: row.session_id,
+    taskId: row.task_id ?? snapshot.taskId ?? null,
+    agentId: row.agent_id ?? snapshot.agentId ?? null,
     goal: typeof row.goal === 'string' ? row.goal : (snapshot.goal ?? ''),
     status: normalizeStatus(row.status, normalizeStatus(snapshot.status)),
+    branchName: row.branch_name ?? snapshot.branchName ?? null,
+    worktreePath: row.worktree_path ?? snapshot.worktreePath ?? null,
     currentFocus: typeof row.current_focus === 'string' ? row.current_focus : (snapshot.currentFocus ?? ''),
     whyBlocked: typeof row.why_blocked === 'string' ? row.why_blocked : (snapshot.whyBlocked ?? ''),
     nextStep: typeof row.next_step === 'string' ? row.next_step : (snapshot.nextStep ?? ''),
@@ -765,18 +955,20 @@ const compressSummary = (data, maxTokens) => {
   return { compressed, tokens, truncated: true, omitted, compressionLevel };
 };
 
-const cacheSummary = (db, sessionId, { compressed, tokens, compressionLevel, omitted, updatedAt }) => {
+const cacheSummary = (db, sessionId, { taskId = null, compressed, tokens, compressionLevel, omitted, updatedAt }) => {
   db.prepare(`
     INSERT INTO summary_cache(
       session_id,
+      task_id,
       summary_json,
       tokens,
       compression_level,
       omitted_json,
       updated_at
     )
-    VALUES(?, ?, ?, ?, ?, ?)
+    VALUES(?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
+      task_id = excluded.task_id,
       summary_json = excluded.summary_json,
       tokens = excluded.tokens,
       compression_level = excluded.compression_level,
@@ -784,6 +976,7 @@ const cacheSummary = (db, sessionId, { compressed, tokens, compressionLevel, omi
       updated_at = excluded.updated_at
   `).run(
     sessionId,
+    taskId,
     JSON.stringify(compressed),
     tokens,
     compressionLevel,
@@ -806,6 +999,12 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
   const existing = hydrateSession(getSessionRow(db, sessionId));
   const createdAt = existing?.createdAt ?? new Date().toISOString();
   const updatedAt = new Date().toISOString();
+  const task = resolveTaskIdentity({
+    taskId: data.taskId ?? existing?.taskId ?? null,
+    goal: data.goal ?? existing?.goal ?? '',
+    branchName: data.branchName ?? existing?.branchName ?? null,
+    worktreePath: data.worktreePath ?? existing?.worktreePath ?? null,
+  });
   const completed = mergeUniqueStrings(data.completed);
   const decisions = mergeUniqueStrings(data.decisions);
   const touchedFiles = mergeUniqueStrings(data.touchedFiles);
@@ -814,8 +1013,12 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
   const blockers = mergeUniqueStrings(data.blockers);
 
   const snapshot = {
+    taskId: task.taskId,
+    agentId: data.agentId ?? existing?.agentId ?? null,
     goal: typeof data.goal === 'string' ? data.goal : '',
     status: normalizeStatus(data.status),
+    branchName: task.branchName,
+    worktreePath: task.worktreePath,
     pinnedContext,
     unresolvedQuestions,
     currentFocus: data.currentFocus ?? '',
@@ -842,6 +1045,10 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
       current_focus,
       why_blocked,
       next_step,
+      task_id,
+      agent_id,
+      branch_name,
+      worktree_path,
       pinned_context_json,
       unresolved_questions_json,
       blockers_json,
@@ -852,13 +1059,17 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
       created_at,
       updated_at
     )
-    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
       goal = excluded.goal,
       status = excluded.status,
       current_focus = excluded.current_focus,
       why_blocked = excluded.why_blocked,
       next_step = excluded.next_step,
+      task_id = excluded.task_id,
+      agent_id = excluded.agent_id,
+      branch_name = excluded.branch_name,
+      worktree_path = excluded.worktree_path,
       pinned_context_json = excluded.pinned_context_json,
       unresolved_questions_json = excluded.unresolved_questions_json,
       blockers_json = excluded.blockers_json,
@@ -875,6 +1086,10 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
     snapshot.currentFocus,
     snapshot.whyBlocked,
     snapshot.nextStep,
+    snapshot.taskId,
+    snapshot.agentId,
+    snapshot.branchName,
+    snapshot.worktreePath,
     JSON.stringify(pinnedContext),
     JSON.stringify(unresolvedQuestions),
     JSON.stringify(blockers),
@@ -887,19 +1102,35 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
   );
 
   writeActiveSession(db, sessionId, updatedAt);
+  upsertTask(db, {
+    taskId: snapshot.taskId,
+    goal: snapshot.goal,
+    status: snapshot.status,
+    branchName: snapshot.branchName,
+    worktreePath: snapshot.worktreePath,
+    lastSessionId: sessionId,
+    createdAt,
+    updatedAt,
+  });
 
   if (action) {
     db.prepare(`
       INSERT INTO session_events(
         session_id,
         event_type,
+        task_id,
+        agent_id,
+        event_kind,
         payload_json,
         token_cost,
         created_at
       )
-      VALUES(?, ?, ?, ?, ?)
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       sessionId,
+      action,
+      snapshot.taskId,
+      snapshot.agentId,
       action,
       JSON.stringify(pruneEmptyFields(eventPayload ?? {})),
       0,
@@ -960,6 +1191,15 @@ const listSessions = (db, { cleanup = true } = {}) => {
     };
   });
 };
+
+const getLatestSessionIdForTask = (db, taskId) =>
+  db.prepare(`
+    SELECT session_id
+    FROM sessions
+    WHERE task_id = ?
+    ORDER BY datetime(updated_at) DESC, session_id ASC
+    LIMIT 1
+  `).get(taskId)?.session_id ?? null;
 
 const buildResumeCandidates = (sessions) =>
   sessions.slice(0, MAX_RESUME_CANDIDATES).map((session) => ({
@@ -1098,6 +1338,7 @@ const resolveAutoResumeTarget = (db, { forceRecommended = false, cleanup = true 
 export const smartSummary = async ({
   action,
   sessionId,
+  taskId,
   update,
   maxTokens = DEFAULT_MAX_TOKENS,
   event,
@@ -1112,6 +1353,9 @@ export const smartSummary = async ({
   nextStep,
   currentFocus,
   whyBlocked,
+  agentId,
+  branchName,
+  worktreePath,
   pinnedContext,
   unresolvedQuestions,
   blockers,
@@ -1121,14 +1365,19 @@ export const smartSummary = async ({
 } = {}) => {
   const startTime = Date.now();
   
-  if (!update && (goal || status || nextStep || currentFocus || whyBlocked || 
+  if (!update && (goal || status || nextStep || currentFocus || whyBlocked ||
+      taskId || agentId || branchName || worktreePath ||
       pinnedContext || unresolvedQuestions || blockers || completed || decisions || touchedFiles)) {
     update = {
       goal,
+      taskId,
       status,
       nextStep,
       currentFocus,
       whyBlocked,
+      agentId,
+      branchName,
+      worktreePath,
       pinnedContext,
       unresolvedQuestions,
       blockers,
@@ -1180,6 +1429,17 @@ export const smartSummary = async ({
           }
         : null;
 
+      if (!targetSessionId && typeof taskId === 'string' && taskId.trim().length > 0) {
+        targetSessionId = getLatestSessionIdForTask(db, taskId.trim());
+        if (targetSessionId) {
+          resumeMeta = {
+            autoResumed: false,
+            resumeSource: 'task_id',
+            recommendedSessionId: targetSessionId,
+          };
+        }
+      }
+
       if (!targetSessionId && wantsAutoResume) {
         const resolution = resolveAutoResumeTarget(db, {
           forceRecommended: sessionId === AUTO_RESUME_SESSION_ID,
@@ -1225,12 +1485,20 @@ export const smartSummary = async ({
         writeActiveSession(db, targetSessionId, session.updatedAt);
       }
 
+      const taskRecord = normalizeTaskRow(
+        (session.taskId ? getTaskRow(db, session.taskId) : null) ?? getTaskRowForSession(db, targetSessionId),
+      );
+      const latestHandoff = taskRecord?.taskId
+        ? normalizeTaskHandoff(getLatestTaskHandoffRow(db, taskRecord.taskId))
+        : null;
+
       const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(session, maxTokens);
       const rawTokens = countTokens(JSON.stringify(session));
       const summaryMetrics = buildSummaryMetrics(rawTokens, tokens);
 
       if (allowReadSideEffects) {
         cacheSummary(db, targetSessionId, {
+          taskId: session.taskId ?? taskRecord?.taskId ?? null,
           compressed,
           tokens,
           compressionLevel,
@@ -1277,6 +1545,17 @@ export const smartSummary = async ({
         resumeSource: resumeMeta?.resumeSource ?? 'direct',
         ambiguous: resumeMeta?.ambiguous ?? false,
         recommendedSessionId: resumeMeta?.recommendedSessionId ?? targetSessionId,
+        ...(taskRecord ? {
+          task: {
+            taskId: taskRecord.taskId,
+            status: taskRecord.status,
+            canonicalGoal: taskRecord.canonicalGoal,
+            branchName: taskRecord.branchName,
+            worktreePath: taskRecord.worktreePath,
+            resolution: resumeMeta?.resumeSource === 'task_id' ? 'exact' : (resumeMeta?.autoResumed ? 'ranked' : 'active'),
+          },
+        } : {}),
+        ...(latestHandoff ? { handoff: latestHandoff } : {}),
         ...(resumeMeta?.candidates ? { candidates: resumeMeta.candidates } : {}),
         schemaVersion: session.schemaVersion ?? 1,
         updatedAt: session.updatedAt,
@@ -1305,6 +1584,7 @@ export const smartSummary = async ({
       }
 
       const isActiveSession = getActiveSessionId(db) === targetSessionId;
+      const session = hydrateSession(getSessionRow(db, targetSessionId));
 
       db.exec('BEGIN');
       try {
@@ -1313,6 +1593,12 @@ export const smartSummary = async ({
           db.prepare('DELETE FROM active_session WHERE scope = ?').run(ACTIVE_SESSION_SCOPE);
         }
         db.prepare('DELETE FROM summary_cache WHERE session_id = ?').run(targetSessionId);
+        if (session?.taskId) {
+          const remaining = db.prepare('SELECT COUNT(*) AS count FROM sessions WHERE task_id = ?').get(session.taskId).count;
+          if (remaining === 0) {
+            db.prepare('DELETE FROM tasks WHERE task_id = ?').run(session.taskId);
+          }
+        }
         db.exec('COMMIT');
       } catch (error) {
         db.exec('ROLLBACK');
@@ -1365,6 +1651,13 @@ export const smartSummary = async ({
       let targetSessionId = sessionId;
       let existingData = {};
 
+      if (!targetSessionId && typeof taskId === 'string' && taskId.trim().length > 0) {
+        targetSessionId = getLatestSessionIdForTask(db, taskId.trim());
+        if (targetSessionId) {
+          existingData = hydrateSession(getSessionRow(db, targetSessionId)) ?? {};
+        }
+      }
+
       if (!targetSessionId || targetSessionId === 'new') {
         if (action === 'append' || action === 'auto_append' || action === 'checkpoint') {
           const activeSessionId = getActiveSessionId(db);
@@ -1402,6 +1695,7 @@ export const smartSummary = async ({
 
       if (action === 'auto_append' && changedFields.length === 0) {
         const currentSession = hydrateSession(getSessionRow(db, targetSessionId)) ?? mergedData;
+        const currentTask = currentSession.taskId ? normalizeTaskRow(getTaskRow(db, currentSession.taskId)) : null;
         const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(currentSession, maxTokens);
         const rawTokens = countTokens(JSON.stringify(currentSession));
 
@@ -1431,6 +1725,7 @@ export const smartSummary = async ({
           truncated,
           omitted,
           compressionLevel,
+          ...(currentTask ? { task: currentTask } : {}),
           schemaVersion: currentSession.schemaVersion ?? SQLITE_SCHEMA_VERSION,
           updatedAt: currentSession.updatedAt,
           message: 'Skipped auto-append because no meaningful context changed.',
@@ -1439,6 +1734,7 @@ export const smartSummary = async ({
 
       if (action === 'checkpoint' && !checkpointDecision.shouldPersist) {
         const currentSession = hydrateSession(getSessionRow(db, targetSessionId)) ?? mergedData;
+        const currentTask = currentSession.taskId ? normalizeTaskRow(getTaskRow(db, currentSession.taskId)) : null;
         const { compressed, tokens, truncated, omitted, compressionLevel } = compressSummary(currentSession, maxTokens);
         const rawTokens = countTokens(JSON.stringify(currentSession));
 
@@ -1479,6 +1775,7 @@ export const smartSummary = async ({
           truncated,
           omitted,
           compressionLevel,
+          ...(currentTask ? { task: currentTask } : {}),
           schemaVersion: currentSession.schemaVersion ?? SQLITE_SCHEMA_VERSION,
           updatedAt: currentSession.updatedAt,
           message: checkpointDecision.reason,
@@ -1505,6 +1802,7 @@ export const smartSummary = async ({
       const summaryMetrics = buildSummaryMetrics(rawTokens, tokens);
 
       cacheSummary(db, targetSessionId, {
+        taskId: savedData.taskId ?? null,
         compressed,
         tokens,
         compressionLevel,
@@ -1532,6 +1830,9 @@ export const smartSummary = async ({
       return addRepoSafety({
         action,
         sessionId: targetSessionId,
+        ...(savedData.taskId ? {
+          task: normalizeTaskRow(getTaskRow(db, savedData.taskId)),
+        } : {}),
         skipped: false,
         ...(action === 'auto_append' || action === 'checkpoint' ? { changedFields } : {}),
         ...(action === 'checkpoint'
