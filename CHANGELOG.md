@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.16.5] - 2026-05-06
+
+### Added
+- **Always-on context persistence in adapters:** Claude/Cursor adapters now auto-checkpoint meaningful turns on `PostToolUse` when write tools touch files, without requiring an explicit `smart_turn(end)` call from the user.
+- **Automatic handoff continuity on writes:** Auto-checkpoint path now emits `task_handoffs` with `trigger: post_tool_use` so multi-agent continuity is preserved even if the conversation ends before a manual checkpoint.
+
 ## [1.16.4] - 2026-04-24
 
 ### Added
