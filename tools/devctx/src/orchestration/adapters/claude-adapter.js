@@ -270,6 +270,45 @@ export const createClaudeAdapter = ({
     });
   };
 
+  const maybeAutoCheckpointFromState = async (state, { trigger = 'post_tool_use' } = {}) => {
+    if (!state?.projectSessionId || getMutationSafety().shouldBlock) {
+      return false;
+    }
+
+    const update = {
+      ...(state.promptPreview ? { currentFocus: state.promptPreview } : {}),
+      ...(state.touchedFiles.length > 0 ? { touchedFiles: state.touchedFiles } : {}),
+    };
+
+    await summaryTool({
+      action: 'checkpoint',
+      sessionId: state.projectSessionId,
+      event: 'milestone',
+      update,
+      maxTokens: STOP_MAX_TOKENS,
+      force: true,
+    });
+
+    if (state.taskId) {
+      await writeTaskHandoff({
+        taskId: state.taskId,
+        sessionId: state.projectSessionId,
+        fromAgentId: state.agentId ?? null,
+        toAgentId: null,
+        trigger,
+        summary: {
+          currentFocus: state.promptPreview,
+          touchedFiles: state.touchedFiles,
+          pending: [],
+          nextStep: null,
+          evidence: state.touchedFiles.length > 0 ? [`Touched files: ${state.touchedFiles.join(', ')}`] : [],
+        },
+      });
+    }
+
+    return true;
+  };
+
   const handleSessionStart = async () => {
     const result = await startTurn({
       phase: 'start',
@@ -350,7 +389,7 @@ export const createClaudeAdapter = ({
       toolResponse: input.tool_response,
     });
 
-    const nextState = {
+    let nextState = {
       ...existing,
       checkpointed: checkpoint.matched ? true : existing.checkpointed,
       checkpointEvent: checkpoint.matched ? checkpoint.event : existing.checkpointEvent,
@@ -358,6 +397,17 @@ export const createClaudeAdapter = ({
       meaningfulWriteCount: existing.meaningfulWriteCount + touchedFiles.length,
       updatedAt: new Date().toISOString(),
     };
+
+    if (!checkpoint.matched && touchedFiles.length > 0) {
+      const autoCheckpointed = await maybeAutoCheckpointFromState(nextState, { trigger: 'post_tool_use' });
+      if (autoCheckpointed) {
+        nextState = {
+          ...nextState,
+          checkpointed: true,
+          checkpointEvent: 'milestone',
+        };
+      }
+    }
 
     await maybeSetTrackedTurnState({ hookKey, state: nextState });
     if (checkpoint.matched || touchedFiles.length > 0) {
