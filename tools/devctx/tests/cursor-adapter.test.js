@@ -243,3 +243,140 @@ test('cursor adapter blocks ConversationEnd when checkpoint is missing', async (
   assert.match(result.reason, /smart_turn phase=end/i);
   assert.ok(states.has('cursor:main:cursor-blocked'));
 });
+
+test('cursor adapter PostToolUse auto-appends after threshold reads without writes', async () => {
+  const states = new Map([
+    ['cursor:main:cursor-reads', {
+      client: 'cursor',
+      cursorConversationId: 'cursor-reads',
+      projectSessionId: 'project-reads',
+      taskId: 'task-reads',
+      agentId: 'main',
+      turnId: 'turn-1',
+      promptPreview: 'Map the auth module',
+      continuityState: 'aligned',
+      requireCheckpoint: true,
+      promptMeaningful: true,
+      checkpointed: false,
+      touchedFiles: [],
+      meaningfulWriteCount: 0,
+      readFiles: [],
+      meaningfulReadCount: 0,
+      lastReadCheckpointAt: 0,
+    }],
+  ]);
+  const summaryCalls = [];
+  const handoffCalls = [];
+
+  const adapter = createCursorAdapter({
+    summaryTool: async (request) => {
+      summaryCalls.push(request);
+      return {};
+    },
+    writeTaskHandoff: async (entry) => {
+      handoffCalls.push(entry);
+    },
+    readHookState: async (hookKey) => states.get(hookKey) ?? null,
+    writeHookState: async ({ hookKey, state }) => {
+      states.set(hookKey, state);
+      return state;
+    },
+    removeHookState: async ({ hookKey }) => {
+      states.delete(hookKey);
+      return null;
+    },
+    persistMetric: async () => {},
+    writeAgentRun: async () => {},
+  });
+
+  for (let i = 0; i < 7; i++) {
+    await adapter.handleEvent({
+      hook_event_name: 'PostToolUse',
+      conversation_id: 'cursor-reads',
+      tool_name: 'Read',
+      tool_input: { path: `src/auth/file-${i}.js` },
+    });
+  }
+  assert.equal(summaryCalls.length, 0, 'should not auto-append before threshold');
+
+  await adapter.handleEvent({
+    hook_event_name: 'PostToolUse',
+    conversation_id: 'cursor-reads',
+    tool_name: 'Read',
+    tool_input: { path: 'src/auth/file-7.js' },
+  });
+
+  assert.equal(summaryCalls.length, 1);
+  assert.equal(summaryCalls[0].action, 'auto_append');
+  assert.equal(summaryCalls[0].sessionId, 'project-reads');
+  assert.ok(summaryCalls[0].update.touchedFiles.length >= 1);
+  assert.equal(handoffCalls.length, 1);
+  assert.equal(handoffCalls[0].trigger, 'read_progress');
+
+  const stateAfter = states.get('cursor:main:cursor-reads');
+  assert.equal(stateAfter.meaningfulReadCount, 0, 'counter resets after auto-append');
+  assert.deepEqual(stateAfter.readFiles, []);
+  assert.ok(stateAfter.lastReadCheckpointAt > 0);
+});
+
+test('cursor adapter PostToolUse ignores non-read tools and reads without paths', async () => {
+  const states = new Map([
+    ['cursor:main:cursor-noop', {
+      client: 'cursor',
+      cursorConversationId: 'cursor-noop',
+      projectSessionId: 'project-noop',
+      taskId: null,
+      agentId: 'main',
+      turnId: 'turn-1',
+      promptPreview: 'Explore something',
+      continuityState: 'aligned',
+      requireCheckpoint: true,
+      promptMeaningful: true,
+      checkpointed: false,
+      touchedFiles: [],
+      meaningfulWriteCount: 0,
+      readFiles: [],
+      meaningfulReadCount: 0,
+      lastReadCheckpointAt: 0,
+    }],
+  ]);
+  const summaryCalls = [];
+
+  const adapter = createCursorAdapter({
+    summaryTool: async (request) => {
+      summaryCalls.push(request);
+      return {};
+    },
+    readHookState: async (hookKey) => states.get(hookKey) ?? null,
+    writeHookState: async ({ hookKey, state }) => {
+      states.set(hookKey, state);
+      return state;
+    },
+    removeHookState: async ({ hookKey }) => {
+      states.delete(hookKey);
+      return null;
+    },
+    persistMetric: async () => {},
+    writeAgentRun: async () => {},
+    writeTaskHandoff: async () => {},
+  });
+
+  for (let i = 0; i < 12; i++) {
+    await adapter.handleEvent({
+      hook_event_name: 'PostToolUse',
+      conversation_id: 'cursor-noop',
+      tool_name: 'Read',
+      tool_input: {},
+    });
+    await adapter.handleEvent({
+      hook_event_name: 'PostToolUse',
+      conversation_id: 'cursor-noop',
+      tool_name: 'WebFetch',
+      tool_input: { url: 'https://example.com' },
+    });
+  }
+
+  assert.equal(summaryCalls.length, 0, 'no auto-append when reads have no paths or use unknown tools');
+  const stateAfter = states.get('cursor:main:cursor-noop');
+  assert.equal(stateAfter.meaningfulReadCount, 0);
+});

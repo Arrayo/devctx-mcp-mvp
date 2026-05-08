@@ -3,6 +3,11 @@ import { smartSearch } from '../../tools/smart-search.js';
 
 export const SAFE_CONTINUITY_STATES = new Set(['aligned', 'resume']);
 
+export const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'SemanticSearch']);
+export const READ_CHECKPOINT_THRESHOLD = 8;
+export const READ_CHECKPOINT_THROTTLE_MS = 60_000;
+export const MAX_READ_FILES = 12;
+
 export const MAX_TOP_FILES = 3;
 export const MAX_PREFLIGHT_HINTS = 2;
 export const MAX_FOCUS_LENGTH = 140;
@@ -62,6 +67,29 @@ export const truncate = (value, maxLength = DEFAULT_TRUNCATE_LENGTH) => {
 };
 
 const asArray = (value) => Array.isArray(value) ? value : [];
+
+const isMeaningfulPath = (value) => typeof value === 'string' && value.trim().length > 1;
+
+export const extractReadPathsFromToolUse = ({ toolName, toolInput } = {}) => {
+  if (!toolName || !READ_TOOLS.has(toolName) || !toolInput || typeof toolInput !== 'object') {
+    return [];
+  }
+
+  const candidates = [];
+
+  if (toolName === 'Read') {
+    candidates.push(toolInput.path, toolInput.file_path, toolInput.filePath);
+  } else if (toolName === 'Grep' || toolName === 'SemanticSearch') {
+    candidates.push(toolInput.path);
+    if (Array.isArray(toolInput.target_directories)) {
+      candidates.push(...toolInput.target_directories);
+    }
+  } else if (toolName === 'Glob') {
+    candidates.push(toolInput.target_directory);
+  }
+
+  return [...new Set(candidates.filter(isMeaningfulPath))];
+};
 
 export const uniqueCompact = (values) => [...new Set(
   asArray(values)

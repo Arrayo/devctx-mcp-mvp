@@ -332,29 +332,20 @@ const buildCompactResult = (groups, totalMatches, query, root, searchMode, prove
   }
 
   const modeLabel = searchMode === 'exact' ? '' : searchMode === 'regex' ? ' [regex fallback]' : ` [term expansion: ${(provenance?.expandedTerms ?? []).join(', ')}]`;
-
   const topGroups = groups.slice(0, MAX_RESULT_FILES);
 
   if (totalMatches <= 20) {
-    const header = modeLabel ? `# Search mode:${modeLabel}\n\n` : '';
+    const header = modeLabel ? `# Search mode:${modeLabel}\n` : '';
     return header + topGroups
       .flatMap((group) => group.matches)
       .map(formatMatch)
       .join('\n');
   }
 
-  const lines = [
-    `query: ${query}${modeLabel}`,
-    `total: ${totalMatches} matches in ${totalFiles ?? groups.length} files${totalFiles && totalFiles > groups.length ? ` (showing top ${groups.length})` : ''}`,
-    '',
-    '# Top files',
-  ];
-
-  for (const group of topGroups.slice(0, 10)) {
-    lines.push(`${group.count} match(es), score ${group.score} :: ${group.file}`);
+  const lines = [];
+  if (modeLabel) {
+    lines.push(`# Search mode:${modeLabel}`);
   }
-
-  lines.push('', '# Sample matches');
 
   const topScore = topGroups[0]?.score ?? 0;
   for (const group of topGroups.slice(0, 5)) {
@@ -366,7 +357,7 @@ const buildCompactResult = (groups, totalMatches, query, root, searchMode, prove
 
   const fileCount = totalFiles ?? groups.length;
   if (fileCount > 30) {
-    lines.push('', `# Note: ${fileCount} files matched — query may be too broad. Use Grep for exact pattern matching.`);
+    lines.push(`# Note: ${fileCount} files matched — query may be too broad. Use Grep for exact pattern matching.`);
   }
 
   return lines.join('\n');
@@ -535,7 +526,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, _testFor
     totalMatches: dedupedMatches.length,
     matchedFiles: cappedGroups.length,
     ...(groups.length > cappedGroups.length ? { totalFiles: groups.length } : {}),
-    topFiles: cappedGroups.slice(0, 10).map((group) => ({ file: group.file, count: group.count, score: group.score })),
+    topFiles: cappedGroups.slice(0, 5).map((group) => ({ file: group.file, count: group.count, score: group.score })),
     matches: compressedText,
   };
 

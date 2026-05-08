@@ -16,6 +16,12 @@ import { smartSummary } from './smart-summary.js';
 const isStorageUnhealthy = (health) =>
   health && health.status !== 'ok' && health.status !== null && health.status !== undefined;
 
+const VALID_VERBOSITIES = new Set(['minimal', 'standard', 'full']);
+const DEFAULT_VERBOSITY = 'minimal';
+
+const normalizeVerbosity = (value) =>
+  typeof value === 'string' && VALID_VERBOSITIES.has(value) ? value : DEFAULT_VERBOSITY;
+
 const DEFAULT_START_MAX_TOKENS = 400;
 const DEFAULT_END_MAX_TOKENS = 500;
 const DEFAULT_END_EVENT = 'milestone';
@@ -253,6 +259,7 @@ const buildStartRecommendedPath = ({
   mutationSafety,
   autoCreated,
   isolatedSession,
+  verbosity = DEFAULT_VERBOSITY,
 }) => {
   const nextTools = [];
   const steps = [];
@@ -310,15 +317,23 @@ const buildStartRecommendedPath = ({
     ));
   }
 
+  const mode = mutationSafety?.blocked
+    ? 'blocked_guided'
+    : refreshedContext
+      ? 'guided_refresh'
+      : hasMeaningfulPrompt(prompt)
+        ? 'guided_context'
+        : 'lightweight';
+  const dedupedTools = [...new Set(nextTools)];
+  const next = steps[0] ? `${steps[0].tool}: ${steps[0].instruction}` : (dedupedTools[0] ?? '');
+
+  if (verbosity === 'minimal') {
+    return { phase: 'start', mode, nextTools: dedupedTools, next };
+  }
+
   return {
     phase: 'start',
-    mode: mutationSafety?.blocked
-      ? 'blocked_guided'
-      : refreshedContext
-        ? 'guided_refresh'
-        : hasMeaningfulPrompt(prompt)
-          ? 'guided_context'
-          : 'lightweight',
+    mode,
     contextSource: refreshedContext
       ? 'refreshed_context'
       : continuity?.shouldReuseContext
@@ -328,12 +343,13 @@ const buildStartRecommendedPath = ({
     ensureSessionRecommended: Boolean(hasMeaningfulPrompt(prompt) && (ensureSession || !summaryResult?.found)),
     autoCreated,
     isolatedSession,
-    nextTools: [...new Set(nextTools)],
+    nextTools: dedupedTools,
+    next,
     instructions: steps.map((s) => `${s.tool}: ${s.instruction}`).join(' | '),
   };
 };
 
-const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow }) => {
+const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow, verbosity = DEFAULT_VERBOSITY }) => {
   const nextTools = [];
   const steps = [];
 
@@ -367,15 +383,24 @@ const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow }
     ));
   }
 
+  const mode = mutationSafety?.blocked
+    ? 'blocked_guided'
+    : checkpoint?.skipped
+      ? 'continue_until_milestone'
+      : 'checkpointed';
+  const dedupedTools = [...new Set(nextTools)];
+  const next = steps[0] ? `${steps[0].tool}: ${steps[0].instruction}` : (dedupedTools[0] ?? '');
+
+  if (verbosity === 'minimal') {
+    return { phase: 'end', mode, nextTools: dedupedTools, next };
+  }
+
   return {
     phase: 'end',
-    mode: mutationSafety?.blocked
-      ? 'blocked_guided'
-      : checkpoint?.skipped
-        ? 'continue_until_milestone'
-        : 'checkpointed',
+    mode,
     checkpointEvent: event,
-    nextTools: [...new Set(nextTools)],
+    nextTools: dedupedTools,
+    next,
     instructions: steps.map((s) => `${s.tool}: ${s.instruction}`).join(' | '),
   };
 };
@@ -416,6 +441,7 @@ const startTurn = async ({
   includeMetrics = false,
   metricsWindow = '7d',
   latestMetrics = 5,
+  verbosity = DEFAULT_VERBOSITY,
 } = {}) => {
   const startTime = Date.now();
   let summaryResult = await smartSummary({
@@ -526,6 +552,7 @@ const startTurn = async ({
     mutationSafety,
     autoCreated,
     isolatedSession,
+    verbosity,
   });
 
   await persistSmartTurnQualityMetrics({
@@ -555,32 +582,43 @@ const startTurn = async ({
     },
   });
 
+  const minimal = verbosity === 'minimal';
+  const compactContinuity = minimal
+    ? { state: continuity.state, shouldReuseContext: continuity.shouldReuseContext }
+    : continuity;
+  const compactTask = summaryResult.task && minimal
+    ? { taskId: summaryResult.task.taskId, status: summaryResult.task.status }
+    : summaryResult.task ?? null;
+  const includeMessage = !minimal || mutationSafety?.blocked;
+
   return attachSafetyMetadata({
     phase: 'start',
-    promptPreview: truncate(prompt, MAX_PROMPT_PREVIEW),
     sessionId: effectiveSessionId,
     found: summaryResult.found ?? false,
     autoCreated,
     isolatedSession,
+    ...(minimal ? {} : { promptPreview: truncate(prompt, MAX_PROMPT_PREVIEW) }),
     ...(previousSessionId ? { previousSessionId } : {}),
-    continuity,
-    summary: summaryResult.summary ?? null,
+    continuity: compactContinuity,
+    ...(summaryResult.summary ? { summary: summaryResult.summary } : {}),
     ...(refreshedContext ? { refreshedContext } : {}),
     ...(workflow ? { workflow } : {}),
-    ...(summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
-    ...(summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
-    ...(summaryResult.task ? { task: summaryResult.task } : {}),
+    ...(!minimal && summaryResult.candidates ? { candidates: summaryResult.candidates } : {}),
+    ...(summaryResult.ambiguous && summaryResult.recommendedSessionId ? { recommendedSessionId: summaryResult.recommendedSessionId } : {}),
+    ...(compactTask ? { task: compactTask } : {}),
     ...(summaryResult.handoff ? { handoff: summaryResult.handoff } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
     ...(isStorageUnhealthy(summaryResult.storageHealth ?? metrics?.storageHealth) ? { storageHealth: summaryResult.storageHealth ?? metrics?.storageHealth } : {}),
     recommendedPath,
-    message: mutationSafety?.blocked
-      ? mutationSafety.message
-      : summaryResult.found
-        ? continuity.reason
-        : autoCreated
-          ? 'Created a new persisted session for this task prompt.'
-          : continuity.reason,
+    ...(includeMessage ? {
+      message: mutationSafety?.blocked
+        ? mutationSafety.message
+        : summaryResult.found
+          ? continuity.reason
+          : autoCreated
+            ? 'Created a new persisted session for this task prompt.'
+            : continuity.reason,
+    } : {}),
   }, {
     repoSafety: summaryResult.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(summaryResult.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
@@ -601,6 +639,7 @@ const endTurn = async ({
   includeMetrics = false,
   metricsWindow = '7d',
   latestMetrics = 5,
+  verbosity = DEFAULT_VERBOSITY,
 } = {}) => {
   const startTime = Date.now();
   const checkpoint = await smartSummary({
@@ -660,6 +699,7 @@ const endTurn = async ({
     checkpoint,
     mutationSafety,
     workflow,
+    verbosity,
   });
 
   await persistSmartTurnQualityMetrics({
@@ -683,15 +723,34 @@ const endTurn = async ({
     },
   });
 
+  const minimal = verbosity === 'minimal';
+  const compactCheckpoint = minimal
+    ? {
+        skipped: Boolean(checkpoint.skipped),
+        ...(checkpoint.blocked !== undefined ? { blocked: checkpoint.blocked } : {}),
+        ...(checkpoint.summary ? { summary: checkpoint.summary } : {}),
+        ...(checkpoint.tokens !== undefined ? { tokens: checkpoint.tokens } : {}),
+        ...(checkpoint.checkpoint ? {
+          checkpoint: {
+            event: checkpoint.checkpoint.event,
+            shouldPersist: checkpoint.checkpoint.shouldPersist,
+            score: checkpoint.checkpoint.score,
+            threshold: checkpoint.checkpoint.threshold,
+          },
+        } : {}),
+      }
+    : checkpoint;
+  const includeMessage = !minimal || mutationSafety?.blocked;
+
   return attachSafetyMetadata({
     phase: 'end',
     sessionId: checkpoint.sessionId ?? sessionId ?? null,
-    checkpoint,
+    checkpoint: compactCheckpoint,
     ...(workflow ? { workflow } : {}),
     ...(metrics ? { metrics: summarizeMetrics(metrics) } : {}),
     ...(isStorageUnhealthy(checkpoint.storageHealth ?? metrics?.storageHealth) ? { storageHealth: checkpoint.storageHealth ?? metrics?.storageHealth } : {}),
     recommendedPath,
-    message: mutationSafety?.blocked ? mutationSafety.message : checkpoint.message,
+    ...(includeMessage ? { message: mutationSafety?.blocked ? mutationSafety.message : checkpoint.message } : {}),
   }, {
     repoSafety: checkpoint.repoSafety ?? metrics?.repoSafety ?? null,
     sideEffectsSuppressed: Boolean(checkpoint.sideEffectsSuppressed ?? metrics?.sideEffectsSuppressed),
@@ -715,7 +774,10 @@ export const smartTurn = async ({
   includeMetrics = false,
   metricsWindow = '7d',
   latestMetrics = 5,
+  verbosity,
 } = {}) => {
+  const resolvedVerbosity = normalizeVerbosity(verbosity);
+
   if (phase === 'start') {
     return startTurn({
       sessionId,
@@ -726,6 +788,7 @@ export const smartTurn = async ({
       includeMetrics,
       metricsWindow,
       latestMetrics,
+      verbosity: resolvedVerbosity,
     });
   }
 
@@ -740,6 +803,7 @@ export const smartTurn = async ({
       includeMetrics,
       metricsWindow,
       latestMetrics,
+      verbosity: resolvedVerbosity,
     });
   }
 

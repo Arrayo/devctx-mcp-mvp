@@ -189,3 +189,77 @@ test('claude adapter Stop auto-appends carryover and clears state on second stop
   assert.match(summaryCalls[0].update.nextStep, /run the Claude adapter tests/i);
   assert.equal(states.has('claude:main:claude-stop'), false);
 });
+
+test('claude adapter PostToolUse auto-appends after threshold reads without writes', async () => {
+  const states = new Map([
+    ['claude:main:claude-reads', {
+      client: 'claude',
+      claudeSessionId: 'claude-reads',
+      projectSessionId: 'project-reads',
+      taskId: 'task-reads',
+      agentId: 'main',
+      turnId: 'turn-1',
+      promptPreview: 'Map the auth module',
+      continuityState: 'aligned',
+      requireCheckpoint: true,
+      promptMeaningful: true,
+      checkpointed: false,
+      touchedFiles: [],
+      meaningfulWriteCount: 0,
+      readFiles: [],
+      meaningfulReadCount: 0,
+      lastReadCheckpointAt: 0,
+    }],
+  ]);
+  const summaryCalls = [];
+  const handoffCalls = [];
+
+  const adapter = createClaudeAdapter({
+    summaryTool: async (request) => {
+      summaryCalls.push(request);
+      return {};
+    },
+    writeTaskHandoff: async (entry) => {
+      handoffCalls.push(entry);
+    },
+    readHookState: async (hookKey) => states.get(hookKey) ?? null,
+    writeHookState: async ({ hookKey, state }) => {
+      states.set(hookKey, state);
+      return state;
+    },
+    removeHookState: async ({ hookKey }) => {
+      states.delete(hookKey);
+      return null;
+    },
+    persistMetric: async () => {},
+    writeAgentRun: async () => {},
+  });
+
+  for (let i = 0; i < 7; i++) {
+    await adapter.handleEvent({
+      hook_event_name: 'PostToolUse',
+      session_id: 'claude-reads',
+      tool_name: 'Read',
+      tool_input: { file_path: `src/auth/file-${i}.js` },
+    });
+  }
+  assert.equal(summaryCalls.length, 0, 'should not auto-append before threshold');
+
+  await adapter.handleEvent({
+    hook_event_name: 'PostToolUse',
+    session_id: 'claude-reads',
+    tool_name: 'Read',
+    tool_input: { file_path: 'src/auth/file-7.js' },
+  });
+
+  assert.equal(summaryCalls.length, 1);
+  assert.equal(summaryCalls[0].action, 'auto_append');
+  assert.equal(summaryCalls[0].sessionId, 'project-reads');
+  assert.equal(handoffCalls.length, 1);
+  assert.equal(handoffCalls[0].trigger, 'read_progress');
+
+  const stateAfter = states.get('claude:main:claude-reads');
+  assert.equal(stateAfter.meaningfulReadCount, 0);
+  assert.deepEqual(stateAfter.readFiles, []);
+  assert.ok(stateAfter.lastReadCheckpointAt > 0);
+});

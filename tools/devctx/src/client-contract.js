@@ -52,8 +52,11 @@ export const buildRecommendedPathLines = (
     lines.push(`${nextToolsLabel}: ${recommendedPath.nextTools.slice(0, 3).join(' -> ')}`);
   }
 
-  if (includePath && recommendedPath.steps?.[0]?.instruction) {
-    lines.push(`${pathLabel}: ${truncate(recommendedPath.steps[0].instruction, maxLength)}`);
+  if (includePath) {
+    const pathInstruction = recommendedPath.steps?.[0]?.instruction ?? recommendedPath.next ?? null;
+    if (pathInstruction) {
+      lines.push(`${pathLabel}: ${truncate(pathInstruction, maxLength)}`);
+    }
   }
 
   return lines;

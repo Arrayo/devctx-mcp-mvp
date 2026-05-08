@@ -41,6 +41,7 @@ smart_turn (session continuity — read this before calling):
 - START: phase "start". Pass userPrompt (current goal). ensureSession true recommended when you want persistence. Use at the beginning of substantial work or when resuming after a break — not for one-line fixes or single-shot questions.
 - END: phase "end". Pass event: milestone | blocker | task_complete. Pass sessionId if you have it; include update (nextStep, completed, etc.) when checkpointing progress. Call after a meaningful slice of work (close a phase), not after every trivial edit.
 - SKIP smart_turn entirely for trivial or same-session point tasks (the tool schema also warns about this).
+- smart_resume is the cheap shortcut for the first prompt of a substantial task — equivalent to smart_turn(start, ensureSession=true, verbosity=minimal).
 
 Source of truth: devctx does not replace git history, PRs, or repo docs (e.g. MIGRATION.md). If end was not called or work was not committed, those remain authoritative.
 
@@ -508,8 +509,9 @@ export const createDevctxServer = () => {
       includeMetrics: z.boolean().optional(),
       metricsWindow: z.enum(['24h', '7d', '30d', 'all']).optional(),
       latestMetrics: z.number().int().min(1).max(20).optional(),
+      verbosity: z.enum(['minimal', 'standard', 'full']).optional().describe('Default "minimal" — returns compact recommendedPath/continuity/task. Use "standard" or "full" only when you need long instructions, candidates, or full checkpoint diagnostics.'),
     },
-    async ({ phase, sessionId, prompt, update, event, force, maxTokens, ensureSession, includeMetrics, metricsWindow, latestMetrics }) =>
+    async ({ phase, sessionId, prompt, update, event, force, maxTokens, ensureSession, includeMetrics, metricsWindow, latestMetrics, verbosity }) =>
       asTextResult(await smartTurn({
         phase,
         sessionId,
@@ -522,6 +524,29 @@ export const createDevctxServer = () => {
         includeMetrics,
         metricsWindow,
         latestMetrics,
+        verbosity,
+      })),
+  );
+
+  server.tool(
+    'smart_resume',
+    'Lightweight entry point for the first prompt of a substantial task. Equivalent to smart_turn(phase=start, ensureSession=true, verbosity=minimal): rehydrates the most recent persisted session for this project, classifies prompt continuity, and returns a compact recommendedPath. Prefer this over smart_turn(start) when you just want to recover context cheaply at the beginning of a session. SKIP for one-off lookups, single-line fixes, or trivial questions where re-reading is faster than rehydration.',
+    {
+      prompt: z.string().optional(),
+      sessionId: z.string().optional(),
+      taskId: z.string().optional(),
+      maxTokens: z.number().int().min(100).max(2000).optional(),
+      verbosity: z.enum(['minimal', 'standard', 'full']).optional(),
+    },
+    async ({ prompt, sessionId, taskId, maxTokens, verbosity }) =>
+      asTextResult(await smartTurn({
+        phase: 'start',
+        prompt,
+        sessionId,
+        taskId,
+        maxTokens,
+        ensureSession: true,
+        verbosity: verbosity ?? 'minimal',
       })),
   );
 

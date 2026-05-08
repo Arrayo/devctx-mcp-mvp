@@ -64,7 +64,7 @@ test('smart_turn start reuses aligned persisted context', { skip: SKIP_SQLITE_TE
   assert.equal(result.refreshedContext, undefined);
   assert.equal(result.recommendedPath.mode, 'guided_context');
   assert.deepEqual(result.recommendedPath.nextTools, ['smart_context', 'smart_read', 'smart_turn']);
-  assert.match(result.recommendedPath.instructions, /smart_context/i);
+  assert.match(result.recommendedPath.next, /smart_context/i);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-aligned' });
 });
@@ -117,7 +117,7 @@ test('smart_turn start refreshes lightweight context for the new prompt', { skip
   assert.ok(result.refreshedContext.topFiles.some((item) => item.file.includes('src/auth.js')));
   assert.equal(result.recommendedPath.mode, 'guided_refresh');
   assert.deepEqual(result.recommendedPath.nextTools, ['smart_read', 'smart_turn']);
-  assert.match(result.recommendedPath.instructions, /refreshedContext\.topFiles/i);
+  assert.match(result.recommendedPath.next, /refreshedContext\.topFiles/i);
 
   await smartSummary({ action: 'reset', sessionId: result.sessionId });
 });
@@ -261,7 +261,7 @@ test('smart_turn reports workflow tracking blocked when state sqlite is staged',
       });
       assert.equal(result.recommendedPath.mode, 'blocked_guided');
       assert.equal(result.recommendedPath.nextTools[0], 'repo_safety');
-      assert.match(result.recommendedPath.instructions, /recommendedActions/i);
+      assert.match(result.recommendedPath.next, /recommendedActions/i);
 
       const active = await getWorkflowMetrics({ sessionId: 'turn-workflow-blocked', completed: false, limit: 1 });
       assert.equal(active.length, 0);
@@ -433,7 +433,7 @@ test('smart_turn end checkpoints a meaningful turn update', { skip: SKIP_SQLITE_
   assert.ok(result.checkpoint.summary.recentCompleted.includes('Implemented smart_turn orchestration flow'));
   assert.equal(result.recommendedPath.mode, 'checkpointed');
   assert.deepEqual(result.recommendedPath.nextTools, ['smart_turn']);
-  assert.match(result.recommendedPath.instructions, /restart with smart_turn\(start/i);
+  assert.match(result.recommendedPath.next, /restart with smart_turn\(start/i);
 
   await smartSummary({ action: 'reset', sessionId: 'turn-end' });
 });

@@ -12,7 +12,15 @@ import {
   upsertAgentRun,
 } from '../../storage/sqlite.js';
 import { DEFAULT_START_MAX_TOKENS, resolveManagedStart } from '../base-orchestrator.js';
-import { extractNextStep, normalizeWhitespace, truncate } from '../policy/event-policy.js';
+import {
+  MAX_READ_FILES,
+  READ_CHECKPOINT_THRESHOLD,
+  READ_CHECKPOINT_THROTTLE_MS,
+  extractNextStep,
+  extractReadPathsFromToolUse,
+  normalizeWhitespace,
+  truncate,
+} from '../policy/event-policy.js';
 
 export const HOOK_CLIENT = 'cursor';
 export const STOP_MAX_TOKENS = 300;
@@ -207,6 +215,11 @@ export const createCursorAdapter = ({
     const autoStartTriggered = action === 'ConversationStart' || action === 'UserMessageSubmit';
     const autoCheckpointTriggered = action === 'ConversationEnd' && autoAppended;
 
+    const shouldPersist = autoStartTriggered || autoCheckpointTriggered || blocked || overheadTokens > 0;
+    if (!shouldPersist) {
+      return;
+    }
+
     await persistMetric({
       tool: 'cursor_hook',
       action,
@@ -269,13 +282,52 @@ export const createCursorAdapter = ({
         checkpointEvent: null,
         touchedFiles: [],
         meaningfulWriteCount: 0,
+        readFiles: [],
+        meaningfulReadCount: 0,
+        lastReadCheckpointAt: 0,
       },
     });
   };
 
-  const maybeAutoCheckpointFromState = async (state, { trigger = 'post_tool_use' } = {}) => {
+  const maybeAutoCheckpointFromState = async (state, { trigger = 'post_tool_use', mode = 'milestone' } = {}) => {
     if (!state?.projectSessionId || getMutationSafety().shouldBlock) {
       return false;
+    }
+
+    if (mode === 'read_progress') {
+      const filesForUpdate = state.readFiles.slice(-MAX_READ_FILES);
+      if (filesForUpdate.length === 0) {
+        return false;
+      }
+
+      await summaryTool({
+        action: 'auto_append',
+        sessionId: state.projectSessionId,
+        update: {
+          ...(state.promptPreview ? { currentFocus: state.promptPreview } : {}),
+          touchedFiles: filesForUpdate,
+        },
+        maxTokens: STOP_MAX_TOKENS,
+      });
+
+      if (state.taskId) {
+        await writeTaskHandoff({
+          taskId: state.taskId,
+          sessionId: state.projectSessionId,
+          fromAgentId: state.agentId ?? null,
+          toAgentId: null,
+          trigger: 'read_progress',
+          summary: {
+            currentFocus: state.promptPreview,
+            touchedFiles: filesForUpdate,
+            pending: [],
+            nextStep: null,
+            evidence: [`Exploration: ${filesForUpdate.length} file(s) read`],
+          },
+        });
+      }
+
+      return true;
     }
 
     const update = {
@@ -391,6 +443,16 @@ export const createCursorAdapter = ({
       toolInput: input.tool_input,
       toolResponse: input.tool_response,
     });
+    const readPaths = touchedFiles.length === 0 && !checkpoint.matched
+      ? extractReadPathsFromToolUse({ toolName: input.tool_name, toolInput: input.tool_input })
+      : [];
+
+    const previousReadFiles = Array.isArray(existing.readFiles) ? existing.readFiles : [];
+    const previousReadCount = Number.isFinite(existing.meaningfulReadCount) ? existing.meaningfulReadCount : 0;
+    const readFiles = readPaths.length > 0
+      ? uniq([...previousReadFiles, ...readPaths]).slice(-MAX_READ_FILES)
+      : previousReadFiles;
+    const meaningfulReadCount = readPaths.length > 0 ? previousReadCount + 1 : previousReadCount;
 
     let nextState = {
       ...existing,
@@ -398,6 +460,9 @@ export const createCursorAdapter = ({
       checkpointEvent: checkpoint.matched ? checkpoint.event : existing.checkpointEvent,
       touchedFiles: uniq([...existing.touchedFiles, ...touchedFiles]).slice(0, MAX_TOUCHED_FILES),
       meaningfulWriteCount: existing.meaningfulWriteCount + touchedFiles.length,
+      readFiles,
+      meaningfulReadCount,
+      lastReadCheckpointAt: existing.lastReadCheckpointAt ?? 0,
       updatedAt: new Date().toISOString(),
     };
 
@@ -410,10 +475,28 @@ export const createCursorAdapter = ({
           checkpointEvent: 'milestone',
         };
       }
+    } else if (
+      !checkpoint.matched
+      && touchedFiles.length === 0
+      && meaningfulReadCount >= READ_CHECKPOINT_THRESHOLD
+      && Date.now() - (nextState.lastReadCheckpointAt ?? 0) >= READ_CHECKPOINT_THROTTLE_MS
+    ) {
+      const autoAppended = await maybeAutoCheckpointFromState(nextState, {
+        trigger: 'read_progress',
+        mode: 'read_progress',
+      });
+      if (autoAppended) {
+        nextState = {
+          ...nextState,
+          readFiles: [],
+          meaningfulReadCount: 0,
+          lastReadCheckpointAt: Date.now(),
+        };
+      }
     }
 
     await maybeSetTrackedTurnState({ hookKey, state: nextState });
-    if (checkpoint.matched || touchedFiles.length > 0) {
+    if (checkpoint.matched || touchedFiles.length > 0 || readPaths.length > 0) {
       await recordHookMetrics({
         action: 'PostToolUse',
         sessionId: existing.projectSessionId,

@@ -13,8 +13,10 @@ import {
   buildWorkflowPromptWithPolicy,
   buildWorkflowPolicyPayload,
   extractNextStep,
+  extractReadPathsFromToolUse,
   buildTaskRunnerAutomaticity,
   SAFE_CONTINUITY_STATES,
+  READ_TOOLS,
 } from '../src/orchestration/policy/event-policy.js';
 
 test('normalizeWhitespace collapses multiple spaces and trims', () => {
@@ -489,4 +491,35 @@ test('buildWorkflowPolicyPayload creates immutable nextTools array', () => {
 
   result.nextTools.push('smart_turn');
   assert.deepEqual(originalTools, ['smart_read', 'smart_edit']);
+});
+
+test('extractReadPathsFromToolUse pulls paths from supported read tools', () => {
+  assert.deepEqual(
+    extractReadPathsFromToolUse({ toolName: 'Read', toolInput: { path: 'src/a.js' } }),
+    ['src/a.js'],
+  );
+  assert.deepEqual(
+    extractReadPathsFromToolUse({ toolName: 'Read', toolInput: { file_path: 'src/b.js' } }),
+    ['src/b.js'],
+  );
+  assert.deepEqual(
+    extractReadPathsFromToolUse({ toolName: 'Glob', toolInput: { target_directory: 'src' } }),
+    ['src'],
+  );
+  assert.deepEqual(
+    extractReadPathsFromToolUse({
+      toolName: 'SemanticSearch',
+      toolInput: { target_directories: ['src/auth', 'src/api'] },
+    }),
+    ['src/auth', 'src/api'],
+  );
+  assert.deepEqual(
+    extractReadPathsFromToolUse({ toolName: 'Grep', toolInput: { pattern: 'foo' } }),
+    [],
+  );
+  assert.deepEqual(
+    extractReadPathsFromToolUse({ toolName: 'Write', toolInput: { path: 'src/a.js' } }),
+    [],
+  );
+  assert.ok(READ_TOOLS.has('Read') && READ_TOOLS.has('SemanticSearch'));
 });

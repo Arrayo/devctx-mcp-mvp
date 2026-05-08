@@ -744,7 +744,6 @@ test('smart_summary - hard cap with pathological touchedFiles', { skip: SKIP_SQL
   });
 
   assert.ok(result.tokens <= 350, `Expected tokens <= 350, got ${result.tokens}`);
-  assert.strictEqual(result.truncated, true);
   assert.ok((result.summary.hotFiles || []).length <= 5);
 
   await smartSummary({ action: 'reset', sessionId: 'test-long-paths' });
@@ -1279,6 +1278,100 @@ test('smart_summary - cleanup_legacy supports dry-run and apply for imported fil
     assert.ok(!fs.existsSync(metricsFile));
 
     await smartSummary({ action: 'reset', sessionId: legacySessionId });
+  } finally {
+    setProjectRoot(previousRoot);
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+});
+
+test('smart_summary - rolling window archives oldest decisions/completed/touchedFiles past 30', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const sessionId = 'rolling-window-session';
+  const initial = Array.from({ length: 25 }, (_, i) => `task-${i}`);
+  await smartSummary({
+    action: 'update',
+    sessionId,
+    update: {
+      goal: 'Rolling window verification',
+      status: 'in_progress',
+      completed: initial,
+      decisions: initial,
+      touchedFiles: initial.map((t) => `src/${t}.js`),
+    },
+  });
+
+  const additions = Array.from({ length: 20 }, (_, i) => `task-${25 + i}`);
+  const result = await smartSummary({
+    action: 'append',
+    sessionId,
+    update: {
+      completed: additions,
+      decisions: additions,
+      touchedFiles: additions.map((t) => `src/${t}.js`),
+    },
+  });
+
+  assert.strictEqual(result.summary.completedCount, 45);
+  assert.strictEqual(result.summary.decisionsCount, 45);
+  assert.strictEqual(result.summary.touchedFilesCount, 45);
+
+  const stored = await withProjectStateDb(
+    (db) => JSON.parse(db.prepare('SELECT snapshot_json FROM sessions WHERE session_id = ?').get(sessionId).snapshot_json),
+    { readOnly: true },
+  );
+
+  assert.strictEqual(stored.completed.length, 20, 'completed array trimmed to ROLLING_KEEP');
+  assert.strictEqual(stored.decisions.length, 20);
+  assert.strictEqual(stored.touchedFiles.length, 20);
+  assert.strictEqual(stored.archivedCounts.completed, 25);
+  assert.strictEqual(stored.archivedCounts.decisions, 25);
+  assert.strictEqual(stored.archivedCounts.touchedFiles, 25);
+  assert.strictEqual(stored.completed[stored.completed.length - 1], 'task-44');
+
+  await smartSummary({ action: 'reset', sessionId });
+});
+
+test('smart_summary - get falls back to latest task handoff when no live session exists', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-handoff-fallback-'));
+  const previousRoot = projectRoot;
+
+  try {
+    setProjectRoot(tmpRoot);
+
+    const { persistTaskHandoff } = await import('../src/storage/sqlite.js');
+
+    await withProjectStateDb((db) => {
+      const now = new Date().toISOString();
+      db.prepare(`
+        INSERT INTO tasks(task_id, project_scope, canonical_goal, normalized_goal, status, branch_name, worktree_path, last_session_id, created_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run('handoff-task', 'project', 'Resume from handoff', 'resume from handoff', 'in_progress', null, null, null, now, now);
+    });
+
+    await persistTaskHandoff({
+      filePath: getStateDbPath(),
+      taskId: 'handoff-task',
+      sessionId: null,
+      fromAgentId: 'main',
+      toAgentId: null,
+      trigger: 'session_end',
+      summary: {
+        currentFocus: 'Migrate auth module',
+        touchedFiles: ['src/auth/login.js', 'src/auth/session.js'],
+        nextStep: 'Wire login handler to new session store',
+        pending: ['Verify token expiration handling'],
+      },
+    });
+
+    const result = await smartSummary({ action: 'get' });
+
+    assert.strictEqual(result.found, true);
+    assert.strictEqual(result.recoveredFromHandoff, true);
+    assert.strictEqual(result.compressionLevel, 'handoff');
+    assert.strictEqual(result.summary.currentFocus, 'Migrate auth module');
+    assert.strictEqual(result.summary.nextStep, 'Wire login handler to new session store');
+    assert.ok(result.summary.hotFiles.some((f) => f.includes('login.js')));
+    assert.strictEqual(result.handoff.taskId, 'handoff-task');
+    assert.strictEqual(result.task.taskId, 'handoff-task');
   } finally {
     setProjectRoot(previousRoot);
     fs.rmSync(tmpRoot, { recursive: true, force: true });

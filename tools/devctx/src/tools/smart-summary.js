@@ -19,6 +19,16 @@ import {
 
 const MAX_SESSION_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_TOKENS = 500;
+const ROLLING_LIMIT = 30;
+const ROLLING_KEEP = 20;
+
+const applyRollingWindow = (items) => {
+  if (!Array.isArray(items) || items.length <= ROLLING_LIMIT) {
+    return { items: Array.isArray(items) ? items : [], archived: 0 };
+  }
+  const archived = items.length - ROLLING_KEEP;
+  return { items: items.slice(-ROLLING_KEEP), archived };
+};
 const VALID_STATUSES = new Set(['planning', 'in_progress', 'blocked', 'completed']);
 const ACTIVE_STATUSES = new Set(['planning', 'in_progress', 'blocked']);
 const DEFAULT_STATUS = 'in_progress';
@@ -735,6 +745,65 @@ const getLatestTaskHandoffRow = (db, taskId) => db.prepare(`
   LIMIT 1
 `).get(taskId);
 
+const HANDOFF_FALLBACK_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const getMostRecentTaskHandoffRow = (db) => db.prepare(`
+  SELECT
+    handoff_id,
+    task_id,
+    session_id,
+    from_agent_id,
+    to_agent_id,
+    trigger,
+    summary_json,
+    created_at
+  FROM task_handoffs
+  ORDER BY datetime(created_at) DESC, handoff_id DESC
+  LIMIT 1
+`).get();
+
+const buildSummaryFromHandoff = (handoff, taskRecord = null) => {
+  const summary = handoff?.summary ?? {};
+  const touchedFiles = mergeUniqueStrings(summary.touchedFiles);
+  const pending = mergeUniqueStrings(summary.pending);
+
+  return pruneEmptyFields({
+    status: normalizeStatus(taskRecord?.status, 'in_progress'),
+    nextStep: isMeaningfulString(summary.nextStep) ? summary.nextStep : undefined,
+    currentFocus: isMeaningfulString(summary.currentFocus) ? summary.currentFocus : undefined,
+    goal: isMeaningfulString(taskRecord?.canonicalGoal) ? taskRecord.canonicalGoal : undefined,
+    pinnedContext: pending.slice(0, 3),
+    hotFiles: uniqueTail(touchedFiles.map(compactFilePath), 5),
+    touchedFilesCount: touchedFiles.length,
+    completedCount: 0,
+    decisionsCount: 0,
+  });
+};
+
+const buildHandoffFallback = (db) => {
+  const handoffRow = getMostRecentTaskHandoffRow(db);
+  if (!handoffRow) {
+    return null;
+  }
+
+  const ageMs = Date.now() - getTimestamp(handoffRow.created_at, 0);
+  if (!Number.isFinite(ageMs) || ageMs > HANDOFF_FALLBACK_MAX_AGE_MS) {
+    return null;
+  }
+
+  const handoff = normalizeTaskHandoff(handoffRow);
+  const taskRecord = handoff?.taskId ? normalizeTaskRow(getTaskRow(db, handoff.taskId)) : null;
+  const summary = buildSummaryFromHandoff(handoff, taskRecord);
+  const tokens = countTokens(JSON.stringify(summary));
+
+  return {
+    summary,
+    tokens,
+    handoff,
+    task: taskRecord,
+  };
+};
+
 const normalizeTaskHandoff = (row) => {
   if (!row) {
     return null;
@@ -761,6 +830,13 @@ const hydrateSession = (row) => {
   const completed = mergeUniqueStrings(snapshot.completed);
   const decisions = mergeUniqueStrings(snapshot.decisions);
   const touchedFiles = mergeUniqueStrings(snapshot.touchedFiles);
+  const archivedCounts = snapshot.archivedCounts && typeof snapshot.archivedCounts === 'object'
+    ? {
+        completed: Number(snapshot.archivedCounts.completed ?? 0) || 0,
+        decisions: Number(snapshot.archivedCounts.decisions ?? 0) || 0,
+        touchedFiles: Number(snapshot.archivedCounts.touchedFiles ?? 0) || 0,
+      }
+    : { completed: 0, decisions: 0, touchedFiles: 0 };
   const pinnedContext = mergeUniqueStrings(parseJsonText(row.pinned_context_json, []), snapshot.pinnedContext);
   const unresolvedQuestions = mergeUniqueStrings(parseJsonText(row.unresolved_questions_json, []), snapshot.unresolvedQuestions);
   const blockers = mergeUniqueStrings(parseJsonText(row.blockers_json, []), snapshot.blockers);
@@ -784,9 +860,10 @@ const hydrateSession = (row) => {
     completed,
     decisions,
     touchedFiles,
-    completedCount: Number.isInteger(row.completed_count) ? row.completed_count : completed.length,
-    decisionsCount: Number.isInteger(row.decisions_count) ? row.decisions_count : decisions.length,
-    touchedFilesCount: Number.isInteger(row.touched_files_count) ? row.touched_files_count : touchedFiles.length,
+    archivedCounts,
+    completedCount: Number.isInteger(row.completed_count) ? row.completed_count : completed.length + archivedCounts.completed,
+    decisionsCount: Number.isInteger(row.decisions_count) ? row.decisions_count : decisions.length + archivedCounts.decisions,
+    touchedFilesCount: Number.isInteger(row.touched_files_count) ? row.touched_files_count : touchedFiles.length + archivedCounts.touchedFiles,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -821,7 +898,7 @@ const buildSessionSummary = (session) => {
 const compressSummary = (data, maxTokens) => {
   const baseSummary = buildSessionSummary(data);
   let compressed = baseSummary;
-  let summary = JSON.stringify(compressed, null, 2);
+  let summary = JSON.stringify(compressed);
   let tokens = countTokens(summary);
 
   if (tokens <= maxTokens) {
@@ -830,7 +907,7 @@ const compressSummary = (data, maxTokens) => {
 
   const recomputeTokens = () => {
     compressed = pruneEmptyFields(compressed);
-    summary = JSON.stringify(compressed, null, 2);
+    summary = JSON.stringify(compressed);
     tokens = countTokens(summary);
   };
 
@@ -1005,12 +1082,22 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
     branchName: data.branchName ?? existing?.branchName ?? null,
     worktreePath: data.worktreePath ?? existing?.worktreePath ?? null,
   });
-  const completed = mergeUniqueStrings(data.completed);
-  const decisions = mergeUniqueStrings(data.decisions);
-  const touchedFiles = mergeUniqueStrings(data.touchedFiles);
+  const completedRoll = applyRollingWindow(mergeUniqueStrings(data.completed));
+  const decisionsRoll = applyRollingWindow(mergeUniqueStrings(data.decisions));
+  const touchedRoll = applyRollingWindow(mergeUniqueStrings(data.touchedFiles));
+  const completed = completedRoll.items;
+  const decisions = decisionsRoll.items;
+  const touchedFiles = touchedRoll.items;
   const pinnedContext = mergeUniqueStrings(data.pinnedContext);
   const unresolvedQuestions = mergeUniqueStrings(data.unresolvedQuestions);
   const blockers = mergeUniqueStrings(data.blockers);
+
+  const previousArchived = existing?.archivedCounts ?? {};
+  const archivedCounts = {
+    completed: (previousArchived.completed ?? 0) + completedRoll.archived,
+    decisions: (previousArchived.decisions ?? 0) + decisionsRoll.archived,
+    touchedFiles: (previousArchived.touchedFiles ?? 0) + touchedRoll.archived,
+  };
 
   const snapshot = {
     taskId: task.taskId,
@@ -1028,9 +1115,10 @@ const saveSession = (db, sessionId, data, { action, eventPayload } = {}) => {
     blockers,
     nextStep: data.nextStep ?? '',
     touchedFiles,
-    completedCount: completed.length,
-    decisionsCount: decisions.length,
-    touchedFilesCount: touchedFiles.length,
+    archivedCounts,
+    completedCount: completed.length + archivedCounts.completed,
+    decisionsCount: decisions.length + archivedCounts.decisions,
+    touchedFilesCount: touchedFiles.length + archivedCounts.touchedFiles,
     schemaVersion: SQLITE_SCHEMA_VERSION,
     sessionId,
     createdAt,
@@ -1446,6 +1534,23 @@ export const smartSummary = async ({
           cleanup: allowReadSideEffects,
         });
         if (!resolution.found) {
+          const handoffFallback = buildHandoffFallback(db);
+          if (handoffFallback) {
+            return addRepoSafety({
+              action: 'get',
+              sessionId: null,
+              found: true,
+              recoveredFromHandoff: true,
+              autoResumed: false,
+              ambiguous: false,
+              summary: handoffFallback.summary,
+              tokens: handoffFallback.tokens,
+              compressionLevel: 'handoff',
+              ...(handoffFallback.task ? { task: handoffFallback.task } : {}),
+              handoff: handoffFallback.handoff,
+              message: 'Recovered from latest task handoff (no live session).',
+            }, mutationSafety.repoSafety, suppressReadSideEffects);
+          }
           return addRepoSafety({
             action: 'get',
             sessionId: null,
@@ -1463,6 +1568,21 @@ export const smartSummary = async ({
       }
 
       if (!targetSessionId) {
+        const handoffFallback = buildHandoffFallback(db);
+        if (handoffFallback) {
+          return addRepoSafety({
+            action: 'get',
+            sessionId: null,
+            found: true,
+            recoveredFromHandoff: true,
+            summary: handoffFallback.summary,
+            tokens: handoffFallback.tokens,
+            compressionLevel: 'handoff',
+            ...(handoffFallback.task ? { task: handoffFallback.task } : {}),
+            handoff: handoffFallback.handoff,
+            message: 'Recovered from latest task handoff (no live session).',
+          }, mutationSafety.repoSafety, suppressReadSideEffects);
+        }
         return addRepoSafety({
           action: 'get',
           sessionId: null,
@@ -1473,6 +1593,21 @@ export const smartSummary = async ({
 
       const session = hydrateSession(getSessionRow(db, targetSessionId));
       if (!session) {
+        const handoffFallback = buildHandoffFallback(db);
+        if (handoffFallback) {
+          return addRepoSafety({
+            action: 'get',
+            sessionId: targetSessionId,
+            found: true,
+            recoveredFromHandoff: true,
+            summary: handoffFallback.summary,
+            tokens: handoffFallback.tokens,
+            compressionLevel: 'handoff',
+            ...(handoffFallback.task ? { task: handoffFallback.task } : {}),
+            handoff: handoffFallback.handoff,
+            message: 'Session not found; recovered context from latest task handoff.',
+          }, mutationSafety.repoSafety, suppressReadSideEffects);
+        }
         return addRepoSafety({
           action: 'get',
           sessionId: targetSessionId,
