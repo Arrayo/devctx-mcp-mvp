@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { isBinaryBuffer } from './utils/fs.js';
 import { IGNORED_DIRS } from './config/ignored-paths.js';
 
-const INDEX_VERSION = 4;
+const INDEX_VERSION = 5;
 
 const MAX_SIGNATURE_LEN = 200;
 const MAX_SNIPPET_LEN = 280;
@@ -722,8 +722,6 @@ export const buildIndex = (root, progress = null) => {
         if (!invertedIndex[key]) invertedIndex[key] = [];
         const entry = { path: relPath, line: sym.line, kind: sym.kind };
         if (sym.parent) entry.parent = sym.parent;
-        if (sym.signature) entry.signature = sym.signature;
-        if (sym.snippet) entry.snippet = sym.snippet;
         invertedIndex[key].push(entry);
       }
     } catch { /* unreadable */ }
@@ -783,10 +781,24 @@ export const buildIndex = (root, progress = null) => {
 // Query helpers
 // ---------------------------------------------------------------------------
 
+const findSymbolForHit = (index, key, hit) => {
+  const symbols = index.files?.[hit.path]?.symbols;
+  if (!Array.isArray(symbols)) return null;
+  return symbols.find((sym) => sym.name?.toLowerCase() === key && sym.line === hit.line) ?? null;
+};
+
 export const queryIndex = (index, symbolName) => {
   if (!index?.invertedIndex) return [];
   const key = symbolName.toLowerCase();
-  return index.invertedIndex[key] ?? [];
+  const hits = index.invertedIndex[key] ?? [];
+  return hits.map((hit) => {
+    const sym = findSymbolForHit(index, key, hit);
+    if (!sym) return hit;
+    const enriched = { ...hit };
+    if (sym.signature && !enriched.signature) enriched.signature = sym.signature;
+    if (sym.snippet && !enriched.snippet) enriched.snippet = sym.snippet;
+    return enriched;
+  });
 };
 
 export const queryRelated = (index, relPath) => {
@@ -873,8 +885,6 @@ export const reindexFile = (index, root, relPath) => {
       if (!index.invertedIndex[key]) index.invertedIndex[key] = [];
       const invEntry = { path: relPath, line: sym.line, kind: sym.kind };
       if (sym.parent) invEntry.parent = sym.parent;
-      if (sym.signature) invEntry.signature = sym.signature;
-      if (sym.snippet) invEntry.snippet = sym.snippet;
       index.invertedIndex[key].push(invEntry);
     }
 

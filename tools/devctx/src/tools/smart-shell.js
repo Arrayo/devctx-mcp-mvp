@@ -185,6 +185,19 @@ const MAX_DIFF_FILES = 8;
 const MAX_LINES_PER_FILE = 60;
 const DIFF_TOTAL_LIMIT = 4000;
 
+const TAP_HEADER = /^TAP version/;
+const TAP_OK_LINE = /^\s*ok\s+\d+/;
+const TAP_NOT_OK_LINE = /^\s*not ok\s+\d+/;
+const TAP_SUBTEST_LINE = /^\s*#\s+Subtest:/;
+const TAP_YAML_FENCE = /^\s*(---|\.\.\.)\s*$/;
+const TAP_SUMMARY_LINE = /^\s*#\s+(tests|pass|fail|skipped|todo|duration_ms|cancelled|suites)\b/;
+const TAP_DETECT = /(^|\n)(TAP version |# tests \d+)/;
+const TAP_FAIL_CONTEXT = 4;
+
+const GIT_LOG_COMMIT_HEADER = /^commit [0-9a-f]{40}/;
+const GIT_LOG_DETECT = /^commit [0-9a-f]{40}\nAuthor:/m;
+const MAX_GIT_LOG_COMMITS = 40;
+
 const splitDiffByFile = (text) => {
   const files = [];
   let current = null;
@@ -199,6 +212,95 @@ const splitDiffByFile = (text) => {
   }
   if (current) files.push(current);
   return files;
+};
+
+export const compressTapOutput = (text) => {
+  const lines = text.split('\n');
+  const summary = [];
+  const failures = [];
+  const headerLines = [];
+  let inYaml = false;
+  let yamlFailureBuffer = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (TAP_HEADER.test(line) && headerLines.length === 0) {
+      headerLines.push(line);
+      continue;
+    }
+
+    if (TAP_SUMMARY_LINE.test(line)) {
+      summary.push(line);
+      continue;
+    }
+
+    if (TAP_NOT_OK_LINE.test(line)) {
+      failures.push(line);
+      yamlFailureBuffer = failures;
+      inYaml = false;
+      continue;
+    }
+
+    if (TAP_YAML_FENCE.test(line)) {
+      if (yamlFailureBuffer) yamlFailureBuffer.push(line);
+      inYaml = !inYaml;
+      if (!inYaml) yamlFailureBuffer = null;
+      continue;
+    }
+
+    if (inYaml && yamlFailureBuffer) {
+      if (yamlFailureBuffer.length - failures.indexOf(yamlFailureBuffer[0]) <= TAP_FAIL_CONTEXT + 6) {
+        yamlFailureBuffer.push(line);
+      }
+      continue;
+    }
+
+    if (TAP_OK_LINE.test(line) || TAP_SUBTEST_LINE.test(line)) {
+      continue;
+    }
+
+    if (line.trim().startsWith('#') && failures.length > 0 && failures.length < 200) {
+      failures.push(line);
+    }
+  }
+
+  const parts = [];
+  if (headerLines.length > 0) parts.push(headerLines.join('\n'));
+  if (failures.length > 0) {
+    parts.push(`# ${failures.filter((l) => TAP_NOT_OK_LINE.test(l)).length} failure(s):`);
+    parts.push(failures.join('\n'));
+  } else {
+    parts.push('# all tests passed (ok lines collapsed)');
+  }
+  if (summary.length > 0) parts.push(summary.join('\n'));
+
+  return parts.join('\n');
+};
+
+export const compressGitLog = (text) => {
+  const lines = text.split('\n');
+  const commits = [];
+  let current = null;
+
+  for (const line of lines) {
+    if (GIT_LOG_COMMIT_HEADER.test(line)) {
+      if (current) commits.push(current);
+      current = { sha: line.split(' ')[1], subject: '' };
+    } else if (current && !current.subject && line.trim() && !/^(Author|Date|Merge|commit):/i.test(line)) {
+      current.subject = line.trim();
+    }
+  }
+  if (current) commits.push(current);
+
+  if (commits.length === 0) return text;
+
+  const shown = commits.slice(0, MAX_GIT_LOG_COMMITS);
+  const skipped = commits.length - shown.length;
+  const body = shown.map(({ sha, subject }) => `${sha.slice(0, 7)} ${subject}`).join('\n');
+  return skipped > 0
+    ? `${body}\n# ${skipped} more commit(s) not shown — narrow with --since/--until or git log -n <N>`
+    : body;
 };
 
 const compressDiff = (text) => {
@@ -301,8 +403,20 @@ export const smartShell = async ({ command }) => {
     'entity not found',
   ]);
   const shouldPrioritizeRelevant = execution.code !== 0 || execution.timedOut;
-  const compressedSource = shouldPrioritizeRelevant && relevant ? relevant : rawText;
-  const compressedText = truncate(compressDiff(uniqueLines(compressedSource)), 5000);
+  const isTap = TAP_DETECT.test(rawText);
+  const isGitLog = !isTap && GIT_LOG_DETECT.test(rawText);
+  let stagedCompression;
+
+  if (isTap) {
+    stagedCompression = compressTapOutput(rawText);
+  } else if (isGitLog) {
+    stagedCompression = compressGitLog(rawText);
+  } else {
+    const compressedSource = shouldPrioritizeRelevant && relevant ? relevant : rawText;
+    stagedCompression = compressDiff(uniqueLines(compressedSource));
+  }
+
+  const compressedText = truncate(stagedCompression, 5000);
   const metrics = buildMetrics({
     tool: 'smart_shell',
     target: command,
