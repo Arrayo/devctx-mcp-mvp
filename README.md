@@ -29,13 +29,18 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.16.5`
+## Latest Release: `1.17.0`
 
-- **Arrow function signatures:** `signatures` mode now extracts full parameter signatures from `const fn = (params) => {}` declarations (was names-only). Agents see the API surface of every function, not just named `function` declarations.
-- **Dependencies with matched symbols always read content:** When `smart_context` finds a dependency file containing query-relevant symbols, it reads its content even if the index signal is strong — eliminates follow-up `smart_read` calls.
-- **`matchedFiles` reflects capped count:** `smart_search` now reports the number of files actually shown (capped), with `totalFiles` for the uncapped count when it differs.
-- **Real-world eval harness:** New `npm run eval:realworld` — 10 scenario battery testing self-sufficiency, token efficiency, and search noise against the MCP's own codebase.
-- **Self-sufficiency rate: 63% → 88%** (7/8 context scenarios). Follow-up reads dropped from 5 to 0.
+- **Token-tight `smart_turn(start)` by default.** New `verbosity` parameter (default `minimal`) trims the response body and replaces the verbose `recommendedPath.instructions` with a compact `next` string. ~40-55% fewer tokens per call.
+- **`smart_resume` alias.** Lightweight shortcut for `smart_turn(phase: 'start', ensureSession: true, verbosity: 'minimal')` so agents can rehydrate context in one call without remembering flags.
+- **Continuity recovery from task handoffs.** `smart_summary(get)` now falls back to the most recent `task_handoffs` entry (≤7 days old) when no live session is found, so multi-agent runs never start blind.
+- **Rolling window for activity lists.** `decisions`, `completed`, and `touchedFiles` are trimmed to 20 items when they exceed 30, with `archivedCounts` preserving full history without inflating snapshots.
+- **Read-aware auto checkpoints.** Adapters track meaningful client reads (`Read`, `Grep`, `Glob`, `SemanticSearch`) with concrete paths and trigger `auto_append` (plus a `read_progress` task handoff) every 8 reads, throttled at 60s.
+- **Leaner search index (v5).** `invertedIndex` no longer duplicates `signature`/`snippet` (already in `files[].symbols`); `queryIndex` enriches hits at lookup time. ~30-40% smaller `index.json`.
+- **`smart_shell` TAP and git-log compression.** `node --test` output collapses passing `ok` lines while keeping `not ok` failures with their YAML; verbose `git log` becomes one `<sha7> subject` per commit.
+- **Background storage GC + index pre-warm.** `smart_turn(start)` fires `runStorageMaintenance` (24h-throttled prune of `metrics_events`, `task_handoffs`, `agent_runs`, `workflow_metrics`, `context_access` older than 30 days) and `triggerBackgroundIndexBuild` (re-uses a single in-flight build). Both are gated by `DEVCTX_DISABLE_BACKGROUND_TASKS`.
+- **Hook noise reduction.** Cursor and Claude adapters skip persisting empty `PostToolUse` metrics when there is no auto-trigger, no block, and zero overhead tokens.
+- **`smart_search` compact result.** Removed redundant `query` / `total` / `# Top files` blocks from text output for broad queries; `topFiles` capped at 5 in JSON.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -1089,7 +1094,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.16.5 (or later)
+# Should show: smart-context-mcp@1.17.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -2118,7 +2123,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.16.5)
+│   └── package.json       ← Package metadata (v1.17.0)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file

@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.17.0] - 2026-05-08
+
+### Added — token savings & continuity (P0 + P1)
+- **`verbosity` on `smart_turn`** (`minimal` | `standard` | `full`, default `minimal`). Minimal trims the response body and replaces verbose `recommendedPath.instructions` with a compact `next` string. ~40-55% fewer tokens per `smart_turn(start)`.
+- **`smart_resume` alias.** Convenience tool that maps to `smart_turn(phase: 'start', ensureSession: true, verbosity: 'minimal')` for one-call session rehydration.
+- **`smart_summary(get)` falls back to `task_handoffs`.** When no live session is found, returns the latest handoff entry (≤7 days old) so multi-agent runs and post-restart agents recover task context instead of starting blank.
+- **Rolling window in summary snapshots.** `decisions`, `completed`, and `touchedFiles` are trimmed to the 20 most recent items when they exceed 30; full counts surfaced via `archivedCounts`.
+- **Read-aware auto-checkpoints in adapters.** `claude-adapter` and `cursor-adapter` extract concrete paths from `Read`, `Grep`, `Glob`, and `SemanticSearch` tool calls, accumulate them per turn, and after 8 meaningful reads (throttled at 60s) trigger `smart_summary auto_append` plus a `task_handoff` with `trigger: 'read_progress'`.
+
+### Changed — leaner index & shell output
+- **Search index v5.** `invertedIndex` entries now store only `{ path, line, kind, parent? }`. `signature`/`snippet` (already in `files[].symbols`) are enriched at query time by `queryIndex`. ~30-40% smaller `index.json`, identical API surface.
+- **`smart_shell` TAP compression.** `compressTapOutput` collapses passing `ok …` lines to a single counter, preserves `not ok …` failures with their YAML diagnostic block, and keeps the final summary (`# tests`, `# pass`, `# fail`, …).
+- **`smart_shell` git-log compression.** `compressGitLog` reduces multi-line commit blocks to one `<sha7> subject` line, capped at 40 commits with a "skipped N commits" note.
+- **Hook metrics filtered.** Adapters now skip persisting `PostToolUse` metrics when there is no checkpoint/auto-trigger, no block, and zero overhead tokens — removing pure noise from the metrics store.
+- **`smart_search` compact text output.** Removed `query`, `total`, and `# Top files` headers from the text payload; JSON `topFiles` capped at 5.
+
+### Added — background maintenance & pre-warm
+- **`runStorageMaintenance()` in `sqlite.js`.** Prunes `metrics_events`, `session_events`, `task_handoffs`, `agent_runs`, `workflow_metrics`, and `context_access` older than 30 days. Persists `last_storage_gc_at` in `meta`, throttled 24h, with a `force` override for admin/testing.
+- **`triggerBackgroundIndexBuild()` in `index-manager.js`.** Fires `ensureIndexReady` fire-and-forget, re-uses a single in-flight promise, and short-circuits when the existing index is already fresh.
+- **Hooked into `smart_turn(start)`.** Both helpers run on every start turn (gated by `DEVCTX_DISABLE_BACKGROUND_TASKS=true`) so the SQLite store stays bounded and the agent never pays for a cold index on the first `smart_search`.
+
+### Tests
+- New: `tests/smart-shell-compression.test.js` (TAP and git-log compressors).
+- Extended: `event-policy`, `cursor-adapter`, `claude-adapter`, `robustness` (index v5 assertions), `sqlite-storage` (GC + throttle + force), `index-manager` (fresh short-circuit + missing-root failure path).
+- Suite: 755 total, 754 pass, 1 skipped.
+
 ## [1.16.5] - 2026-05-06
 
 ### Added
