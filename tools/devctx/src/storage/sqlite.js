@@ -511,6 +511,16 @@ export const getMeta = (db, key) => {
   return row?.value ?? null;
 };
 
+const DEFAULT_GC_RETENTION_DAYS = 30;
+const DEFAULT_GC_THROTTLE_MS = 24 * 60 * 60 * 1000;
+const STORAGE_GC_META_KEY = 'last_storage_gc_at';
+
+const sanitizeRetentionDays = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_GC_RETENTION_DAYS;
+  return Math.min(365, Math.max(1, Math.floor(parsed)));
+};
+
 const getSchemaVersion = (db) => Number(getMeta(db, 'schema_version') ?? 0);
 const VALID_STATUSES = new Set(['planning', 'in_progress', 'blocked', 'completed']);
 
@@ -1455,6 +1465,42 @@ export const upsertAgentRun = async ({ filePath = getStateDbPath(), runId, taskI
       updatedAt: now,
     };
   }, { filePath });
+
+export const runStorageMaintenance = async ({
+  filePath = getStateDbPath(),
+  retentionDays = DEFAULT_GC_RETENTION_DAYS,
+  throttleMs = DEFAULT_GC_THROTTLE_MS,
+  force = false,
+} = {}) => withStateDb((db) => {
+  const now = Date.now();
+  const lastRun = Number(getMeta(db, STORAGE_GC_META_KEY) ?? 0);
+  if (!force && now - lastRun < throttleMs) {
+    return { skipped: true, reason: 'throttled', lastRunAt: lastRun || null };
+  }
+
+  const days = sanitizeRetentionDays(retentionDays);
+  const cutoffIso = new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+
+  const removeOlder = (sql) => db.prepare(sql).run(cutoffIso).changes;
+
+  const removed = {
+    metricsEvents: removeOlder('DELETE FROM metrics_events WHERE created_at < ?'),
+    sessionEvents: removeOlder('DELETE FROM session_events WHERE created_at < ?'),
+    taskHandoffs: removeOlder('DELETE FROM task_handoffs WHERE created_at < ?'),
+    agentRuns: removeOlder('DELETE FROM agent_runs WHERE updated_at < ?'),
+    workflowMetrics: removeOlder('DELETE FROM workflow_metrics WHERE created_at < ?'),
+    contextAccess: removeOlder('DELETE FROM context_access WHERE timestamp < ?'),
+  };
+
+  setMeta(db, STORAGE_GC_META_KEY, String(now));
+
+  return {
+    skipped: false,
+    runAt: now,
+    retentionDays: days,
+    removed,
+  };
+}, { filePath });
 
 const listLegacySessionFiles = (sessionsDir) => {
   if (!fs.existsSync(sessionsDir)) {

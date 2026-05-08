@@ -16,6 +16,7 @@ import {
   getMeta,
   initializeStateDb,
   importLegacyState,
+  runStorageMaintenance,
   STATE_DB_SOFT_MAX_BYTES,
   SQLITE_SCHEMA_VERSION,
   withStateDb,
@@ -382,4 +383,48 @@ test('sqlite storage - classifyStateDbError identifies locked databases', () => 
   assert.strictEqual(diagnostic.issue, 'locked');
   assert.strictEqual(diagnostic.status, 'error');
   assert.strictEqual(diagnostic.retriable, true);
+});
+
+test('sqlite storage - runStorageMaintenance prunes rows older than retention window', { skip: SKIP_SQLITE_TESTS ? 'SQLite support requires Node 22+' : false }, async () => {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'devctx-sqlite-gc-'));
+  const filePath = path.join(tmpRoot, '.devctx', 'state.sqlite');
+
+  try {
+    await initializeStateDb({ filePath });
+
+    const oldIso = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    const recentIso = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString();
+
+    await withStateDb((db) => {
+      const insertMetric = db.prepare(`
+        INSERT INTO metrics_events (tool, action, session_id, target, raw_tokens, compressed_tokens, saved_tokens, savings_pct, latency_ms, metadata_json, created_at)
+        VALUES ('test', 'noop', NULL, 'gc', 0, 0, 0, 0, 0, '{}', ?)
+      `);
+      insertMetric.run(oldIso);
+      insertMetric.run(recentIso);
+
+      db.prepare(`
+        INSERT INTO task_handoffs (task_id, session_id, from_agent_id, to_agent_id, trigger, summary_json, created_at)
+        VALUES ('task-old', 's1', 'a1', 'a2', 'stop', '{}', ?)
+      `).run(oldIso);
+    }, { filePath });
+
+    const firstRun = await runStorageMaintenance({ filePath, retentionDays: 30, throttleMs: 0 });
+    assert.strictEqual(firstRun.skipped, false);
+    assert.strictEqual(firstRun.removed.metricsEvents, 1, 'should drop one stale metric');
+    assert.strictEqual(firstRun.removed.taskHandoffs, 1, 'should drop stale handoff');
+
+    const remaining = await withStateDb((db) => db.prepare('SELECT COUNT(*) AS n FROM metrics_events').get().n, { filePath });
+    assert.strictEqual(remaining, 1);
+
+    const secondRun = await runStorageMaintenance({ filePath, retentionDays: 30 });
+    assert.strictEqual(secondRun.skipped, true, 'should respect throttle window');
+    assert.strictEqual(secondRun.reason, 'throttled');
+
+    const forced = await runStorageMaintenance({ filePath, retentionDays: 30, force: true });
+    assert.strictEqual(forced.skipped, false);
+    assert.strictEqual(forced.removed.metricsEvents, 0, 'no more stale rows after first GC');
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });

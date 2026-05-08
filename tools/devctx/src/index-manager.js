@@ -128,3 +128,24 @@ export const getIndexStatus = (root = projectRoot) => {
     age: meta?.builtAt ? Date.now() - meta.builtAt : null
   };
 };
+
+let backgroundBuildPromise = null;
+
+export const triggerBackgroundIndexBuild = ({ root = projectRoot, timeoutMs = INDEX_BUILD_TIMEOUT_MS } = {}) => {
+  if (backgroundBuildPromise) {
+    return backgroundBuildPromise;
+  }
+
+  const status = getIndexStatus(root);
+  if (status.available && status.fresh) {
+    return Promise.resolve({ status: 'fresh', cached: true });
+  }
+
+  backgroundBuildPromise = ensureIndexReady({ root, timeoutMs })
+    .catch((error) => ({ status: 'error', error: error?.message ?? String(error) }))
+    .finally(() => {
+      backgroundBuildPromise = null;
+    });
+
+  return backgroundBuildPromise;
+};

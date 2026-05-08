@@ -2,7 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { ensureIndexReady, getIndexStatus } from '../src/index-manager.js';
+import { ensureIndexReady, getIndexStatus, triggerBackgroundIndexBuild } from '../src/index-manager.js';
 
 const TEST_ROOT = path.join(process.cwd(), '.test-index-manager');
 
@@ -60,5 +60,18 @@ describe('Index Manager', () => {
     if (result.status === 'built') {
       assert.equal(result.cached, false);
     }
+  });
+
+  it('triggerBackgroundIndexBuild short-circuits when index is fresh', async () => {
+    await ensureIndexReady({ root: TEST_ROOT, timeoutMs: 30000 });
+
+    const result = await triggerBackgroundIndexBuild({ root: TEST_ROOT, timeoutMs: 30000 });
+    assert.ok(['fresh', 'ready', 'built'].includes(result.status));
+  });
+
+  it('triggerBackgroundIndexBuild does not throw when index build fails', async () => {
+    const missingRoot = path.join(TEST_ROOT, 'definitely-missing');
+    const result = await triggerBackgroundIndexBuild({ root: missingRoot, timeoutMs: 5000 });
+    assert.ok(result, 'should resolve without throwing');
   });
 });

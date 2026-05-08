@@ -1,4 +1,5 @@
 import { buildIndexIncremental, persistIndex } from '../index.js';
+import { triggerBackgroundIndexBuild } from '../index-manager.js';
 import { projectRoot } from '../utils/runtime-config.js';
 import {
   autoTrackWorkflow,
@@ -7,6 +8,7 @@ import {
   isWorkflowTrackingEnabled,
 } from '../workflow-tracker.js';
 import { persistMetrics } from '../metrics.js';
+import { runStorageMaintenance } from '../storage/sqlite.js';
 import { PRODUCT_QUALITY_ANALYTICS_KIND } from '../analytics/product-quality.js';
 import { attachSafetyMetadata, buildMutationSafety } from '../utils/mutation-safety.js';
 import { smartContext } from './smart-context.js';
@@ -444,6 +446,12 @@ const startTurn = async ({
   verbosity = DEFAULT_VERBOSITY,
 } = {}) => {
   const startTime = Date.now();
+
+  if (process.env.DEVCTX_DISABLE_BACKGROUND_TASKS !== 'true') {
+    triggerBackgroundIndexBuild({ root: projectRoot }).catch(() => {});
+    runStorageMaintenance().catch(() => {});
+  }
+
   let summaryResult = await smartSummary({
     action: 'get',
     sessionId,
