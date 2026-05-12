@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { projectRoot } from '../utils/runtime-config.js';
 
 export const STATE_DB_FILENAME = 'state.sqlite';
-export const SQLITE_SCHEMA_VERSION = 6;
+export const SQLITE_SCHEMA_VERSION = 7;
 export const ACTIVE_SESSION_SCOPE = 'project';
 export const STATE_DB_SOFT_MAX_BYTES = 32 * 1024 * 1024;
 const STATE_DB_BUSY_TIMEOUT_MS = 1000;
@@ -16,6 +16,7 @@ export const EXPECTED_TABLES = [
   'active_session',
   'agent_runs',
   'context_access',
+  'explain_cache',
   'hook_turn_state',
   'meta',
   'metrics_events',
@@ -243,6 +244,26 @@ const MIGRATIONS = [
         ON task_handoffs(task_id, created_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_agent_runs_task_updated
         ON agent_runs(task_id, updated_at DESC)`,
+    ],
+  },
+  {
+    version: 7,
+    statements: [
+      `CREATE TABLE IF NOT EXISTS explain_cache (
+        cache_key TEXT PRIMARY KEY,
+        file_path TEXT NOT NULL,
+        symbol TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        explanation_json TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'structural',
+        tokens INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_explain_cache_file_symbol
+        ON explain_cache(file_path, symbol, updated_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_explain_cache_updated
+        ON explain_cache(updated_at DESC)`,
     ],
   },
 ];
@@ -1490,6 +1511,7 @@ export const runStorageMaintenance = async ({
     agentRuns: removeOlder('DELETE FROM agent_runs WHERE updated_at < ?'),
     workflowMetrics: removeOlder('DELETE FROM workflow_metrics WHERE created_at < ?'),
     contextAccess: removeOlder('DELETE FROM context_access WHERE timestamp < ?'),
+    explainCache: removeOlder('DELETE FROM explain_cache WHERE updated_at < ?'),
   };
 
   setMeta(db, STORAGE_GC_META_KEY, String(now));
@@ -1928,4 +1950,57 @@ export const cleanupLegacyState = async ({
   }
 
   return report;
+}, { filePath });
+
+const buildExplainCacheKey = ({ filePath, symbol, contentHash }) =>
+  createHash('sha256').update(`${filePath}\u241F${symbol}\u241F${contentHash}`).digest('hex');
+
+export const getExplainCache = async ({
+  filePath: dbPath = getStateDbPath(),
+  relPath,
+  symbol,
+  contentHash,
+} = {}) => withStateDb((db) => {
+  if (!relPath || !symbol || !contentHash) return null;
+  const cacheKey = buildExplainCacheKey({ filePath: relPath, symbol, contentHash });
+  const row = db.prepare(`
+    SELECT explanation_json, provider, tokens, updated_at
+    FROM explain_cache
+    WHERE cache_key = ?
+  `).get(cacheKey);
+  if (!row) return null;
+  return {
+    explanation: parseJsonText(row.explanation_json, null),
+    provider: row.provider,
+    tokens: row.tokens,
+    updatedAt: row.updated_at,
+  };
+}, { filePath: dbPath });
+
+export const setExplainCache = async ({
+  filePath: dbPath = getStateDbPath(),
+  relPath,
+  symbol,
+  contentHash,
+  explanation,
+  provider = 'structural',
+  tokens = 0,
+} = {}) => withStateDb((db) => {
+  if (!relPath || !symbol || !contentHash || !explanation) return null;
+  const cacheKey = buildExplainCacheKey({ filePath: relPath, symbol, contentHash });
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO explain_cache(cache_key, file_path, symbol, content_hash, explanation_json, provider, tokens, created_at, updated_at)
+    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(cache_key) DO UPDATE SET
+      explanation_json = excluded.explanation_json,
+      provider = excluded.provider,
+      tokens = excluded.tokens,
+      updated_at = excluded.updated_at
+  `).run(cacheKey, relPath, symbol, contentHash, toJsonText(explanation), provider, tokens, now, now);
+  return { cacheKey, updatedAt: now };
+}, { filePath: dbPath });
+
+export const clearExplainCache = async ({ filePath = getStateDbPath() } = {}) => withStateDb((db) => {
+  return db.prepare('DELETE FROM explain_cache').run().changes;
 }, { filePath });

@@ -21,6 +21,7 @@ import { summarizeFallback } from './smart-read/fallback.js';
 import { summarizePython, extractPythonSymbol } from './smart-read/python.js';
 import { summarizeJson } from './smart-read/shared.js';
 import { summarizeToml, summarizeYaml } from './smart-read/structured.js';
+import { explainSymbols, formatExplanationsAsText } from '../explain/explainer.js';
 
 const codeExtensions = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs']);
 const pythonExtensions = new Set(['.py']);
@@ -471,6 +472,22 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     compressedText = sym.text;
     indexHintUsed = sym.indexHint;
     cacheHit = sym.cached;
+  } else if (mode === 'explain') {
+    if (!symbol) {
+      compressedText = 'Error: symbol parameter is required for explain mode';
+    } else {
+      const explanations = await explainSymbols({
+        fullPath,
+        content,
+        symbols: symbol,
+        root: effectiveRoot,
+      });
+      compressedText = formatExplanationsAsText(explanations);
+      const anyCached = explanations.some((e) => e.cached);
+      const anyIndex = explanations.some((e) => e.found);
+      if (anyCached) cacheHit = true;
+      indexHintUsed = anyIndex;
+    }
   } else if (validBudget) {
     const cascadeFrom = MODE_CASCADE.indexOf(effectiveMode);
     const cascade = cascadeFrom >= 0 ? MODE_CASCADE.slice(cascadeFrom) : [effectiveMode];
@@ -518,12 +535,12 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     };
   }
 
-  if (validBudget && (mode === 'range' || mode === 'symbol') && countTokens(compressedText) > validBudget) {
+  if (validBudget && (mode === 'range' || mode === 'symbol' || mode === 'explain') && countTokens(compressedText) > validBudget) {
     compressedText = truncateByTokens(compressedText, validBudget);
   }
 
   const rawMode = effectiveMode === 'full' || effectiveMode === 'range';
-  const parser = rawMode ? 'raw' : resolveParserType(extension, fullPath);
+  const parser = mode === 'explain' ? 'structural' : (rawMode ? 'raw' : resolveParserType(extension, fullPath));
   const truncated = compressedText.includes('[truncated ');
 
   const metrics = buildMetrics({
@@ -546,6 +563,8 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
   let expectedBenefit = EXPECTED_BENEFITS.TOKEN_SAVINGS(metrics.savedTokens);
   
   if (mode === 'symbol') {
+    reason = DECISION_REASONS.SYMBOL_EXTRACTION;
+  } else if (mode === 'explain') {
     reason = DECISION_REASONS.SYMBOL_EXTRACTION;
   } else if (validBudget && effectiveMode !== mode) {
     reason = DECISION_REASONS.TOKEN_BUDGET;
@@ -578,7 +597,8 @@ export const smartRead = async ({ filePath, mode = 'outline', startLine, endLine
     truncated,
     content: compressedText,
   };
-  if (mode === 'symbol') result.indexHint = indexHintUsed;
+  if (mode === 'symbol' || mode === 'explain') result.indexHint = indexHintUsed;
+  if (mode === 'explain') result.cached = cacheHit;
   if (validBudget && effectiveMode !== mode) {
     result.chosenMode = effectiveMode;
     result.budgetApplied = true;

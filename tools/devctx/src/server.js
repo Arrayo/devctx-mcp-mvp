@@ -124,10 +124,10 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_read',
-    'Read a file with token-efficient modes. ALWAYS prefer outline/signatures/symbol over full. Reading cascade: outline → signatures → symbol → range → full (last resort). Mode guide: outline (~90% savings): file structure, exports, top-level symbols — use first for orientation. signatures (~85% savings): function signatures with parameters and return types — use when you need the API surface. symbol: extract specific functions/classes by name (string or array) — use when you know what to read; add context=true for callers, tests, and dependencies. range: specific line range — use only when you need exact lines. full: raw content, no savings — only for config/lock files. maxTokens: token budget — auto-cascades to fit (outline → signatures → truncated). Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
+    'Read a file with token-efficient modes. ALWAYS prefer outline/signatures/symbol/explain over full. Reading cascade: outline → signatures → symbol → explain → range → full (last resort). Mode guide: outline (~90% savings): file structure, exports, top-level symbols — use first for orientation. signatures (~85% savings): function signatures with parameters and return types — use when you need the API surface. symbol: extract specific functions/classes by name (string or array) — use when you know what to read; add context=true for callers, tests, and dependencies. explain (~95% savings): one-shot compact summary of a symbol (signature, docstring, first body line, side effects, caller count). Cached in SQLite by content hash — second call is free. Requires symbol. range: specific line range — use only when you need exact lines. full: raw content, no savings — only for config/lock files. maxTokens: token budget — auto-cascades to fit (outline → signatures → truncated). Supports JS/TS, Python, Go, Rust, Java, C#, Kotlin, PHP, Swift, shell, Terraform, Dockerfile, SQL, JSON, TOML, YAML.',
     {
       filePath: z.string(),
-      mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol']).optional(),
+      mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol', 'explain']).optional(),
       startLine: z.number().optional(),
       endLine: z.number().optional(),
       symbol: z.union([z.string(), z.array(z.string())]).optional(),
@@ -140,11 +140,11 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_read_batch',
-    'Read multiple files in one call. Each item accepts path, mode (prefer outline/signatures/symbol — full saves 0 tokens), symbol, startLine, endLine, maxTokens (per-file budget). Optional global maxTokens budget with early stop when exceeded. Max 20 files per call.',
+    'Read multiple files in one call. Each item accepts path, mode (prefer outline/signatures/symbol/explain — full saves 0 tokens), symbol, startLine, endLine, maxTokens (per-file budget). Optional global maxTokens budget with early stop when exceeded. Max 20 files per call.',
     {
       files: z.array(z.object({
         path: z.string(),
-        mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol']).optional(),
+        mode: z.enum(['full', 'outline', 'signatures', 'range', 'symbol', 'explain']).optional(),
         symbol: z.union([z.string(), z.array(z.string())]).optional(),
         startLine: z.number().optional(),
         endLine: z.number().optional(),
