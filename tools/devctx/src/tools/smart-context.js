@@ -7,6 +7,7 @@ import { smartRead } from './smart-read.js';
 import { smartReadBatch } from './smart-read-batch.js';
 import { loadIndex, queryRelated, getGraphCoverage } from '../index.js';
 import { ensureIndexReady } from '../index-manager.js';
+import { buildPathsResult } from '../graph-paths.js';
 import { projectRoot } from '../utils/paths.js';
 import { resolveSafePath } from '../utils/fs.js';
 import { countTokens } from '../tokenCounter.js';
@@ -348,6 +349,64 @@ const filterFoundSymbols = (content, candidates) => {
 const VALID_DETAIL_MODES = new Set(['minimal', 'balanced', 'deep']);
 const DEFAULT_INCLUDE = ['content', 'graph', 'hints', 'symbolDetail'];
 
+const PATH_MODE_MAX_HOPS = 5;
+
+const runPathsMode = async ({ from, to, maxHops, directed, progress, startTime }) => {
+  const root = projectRoot;
+  await ensureIndexReady({ root });
+  const index = loadIndex(root);
+
+  if (!index) {
+    return {
+      success: false,
+      mode: 'paths',
+      paths: {
+        from,
+        to,
+        found: false,
+        reason: 'index-unavailable',
+        path: [],
+        hops: null,
+        fallback: null,
+      },
+      hints: ['Run build_index before requesting paths.'],
+    };
+  }
+
+  const result = buildPathsResult(index, from, to, {
+    maxHops: maxHops ?? PATH_MODE_MAX_HOPS,
+    directed: !!directed,
+  });
+
+  recordDevctxOperation();
+  recordToolUsage({ tool: 'smart_context', savedTokens: 0, target: `paths(${from}→${to})` });
+  recordDecision({
+    tool: 'smart_context',
+    action: `find path "${from}" → "${to}"`,
+    reason: DECISION_REASONS.RELATED_FILES ?? 'graph traversal',
+    alternative: 'Multiple smart_search/smart_read across import graph',
+    expectedBenefit: 'Single-call graph traversal with signatures per hop',
+    context: result.found ? `${result.hops} hops` : 'no path; fallback neighbors',
+  });
+
+  if (progress) {
+    progress.complete({
+      mode: 'paths',
+      from,
+      to,
+      hops: result.hops,
+      found: result.found,
+      latencyMs: Date.now() - startTime,
+    });
+  }
+
+  return {
+    success: true,
+    mode: 'paths',
+    paths: result,
+  };
+};
+
 export const smartContext = async ({
   task,
   intent,
@@ -357,11 +416,35 @@ export const smartContext = async ({
   detail = 'balanced',
   include = DEFAULT_INCLUDE,
   prefetch = false,
+  paths,
+  pathMaxHops,
+  pathDirected,
   progress: enableProgress = false,
 }) => {
   const progress = enableProgress ? createProgressReporter('smart_context') : null;
   const startTime = Date.now();
-  
+
+  if (paths && typeof paths === 'object' && paths.from && paths.to && !task) {
+    if (progress) {
+      progress.report({ phase: 'paths', from: paths.from, to: paths.to });
+    }
+    return runPathsMode({
+      from: paths.from,
+      to: paths.to,
+      maxHops: pathMaxHops,
+      directed: pathDirected,
+      progress,
+      startTime,
+    });
+  }
+
+  if (!task) {
+    return {
+      success: false,
+      error: 'task is required (or paths.from + paths.to for paths mode)',
+    };
+  }
+
   if (progress) {
     progress.report({ phase: 'planning', task: task.substring(0, 80) });
   }

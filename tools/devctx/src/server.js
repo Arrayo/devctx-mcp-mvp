@@ -171,9 +171,9 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_context',
-    'PREFERRED for multi-file tasks. Gets curated context in one call — replaces the manual search → read → read cycle. Combines search + graph expansion + selective reading. Primary files always include content (signatures) in balanced mode — reduces follow-up smart_read calls. Options: intent, maxTokens (budget, default 12000), diff (true for HEAD or branch name), detail (minimal/balanced/deep), include (content/graph/hints/symbolDetail), prefetch (true for predictive loading). Call this FIRST before individual smart_read/smart_search calls.',
+    'PREFERRED for multi-file tasks. Gets curated context in one call — replaces the manual search → read → read cycle. Combines search + graph expansion + selective reading. Primary files always include content (signatures) in balanced mode — reduces follow-up smart_read calls. Options: intent, maxTokens (budget, default 12000), diff (true for HEAD or branch name), detail (minimal/balanced/deep), include (content/graph/hints/symbolDetail), prefetch (true for predictive loading). Paths mode: pass `paths: { from, to }` to traverse the import graph between two files or symbols (BFS, max 5 hops by default). Returns the chain of files with signatures per hop, or nearest neighbors when no path exists. Use this instead of multiple smart_read+smart_search cycles to answer "how does X reach Y?". Call smart_context FIRST before individual smart_read/smart_search calls.',
     {
-      task: z.string(),
+      task: z.string().optional(),
       intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
       maxTokens: z.number().optional(),
       entryFile: z.string().optional(),
@@ -181,9 +181,15 @@ export const createDevctxServer = () => {
       detail: z.enum(['minimal', 'balanced', 'deep']).optional(),
       include: z.array(z.enum(['content', 'graph', 'hints', 'symbolDetail'])).optional(),
       prefetch: z.boolean().optional(),
+      paths: z.object({
+        from: z.string(),
+        to: z.string(),
+      }).optional(),
+      pathMaxHops: z.number().int().min(1).max(10).optional(),
+      pathDirected: z.boolean().optional(),
     },
-    async ({ task, intent, maxTokens, entryFile, diff, detail, include, prefetch }) =>
-      asTextResult(await smartContext({ task, intent, maxTokens, entryFile, diff, detail, include, prefetch })),
+    async ({ task, intent, maxTokens, entryFile, diff, detail, include, prefetch, paths, pathMaxHops, pathDirected }) =>
+      asTextResult(await smartContext({ task, intent, maxTokens, entryFile, diff, detail, include, prefetch, paths, pathMaxHops, pathDirected })),
   );
 
   server.tool(
