@@ -1,0 +1,17 @@
+name: debug-flake
+description: Recover last red test, gather curated debug context, list affected tests
+defaults: {}
+stopOnFail: false
+steps:
+  - tool: smart_test
+    label: lastFailure
+    args:
+      action: last_failure
+  - tool: smart_context
+    args:
+      task: "Debug last failing test"
+      intent: debug
+      maxTokens: 8000
+  - tool: smart_test
+    args:
+      action: affected

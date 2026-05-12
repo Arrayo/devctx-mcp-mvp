@@ -1,0 +1,20 @@
+name: preflight-merge
+description: Review preflight + affected tests + milestone checkpoint
+defaults:
+  ref: HEAD
+stopOnFail: true
+steps:
+  - tool: smart_review
+    label: review
+    args:
+      ref: "{{args.ref}}"
+      includeBlame: false
+  - tool: smart_test
+    label: affected
+    args:
+      action: affected
+      diff: "{{args.ref}}"
+  - tool: smart_turn
+    args:
+      phase: end
+      event: milestone

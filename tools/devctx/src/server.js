@@ -10,6 +10,7 @@ import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
 import { smartTest } from './tools/smart-test.js';
 import { smartReview } from './tools/smart-review.js';
+import { smartPlaybook } from './tools/smart-playbook.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
 import { smartDoctor } from './tools/smart-doctor.js';
@@ -232,6 +233,20 @@ export const createDevctxServer = () => {
     },
     async ({ ref, maxFiles, maxCallers, maxTests, includeBlame }) =>
       asTextResult(await smartReview({ ref, maxFiles, maxCallers, maxTests, includeBlame })),
+  );
+
+  server.tool(
+    'smart_playbook',
+    'Run a declarative workflow (playbook) that composes other smart_* tools in one call. Built-in playbooks: preflight-merge (smart_review + smart_test affected + checkpoint), debug-flake (last_failure + curated debug context + affected tests), refactor-safe (curated context + affected tests + checkpoint), doc-sync (ADR search + docs context), ramp-up (status + doctor + ADR overview). Override or add your own in .devctx/playbooks/*.yaml (or *.json). Pass list=true to enumerate available playbooks. Pass dryRun=true to resolve and validate steps without executing them. Args support {{args.X}} interpolation against defaults + caller args. Only smart_* tools are allowed inside playbooks; shell access stays gated by smart_shell allowlist.',
+    {
+      name: z.string().optional(),
+      args: z.record(z.string(), z.any()).optional(),
+      list: z.boolean().optional(),
+      dryRun: z.boolean().optional(),
+      stopOnFail: z.boolean().optional(),
+    },
+    async ({ name, args, list, dryRun, stopOnFail }) =>
+      asTextResult(await smartPlaybook({ name, args, list, dryRun, stopOnFail })),
   );
 
   server.tool(

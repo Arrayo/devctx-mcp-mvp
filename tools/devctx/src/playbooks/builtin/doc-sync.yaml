@@ -1,0 +1,16 @@
+name: doc-sync
+description: Surface ADR/spec sections then build curated docs context
+defaults:
+  topic: "architecture"
+stopOnFail: false
+steps:
+  - tool: smart_search
+    args:
+      query: "{{args.topic}}"
+      kinds:
+        - adr
+        - adr-section
+  - tool: smart_context
+    args:
+      task: "Sync docs for {{args.topic}}"
+      intent: docs

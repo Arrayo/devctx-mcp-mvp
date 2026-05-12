@@ -1,0 +1,14 @@
+name: ramp-up
+description: First contact with the project — status, doctor, and ADR overview
+defaults: {}
+stopOnFail: false
+steps:
+  - tool: smart_status
+    args: {}
+  - tool: smart_doctor
+    args: {}
+  - tool: smart_search
+    args:
+      query: "architecture decisions"
+      kinds:
+        - adr
