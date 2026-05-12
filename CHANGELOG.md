@@ -2,6 +2,71 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.19.0] - 2026-05-12
+
+Five-step quality jump executed as sequential commits with full dogfooding. MCP grows from 18 → **20 tools** (`smart_playbook` + `global_memory`). +68 new tests, **zero new dependencies**, suite green at 882/883 (1 skipped, 0 fail). Index schema bumped 6 → 7 (auto-reindex on first run).
+
+### Added — `smart_playbook` (new tool)
+- **Declarative composite workflows** that run multiple `smart_*` tools in a single MCP call. Reduces agent planning tokens and gives deterministic, repeatable sequences.
+- **Five built-in playbooks** ship with the package:
+  - `preflight-merge` — `smart_review` + `smart_test(affected)` + `smart_turn(end)` checkpoint.
+  - `debug-flake` — `smart_test(last_failure)` + `smart_context(intent=debug)` + `smart_test(affected)`.
+  - `refactor-safe` — `smart_context(intent=refactor)` + `smart_test(affected)` + `smart_turn(end)` checkpoint.
+  - `doc-sync` — `smart_search(kinds=adr,adr-section)` + `smart_context(intent=docs)`.
+  - `ramp-up` — `smart_status` + `smart_doctor` + `smart_search(kinds=adr)`.
+- **Project-level overrides** in `.devctx/playbooks/*.{yaml,json}` (custom playbooks discover and override built-ins by name).
+- **`{{args.X}}` interpolation** against `defaults` + caller `args`, plus `when` / `label` / `stopOnFail` / `dryRun` per step.
+- **Allowlist:** only `smart_*` tools can be invoked inside a playbook. No arbitrary shell exposure.
+- **Zero deps:** built-in minimal YAML parser handles the subset playbooks need; JSON also accepted.
+- New modules: `src/playbooks/{yaml-mini,loader,runner}.js`, `src/tools/smart-playbook.js`, `src/playbooks/builtin/*.yaml`.
+
+### Added — Reactive FS watcher for the index
+- **`fs.watch` (native, recursive, persistent=false)** with **debounce 600ms** and **batch flush every 2s** keeps the symbol index hot between calls. Agents see a fresh graph without paying full-rebuild latency.
+- **Ignored paths:** `.git`, `node_modules`, `.devctx`, `dist`, `build`, `coverage`, lockfiles, `.min.*`, `.map`, `.snap`, and any non-indexable extension.
+- **Stats surface on `smart_status`:** `enabled`, `flushes`, `eventsObserved`, `filesReindexed`, `filesRemoved`, `errors`, `lastFlushAt`, `pending`.
+- **Gating:** opt-out via `DEVCTX_WATCH_INDEX=false`. Defaults to enabled.
+- **Lifecycle:** singleton watcher handle wired to MCP shutdown for clean close + final flush.
+- New module: `src/index-watcher.js`.
+
+### Added — Pluggable parser registry + richer Python / Go coverage (index v7)
+- **`src/parsers/registry.js`** exposes `registerParser` / `getParser`. `index.js` consults the registry first and falls back to built-in extractors. Tree-sitter (WASM) parsers can register at runtime without touching core.
+- **Python parser:**
+  - Decorators tracked per symbol (`decorators: ["dataclass", "cached", ...]`).
+  - `async def` → kind `async-function` / `async-method`.
+  - `TypeAlias`, `TypeVar`, `NewType`, `ParamSpec`, `TypeVarTuple` captured as `kind="type"`.
+  - Class scope respected by indent — no false-positive nesting after dedent.
+- **Go parser:**
+  - Methods extracted with receiver type as `parent` (e.g. `func (s *Service) Run() → kind="method"`, `parent="Service"`).
+  - Interfaces detected as `kind="interface"` (vs structs as `"type"`).
+  - Top-level `const` / `var` captured as `kind="const"` / `"var"`.
+- **`INDEX_VERSION` 6 → 7.** Indexes rebuild automatically on first run.
+
+### Added — Local semantic re-rank on `smart_search`
+- **Opt-in `semantic: true` (with `semanticLimit`)** returns a `semantic: { embedder, symbols[], files[] }` block ranked by hashing/TF-IDF embeddings. Default behavior unchanged.
+- **Engine:** tokenizer splits camelCase + snake_case + strips stop-words / short tokens, feature hashing (FNV-1a, signed buckets, 256 dims), TF-IDF over the index corpus, L2-normalized vectors, cosine similarity. **<5ms** even on indexes with thousands of symbols.
+- **Pluggable embedder interface** (`id`, `dimensions`, `embed(text, opts)`, `similarity(a, b)`). Future ONNX/transformers/OpenAI embedders can register at runtime without touching `smart_search` or callers.
+- New modules: `src/embeddings/{tokenize,hashing,embedder,index}.js`.
+
+### Added — `global_memory` (new tool, opt-in)
+- **Cross-project memory** persisted to `~/.devctx/global.db` (override via `DEVCTX_GLOBAL_DB`). Gated by `DEVCTX_GLOBAL_MEMORY=true` (defaults to disabled).
+- **Kinds:** `decision` | `pattern` | `playbook` | `note`.
+- **Actions:** `save` (kind + content + tags?), `recall` (kind? + query? + limit?), `list` (counts per kind), `delete` (id), `mark_used` (id), `stats`.
+- **Privacy by default — content is scrubbed before persistence:**
+  - API keys / bearer tokens / passwords / AWS / OpenAI (sk-) / GitHub (ghp_) / Slack (xoxb-) / Google API (AIza) / JWT-like / `-----BEGIN PRIVATE KEY-----` blocks / DB URLs / emails.
+  - Home paths (`/home/USER`, `/Users/USER`, `C:\Users\USER`) collapsed to `~`.
+- **Project paths stored as FNV-1a hash**, not raw path.
+- **Recall uses the local hashing/TF-IDF embedder** (zero deps) for semantic ranking; falls back to chronological order when no query.
+- New modules: `src/global-memory/{scrub,store}.js`, `src/tools/global-memory.js`.
+
+### Dogfooding
+- The whole 5-step plan was implemented while using devctx as the primary tool. Bug found and fixed mid-flight: `nextActions[guided_refresh].args.paths` was leaking object references instead of string paths (fixed in commit `1b1c8bb`).
+- Documentation synchronized from outdated `12 / 14 / 18` tool counts to the current **20**.
+
+### Stats
+- **+68 tests** across 5 new suites (`smart-playbook.test.js`, `index-watcher.test.js`, `parser-coverage.test.js`, `embeddings.test.js`, `global-memory.test.js`).
+- **Suite verde:** 882 pass / 883 tests / 1 skipped / 0 fail.
+- **Zero new runtime dependencies** added.
+
 ## [1.18.1] - 2026-05-12
 
 Agent-MCP simbiosis. No new tools (still 18) — discovery and tool selection improve at the boundary of every turn and mid-task. Zero breaking changes.

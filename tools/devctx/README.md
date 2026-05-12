@@ -56,7 +56,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.18.1 (or later)
+# Should show: smart-context-mcp@1.19.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -278,7 +278,7 @@ Check actual usage:
 
 Provides **two key components**:
 
-### 1. Specialized Tools (18 tools)
+### 1. Specialized Tools (20 tools)
 
 | Tool | Purpose | Savings |
 |------|---------|---------|
@@ -300,6 +300,8 @@ Provides **two key components**:
 | `smart_turn` | Turn boundary + `nextActions[]` machine-readable plan | - |
 | `smart_resume` | Lightweight alias for `smart_turn(phase: 'start', verbosity: 'minimal')` | - |
 | `smart_metrics` | Token usage inspection | - |
+| `smart_playbook` | Declarative workflows: composes `smart_*` tools in one call (preflight-merge, debug-flake, refactor-safe, doc-sync, ramp-up) | - |
+| `global_memory` | Cross-project memory in `~/.devctx/global.db` (opt-in, scrubbed for secrets, semantic recall) | - |
 
 ### 2. Agent Rules (Task-Specific Guidance)
 

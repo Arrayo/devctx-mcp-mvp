@@ -29,15 +29,17 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.18.1`
+## Latest Release: `1.19.0`
 
-Agent-MCP simbiosis: anchors the right tool at the start of a task and nudges the agent back to devctx mid-task on concrete signals. No new tools — still **18 total** — but discovery and tool selection get much better out of the box.
+Five-step quality jump executed as sequential commits with full dogfooding. MCP grows from **18 → 20 tools**, +68 tests, **zero new dependencies**, suite green at 882/883 (1 skipped).
 
-- **`smart_turn` now returns `nextActions[]`.** Machine-readable, intent-aware list of `{ tool, args, why, when }` so the agent has a typed entry point instead of prose. Adapts to the resolved mode (`blocked_guided` / `guided_refresh` / `guided_context` / `lightweight`) and to the inferred intent (debug / tests / review / refactor / implementation / docs / explore). Examples: debug → `smart_test({ action: 'last_failure' })` first; tests → `smart_test({ action: 'affected' })` first; review → `smart_review({ ref: 'HEAD' })` first; refactor / explore → `smart_context({ task, intent })` first; docs → `smart_search({ kinds: ['adr', 'adr-section'] })` first. `summaryResult.ambiguous` prepends a `smart_turn({ sessionId })` action so multi-agent runs disambiguate continuity in one call.
-- **Reactive soft-prompts on `PostToolUse`.** Adapters (Cursor / Claude) now inject a contextual hint via the existing `additionalContext` channel when the agent drifts back to native tools on a clear signal: large `Read` (>12KB → `smart_read({ mode: 'outline' })`), ≥5 sequential `Read` calls without writes (→ `smart_context`), or ≥3 `Grep` / `SemanticSearch` calls in the same turn (→ `smart_search` with `kinds`). Non-blocking, throttled to once per 2 minutes per hook, and gated by `DEVCTX_DISABLE_SOFT_PROMPTS=true`.
-- **Behavioral pairing.** `nextActions` anchors the *first* tool proactively; soft-prompts catch drift mid-task reactively. Together they cover the full turn without enforcing rules or returning errors.
+- **`smart_playbook` (new tool).** Declarative composite workflows that run multiple `smart_*` tools in a single MCP call. Five built-in playbooks ship with the package: `preflight-merge` (review + affected tests + checkpoint), `debug-flake` (last failure + curated debug context + affected), `refactor-safe` (curated context + affected + checkpoint), `doc-sync` (ADR search + docs context), `ramp-up` (status + doctor + ADR overview). Project-level overrides via `.devctx/playbooks/*.{yaml,json}` with `{{args.X}}` interpolation, `when` / `label` / `stopOnFail` / `dryRun`. Tool allowlist restricted to `smart_*`. Zero deps: built-in minimal YAML parser.
+- **Reactive FS watcher for the index.** `fs.watch` (native, recursive, debounced 600ms + batch flush every 2s) keeps the symbol index hot between calls. Filters `.git`, `node_modules`, `.devctx`, `dist`, `build`, lockfiles, `.min.*`, `.map`, `.snap`, and non-indexable extensions. Stats surface in `smart_status` (`enabled`, `flushes`, `eventsObserved`, `filesReindexed`, `filesRemoved`, `errors`, `lastFlushAt`, `pending`). Opt-out via `DEVCTX_WATCH_INDEX=false`. Wired to MCP shutdown for clean close + final flush.
+- **Richer Python / Go parsers + pluggable parser registry.** Python now captures decorators (`decorators: ["dataclass", ...]`), `async def` (kinds `async-function` / `async-method`), `TypeAlias` and `TypeVar` / `NewType` / `ParamSpec` / `TypeVarTuple` as `kind="type"`, and respects class indent for accurate scope. Go now captures methods with receiver type as `parent`, interfaces as `kind="interface"`, top-level `const` / `var`. `src/parsers/registry.js` exposes `registerParser` / `getParser` so future tree-sitter parsers can plug in without touching `index.js`. `INDEX_VERSION` bumped 6 → 7 (auto-reindex).
+- **Local semantic re-rank on `smart_search`.** Opt-in `semantic: true` (with `semanticLimit`) returns a `semantic: { embedder, symbols[], files[] }` block ranked by hashing/TF-IDF embeddings (256-dim, FNV-1a buckets, L2-normalized, cosine similarity, <5ms). Default behavior unchanged. Pluggable embedder interface (`id`, `dimensions`, `embed`, `similarity`) ready to swap in ONNX/transformers without touching callers.
+- **`global_memory` (new tool, opt-in).** Cross-project memory persisted to `~/.devctx/global.db` (override via `DEVCTX_GLOBAL_DB`, gated by `DEVCTX_GLOBAL_MEMORY=true`). Stores canonical decisions, recurring patterns, playbook drafts, and notes across repos. Content scrubbed for likely API keys / bearer tokens / JWT / PEM private keys / AWS / OpenAI / GitHub / Slack / Google API / DB URLs / emails / home paths before persistence. Project paths stored as FNV-1a hash, not raw path. Recall uses the local hashing/TF-IDF embedder for semantic ranking.
 
-See [CHANGELOG.md](./CHANGELOG.md) for the full v1.18.x history.
+See [CHANGELOG.md](./CHANGELOG.md) for the full v1.19.0 entry.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -1091,7 +1093,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.18.1 (or later)
+# Should show: smart-context-mcp@1.19.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -1672,7 +1674,7 @@ See [MCP Prompts Documentation](./docs/mcp-prompts.md) for complete guide.
 ### Quick verification
 
 ```bash
-npm run verify  # Feature verification (18 tools)
+npm run verify  # Feature verification (20 tools)
 npm test        # Unit tests (740+ tests)
 npm run eval    # Synthetic corpus
 npm run eval:self  # Real project
@@ -2120,7 +2122,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.18.1)
+│   └── package.json       ← Package metadata (v1.19.0)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file
