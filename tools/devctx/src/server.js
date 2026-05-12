@@ -8,6 +8,7 @@ import { smartSearch } from './tools/smart-search.js';
 import { smartContext } from './tools/smart-context.js';
 import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
+import { smartTest } from './tools/smart-test.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
 import { smartDoctor } from './tools/smart-doctor.js';
@@ -199,6 +200,23 @@ export const createDevctxServer = () => {
       command: z.string(),
     },
     async ({ command }) => asTextResult(await smartShell({ command })),
+  );
+
+  server.tool(
+    'smart_test',
+    'Test orchestration tied to the import graph. Three actions: (1) action="affected" — given a git diff (default HEAD), expand changed files through the import graph (max 2 hops by default) and return the list of test files that should re-run; no execution. (2) action="run" — execute a test runner from an allowlist (npm-test, npm-run, pnpm-test, pnpm-run, yarn-test, yarn-run, bun-test, bun-run, node-test, vitest, jest). Optional `script` for `*-run`, optional `files` list to target specific tests. Output is compressed; on failure the last_failure record is persisted in SQLite. (3) action="last_failure" — return the last persisted red run (command, exit code, failures, output excerpt). Replaces "run full suite + manually inspect failures" cycles.',
+    {
+      action: z.enum(['affected', 'run', 'last_failure']),
+      diff: z.union([z.boolean(), z.string()]).optional(),
+      maxHops: z.number().int().min(1).max(5).optional(),
+      maxFiles: z.number().int().min(1).max(200).optional(),
+      runner: z.enum(['npm-test', 'npm-run', 'pnpm-test', 'pnpm-run', 'yarn-test', 'yarn-run', 'bun-test', 'bun-run', 'node-test', 'vitest', 'jest']).optional(),
+      script: z.string().optional(),
+      files: z.array(z.string()).optional(),
+      ref: z.string().optional(),
+    },
+    async ({ action, diff, maxHops, maxFiles, runner, script, files, ref }) =>
+      asTextResult(await smartTest({ action, diff, maxHops, maxFiles, runner, script, files, ref })),
   );
 
   server.tool(

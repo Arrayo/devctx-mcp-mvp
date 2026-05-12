@@ -2004,3 +2004,32 @@ export const setExplainCache = async ({
 export const clearExplainCache = async ({ filePath = getStateDbPath() } = {}) => withStateDb((db) => {
   return db.prepare('DELETE FROM explain_cache').run().changes;
 }, { filePath });
+
+const LAST_TEST_FAILURE_META_KEY = 'last_test_failure';
+
+export const setLastTestFailure = async ({
+  filePath = getStateDbPath(),
+  payload,
+} = {}) => withStateDb((db) => {
+  if (!payload) return null;
+  const record = {
+    ...payload,
+    recordedAt: payload.recordedAt ?? new Date().toISOString(),
+  };
+  setMeta(db, LAST_TEST_FAILURE_META_KEY, toJsonText(record));
+  return record;
+}, { filePath });
+
+export const getLastTestFailure = async ({
+  filePath = getStateDbPath(),
+} = {}) => withStateDb((db) => {
+  const raw = getMeta(db, LAST_TEST_FAILURE_META_KEY);
+  if (!raw) return null;
+  return parseJsonText(raw, null);
+}, { filePath, readOnly: true });
+
+export const clearLastTestFailure = async ({
+  filePath = getStateDbPath(),
+} = {}) => withStateDb((db) => {
+  db.prepare('DELETE FROM meta WHERE key = ?').run(LAST_TEST_FAILURE_META_KEY);
+}, { filePath });
