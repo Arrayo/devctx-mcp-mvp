@@ -37,7 +37,10 @@ export const deriveStartActions = ({ prompt, intent, mode, refreshedContext, sum
   }
 
   if (mode === 'guided_refresh' && refreshedContext?.topFiles?.length) {
-    const top = refreshedContext.topFiles.slice(0, 3).map((f) => f.path ?? f);
+    const top = refreshedContext.topFiles
+      .slice(0, 3)
+      .map((f) => (typeof f === 'string' ? f : f?.file ?? f?.path ?? null))
+      .filter(Boolean);
     return [
       action('smart_read', { mode: 'outline', paths: top }, 'Start from refreshed top files in outline mode (cheapest) before any full reads', 'first'),
       action('smart_read', { mode: 'symbol', paths: top.slice(0, 1) }, 'Drill into a specific symbol once you have the structure', 'on-demand'),

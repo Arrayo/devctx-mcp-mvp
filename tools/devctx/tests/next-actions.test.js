@@ -31,15 +31,24 @@ describe('next-actions :: deriveStartActions', () => {
     assert.ok(toolNames(actions).includes('smart_turn'));
   });
 
-  it('guided_refresh seeds smart_read with topFiles', () => {
+  it('guided_refresh seeds smart_read with topFiles (file-keyed)', () => {
     const actions = deriveStartActions({
       prompt: 'something',
       mode: 'guided_refresh',
-      refreshedContext: { topFiles: [{ path: 'src/a.js' }, { path: 'src/b.js' }] },
+      refreshedContext: { topFiles: [{ file: 'src/a.js' }, { file: 'src/b.js' }] },
     });
     assert.equal(actions[0].tool, 'smart_read');
     assert.deepEqual(actions[0].args.paths, ['src/a.js', 'src/b.js']);
     assert.equal(actions[0].args.mode, 'outline');
+  });
+
+  it('guided_refresh also supports path-keyed and string entries', () => {
+    const actions = deriveStartActions({
+      prompt: 'something',
+      mode: 'guided_refresh',
+      refreshedContext: { topFiles: [{ path: 'src/a.js' }, 'src/b.js', { unknown: true }] },
+    });
+    assert.deepEqual(actions[0].args.paths, ['src/a.js', 'src/b.js']);
   });
 
   it('debug intent leads with smart_test(last_failure)', () => {

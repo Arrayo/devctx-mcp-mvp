@@ -278,22 +278,28 @@ Check actual usage:
 
 Provides **two key components**:
 
-### 1. Specialized Tools (12 tools)
+### 1. Specialized Tools (18 tools)
 
 | Tool | Purpose | Savings |
 |------|---------|---------|
-| `smart_read` | Read files in outline/signatures mode | 90% |
+| `smart_read` | Read files in outline / signatures / symbol / explain mode | 90% |
 | `smart_read_batch` | Read multiple files in one call | 90% |
-| `smart_search` | Intent-aware code search with ranking | 95% |
-| `smart_context` | One-call context builder | 85% |
-| `smart_summary` | Task checkpoint management | 98% |
-| `smart_turn` | Task recovery orchestration | - |
-| `smart_metrics` | Token usage inspection | - |
-| `smart_shell` | Safe command execution | 94% |
-| `build_index` | Symbol index builder | - |
+| `smart_search` | Intent-aware code search with ranking and `kinds` filter (incl. ADRs) | 95% |
+| `smart_context` | One-call context builder; `paths: { from, to }` mode traverses the import graph | 85% |
+| `smart_shell` | Safe command execution (TAP / git-log / diff compression) | 94% |
+| `smart_test` | Affected tests via graph + sandboxed runner + persisted `last_failure` | - |
+| `smart_review` | One-call review preflight: diff + callers + tests + heuristic findings | - |
+| `build_index` | Symbol index builder (incremental) | - |
 | `warm_cache` | File preloading (5x faster cold start) | - |
 | `git_blame` | Function-level code attribution | - |
 | `cross_project` | Multi-project context | - |
+| `smart_summary` | Task checkpoint management with rolling window | 98% |
+| `smart_status` | Quick session / project state inspection | - |
+| `smart_doctor` | Health checks for storage, index, hooks | - |
+| `smart_edit` | Targeted symbol-aware edits | - |
+| `smart_turn` | Turn boundary + `nextActions[]` machine-readable plan | - |
+| `smart_resume` | Lightweight alias for `smart_turn(phase: 'start', verbosity: 'minimal')` | - |
+| `smart_metrics` | Token usage inspection | - |
 
 ### 2. Agent Rules (Task-Specific Guidance)
 

@@ -1672,7 +1672,7 @@ See [MCP Prompts Documentation](./docs/mcp-prompts.md) for complete guide.
 ### Quick verification
 
 ```bash
-npm run verify  # Feature verification (14 tools)
+npm run verify  # Feature verification (18 tools)
 npm test        # Unit tests (740+ tests)
 npm run eval    # Synthetic corpus
 npm run eval:self  # Real project
