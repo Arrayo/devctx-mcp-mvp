@@ -4,8 +4,9 @@ import path from 'node:path';
 import ts from 'typescript';
 import { isBinaryBuffer } from './utils/fs.js';
 import { IGNORED_DIRS } from './config/ignored-paths.js';
+import { getParser } from './parsers/registry.js';
 
-const INDEX_VERSION = 6;
+const INDEX_VERSION = 7;
 
 const MAX_SIGNATURE_LEN = 200;
 const MAX_SNIPPET_LEN = 280;
@@ -231,31 +232,78 @@ const extractJsImportsExports = (sourceFile) => {
 // ---------------------------------------------------------------------------
 
 const PYTHON_SYMBOL_RE = /^(class|def|async\s+def)\s+(\w+)/;
+const PYTHON_TYPE_ALIAS_RE = /^(\w+)\s*:\s*(?:TypeAlias|"TypeAlias")\s*=/;
+const PYTHON_TYPEVAR_RE = /^(\w+)\s*=\s*(?:TypeVar|NewType|ParamSpec|TypeVarTuple)\s*\(/;
 
 const extractPySymbols = (content) => {
   const symbols = [];
   const lines = content.split('\n');
   let currentClass = null;
+  let currentClassIndent = -1;
+  let pendingDecorators = [];
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trimStart();
     const indent = lines[i].length - trimmed.length;
+
+    if (trimmed.startsWith('@')) {
+      pendingDecorators.push(trimmed.slice(1).split('(')[0].trim());
+      continue;
+    }
+
+    if (currentClass !== null && trimmed !== '' && indent <= currentClassIndent) {
+      currentClass = null;
+      currentClassIndent = -1;
+    }
+
+    const aliasMatch = PYTHON_TYPE_ALIAS_RE.exec(trimmed) ?? PYTHON_TYPEVAR_RE.exec(trimmed);
+    if (aliasMatch) {
+      symbols.push({
+        name: aliasMatch[1],
+        kind: 'type',
+        line: i + 1,
+        signature: trimSignature(trimmed),
+      });
+      pendingDecorators = [];
+      continue;
+    }
+
     const match = PYTHON_SYMBOL_RE.exec(trimmed);
-    if (!match) continue;
+    if (!match) {
+      if (trimmed !== '') pendingDecorators = [];
+      continue;
+    }
 
     const keyword = match[1].replace(/\s+/g, ' ');
     const name = match[2];
     const line = i + 1;
     const signature = trimSignature(trimmed.replace(/:$/, ''));
+    const decorators = pendingDecorators.length > 0 ? [...pendingDecorators] : undefined;
+    pendingDecorators = [];
 
     if (keyword === 'class') {
       currentClass = name;
-      symbols.push({ name, kind: 'class', line, signature });
-    } else if (indent > 0 && currentClass) {
-      symbols.push({ name, kind: 'method', line, parent: currentClass, signature });
+      currentClassIndent = indent;
+      symbols.push({ name, kind: 'class', line, signature, ...(decorators && { decorators }) });
+    } else if (currentClass !== null && indent > currentClassIndent) {
+      symbols.push({
+        name,
+        kind: keyword === 'async def' ? 'async-method' : 'method',
+        line,
+        parent: currentClass,
+        signature,
+        ...(decorators && { decorators }),
+      });
     } else {
       currentClass = null;
-      symbols.push({ name, kind: 'function', line, signature });
+      currentClassIndent = -1;
+      symbols.push({
+        name,
+        kind: keyword === 'async def' ? 'async-function' : 'function',
+        line,
+        signature,
+        ...(decorators && { decorators }),
+      });
     }
   }
 
@@ -277,8 +325,10 @@ const extractPyImports = (content) => {
 // Go extraction
 // ---------------------------------------------------------------------------
 
-const GO_FUNC_RE = /^func\s+(?:\([\w\s*]+\)\s+)?(\w+)\s*\(/;
-const GO_TYPE_RE = /^type\s+(\w+)\s+/;
+const GO_METHOD_RE = /^func\s+\(\s*\w+\s+\*?(\w+)\s*\)\s+(\w+)\s*\(/;
+const GO_FUNC_RE = /^func\s+(\w+)\s*\(/;
+const GO_TYPE_RE = /^type\s+(\w+)\s+(struct|interface|\w+)/;
+const GO_CONST_RE = /^(?:const|var)\s+(\w+)\s*(?:=|\s+\w)/;
 
 const extractGoSymbols = (content) => {
   const symbols = [];
@@ -286,6 +336,17 @@ const extractGoSymbols = (content) => {
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trimStart();
+    const methodMatch = GO_METHOD_RE.exec(trimmed);
+    if (methodMatch) {
+      symbols.push({
+        name: methodMatch[2],
+        kind: 'method',
+        line: i + 1,
+        parent: methodMatch[1],
+        signature: trimSignature(trimmed),
+      });
+      continue;
+    }
     const funcMatch = GO_FUNC_RE.exec(trimmed);
     if (funcMatch) {
       symbols.push({ name: funcMatch[1], kind: 'function', line: i + 1, signature: trimSignature(trimmed) });
@@ -293,7 +354,14 @@ const extractGoSymbols = (content) => {
     }
     const typeMatch = GO_TYPE_RE.exec(trimmed);
     if (typeMatch) {
-      symbols.push({ name: typeMatch[1], kind: 'type', line: i + 1, signature: trimSignature(trimmed) });
+      const kind = typeMatch[2] === 'interface' ? 'interface' : 'type';
+      symbols.push({ name: typeMatch[1], kind, line: i + 1, signature: trimSignature(trimmed) });
+      continue;
+    }
+    const constMatch = GO_CONST_RE.exec(trimmed);
+    if (constMatch) {
+      const kind = trimmed.startsWith('const') ? 'const' : 'var';
+      symbols.push({ name: constMatch[1], kind, line: i + 1, signature: trimSignature(trimmed) });
     }
   }
 
@@ -676,6 +744,20 @@ export const extractAdrSymbols = (content, fullPath) => {
 
 const extractFileInfo = (fullPath, content) => {
   const ext = path.extname(fullPath).toLowerCase();
+
+  const pluggable = getParser(ext);
+  if (pluggable) {
+    try {
+      const result = pluggable({ fullPath, content }) ?? {};
+      return {
+        symbols: enrichSymbolsWithSnippets(content, result.symbols ?? []),
+        imports: result.imports ?? [],
+        exports: result.exports ?? [],
+      };
+    } catch {
+      return { symbols: [], imports: [], exports: [] };
+    }
+  }
 
   let info;
 

@@ -87,7 +87,7 @@ describe('ADR indexing end-to-end', () => {
 
   it('buildIndex picks up ADR markdown files and skips other markdown', () => {
     const index = buildIndex(tempRoot);
-    assert.equal(index.version, 6);
+    assert.equal(index.version, 7);
 
     assert.ok(index.files['docs/adr/0001-use-jwt.md'], 'ADR file indexed');
     assert.equal(index.files['README.md'], undefined, 'README ignored');
