@@ -11,6 +11,7 @@ import { smartShell } from './tools/smart-shell.js';
 import { smartTest } from './tools/smart-test.js';
 import { smartReview } from './tools/smart-review.js';
 import { smartPlaybook } from './tools/smart-playbook.js';
+import { globalMemory } from './tools/global-memory.js';
 import { startIndexWatcher, isWatchEnabled, setActiveWatcher } from './index-watcher.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
@@ -251,6 +252,23 @@ export const createDevctxServer = () => {
     },
     async ({ name, args, list, dryRun, stopOnFail }) =>
       asTextResult(await smartPlaybook({ name, args, list, dryRun, stopOnFail })),
+  );
+
+  server.tool(
+    'global_memory',
+    'Opt-in cross-project memory persisted to ~/.devctx/global.db (override with DEVCTX_GLOBAL_DB). Enable via DEVCTX_GLOBAL_MEMORY=true. Stores canonical decisions, recurring patterns, playbook drafts, and notes across projects so an agent can carry insights between repos without re-deriving them. Content is scrubbed for likely secrets/JWTs/API keys/emails/home paths before being persisted. Project paths are stored hashed (FNV-1a) instead of raw. Actions: save (kind+content+tags?), recall (kind?+query?+limit? — uses local hashing/TF-IDF embedder for ranking, zero deps), list (counts per kind), delete (id), mark_used (id), stats (db size + per-kind totals). Valid kinds: decision, pattern, playbook, note. projectScope=true (default) hashes the current project so recall can be filtered per-project; set false for repo-agnostic access.',
+    {
+      action: z.enum(['save', 'recall', 'list', 'delete', 'stats', 'mark_used']),
+      kind: z.enum(['decision', 'pattern', 'playbook', 'note']).optional(),
+      content: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      query: z.string().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+      id: z.number().int().optional(),
+      projectScope: z.boolean().optional(),
+    },
+    async ({ action, kind, content, tags, query, limit, id, projectScope }) =>
+      asTextResult(await globalMemory({ action, kind, content, tags, query, limit, id, projectScope })),
   );
 
   server.tool(
