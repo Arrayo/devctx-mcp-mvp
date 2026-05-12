@@ -14,6 +14,7 @@ import { attachSafetyMetadata, buildMutationSafety } from '../utils/mutation-saf
 import { smartContext } from './smart-context.js';
 import { smartMetrics } from './smart-metrics.js';
 import { smartSummary } from './smart-summary.js';
+import { deriveStartActions, deriveEndActions } from '../turn/next-actions.js';
 
 const isStorageUnhealthy = (health) =>
   health && health.status !== 'ok' && health.status !== null && health.status !== undefined;
@@ -328,9 +329,10 @@ const buildStartRecommendedPath = ({
         : 'lightweight';
   const dedupedTools = [...new Set(nextTools)];
   const next = steps[0] ? `${steps[0].tool}: ${steps[0].instruction}` : (dedupedTools[0] ?? '');
+  const nextActions = deriveStartActions({ prompt, mode, refreshedContext, summaryResult });
 
   if (verbosity === 'minimal') {
-    return { phase: 'start', mode, nextTools: dedupedTools, next };
+    return { phase: 'start', mode, nextTools: dedupedTools, nextActions, next };
   }
 
   return {
@@ -346,6 +348,7 @@ const buildStartRecommendedPath = ({
     autoCreated,
     isolatedSession,
     nextTools: dedupedTools,
+    nextActions,
     next,
     instructions: steps.map((s) => `${s.tool}: ${s.instruction}`).join(' | '),
   };
@@ -392,9 +395,10 @@ const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow, 
       : 'checkpointed';
   const dedupedTools = [...new Set(nextTools)];
   const next = steps[0] ? `${steps[0].tool}: ${steps[0].instruction}` : (dedupedTools[0] ?? '');
+  const nextActions = deriveEndActions({ event, checkpoint, mutationSafety, workflow });
 
   if (verbosity === 'minimal') {
-    return { phase: 'end', mode, nextTools: dedupedTools, next };
+    return { phase: 'end', mode, nextTools: dedupedTools, nextActions, next };
   }
 
   return {
@@ -402,6 +406,7 @@ const buildEndRecommendedPath = ({ event, checkpoint, mutationSafety, workflow, 
     mode,
     checkpointEvent: event,
     nextTools: dedupedTools,
+    nextActions,
     next,
     instructions: steps.map((s) => `${s.tool}: ${s.instruction}`).join(' | '),
   };
