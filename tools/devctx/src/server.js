@@ -9,6 +9,7 @@ import { smartContext } from './tools/smart-context.js';
 import { smartReadBatch } from './tools/smart-read-batch.js';
 import { smartShell } from './tools/smart-shell.js';
 import { smartTest } from './tools/smart-test.js';
+import { smartReview } from './tools/smart-review.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
 import { smartDoctor } from './tools/smart-doctor.js';
@@ -217,6 +218,20 @@ export const createDevctxServer = () => {
     },
     async ({ action, diff, maxHops, maxFiles, runner, script, files, ref }) =>
       asTextResult(await smartTest({ action, diff, maxHops, maxFiles, runner, script, files, ref })),
+  );
+
+  server.tool(
+    'smart_review',
+    'Code review preflight in one call. Given a git ref (default HEAD), returns per-file: additions/deletions, changeType, callers (importedBy), affected tests (testOf), changed symbols, and offline heuristic findings (TODO/FIXME, console.log, print, debugger, eval, dynamic Function, process.exit, "as any"/": any", alert, hardcoded secret patterns). Summary aggregates issuesBySeverity, coverageGap (files changed without their tests touched), layersTouched + crossLayer flag (domain/application/infrastructure/presentation by path heuristic). Optional includeBlame: true performs git blame on changed symbol lines (capped to 3 per file). Replaces "git diff + manual grep + locate tests + check callers" loops with a single structured payload an agent can reason over.',
+    {
+      ref: z.string().optional(),
+      maxFiles: z.number().int().min(1).max(200).optional(),
+      maxCallers: z.number().int().min(0).max(50).optional(),
+      maxTests: z.number().int().min(0).max(50).optional(),
+      includeBlame: z.boolean().optional(),
+    },
+    async ({ ref, maxFiles, maxCallers, maxTests, includeBlame }) =>
+      asTextResult(await smartReview({ ref, maxFiles, maxCallers, maxTests, includeBlame })),
   );
 
   server.tool(
