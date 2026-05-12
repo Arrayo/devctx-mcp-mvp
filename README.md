@@ -29,18 +29,16 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.17.0`
+## Latest Release: `1.18.0`
 
-- **Token-tight `smart_turn(start)` by default.** New `verbosity` parameter (default `minimal`) trims the response body and replaces the verbose `recommendedPath.instructions` with a compact `next` string. ~40-55% fewer tokens per call.
-- **`smart_resume` alias.** Lightweight shortcut for `smart_turn(phase: 'start', ensureSession: true, verbosity: 'minimal')` so agents can rehydrate context in one call without remembering flags.
-- **Continuity recovery from task handoffs.** `smart_summary(get)` now falls back to the most recent `task_handoffs` entry (≤7 days old) when no live session is found, so multi-agent runs never start blind.
-- **Rolling window for activity lists.** `decisions`, `completed`, and `touchedFiles` are trimmed to 20 items when they exceed 30, with `archivedCounts` preserving full history without inflating snapshots.
-- **Read-aware auto checkpoints.** Adapters track meaningful client reads (`Read`, `Grep`, `Glob`, `SemanticSearch`) with concrete paths and trigger `auto_append` (plus a `read_progress` task handoff) every 8 reads, throttled at 60s.
-- **Leaner search index (v5).** `invertedIndex` no longer duplicates `signature`/`snippet` (already in `files[].symbols`); `queryIndex` enriches hits at lookup time. ~30-40% smaller `index.json`.
-- **`smart_shell` TAP and git-log compression.** `node --test` output collapses passing `ok` lines while keeping `not ok` failures with their YAML; verbose `git log` becomes one `<sha7> subject` per commit.
-- **Background storage GC + index pre-warm.** `smart_turn(start)` fires `runStorageMaintenance` (24h-throttled prune of `metrics_events`, `task_handoffs`, `agent_runs`, `workflow_metrics`, `context_access` older than 30 days) and `triggerBackgroundIndexBuild` (re-uses a single in-flight build). Both are gated by `DEVCTX_DISABLE_BACKGROUND_TASKS`.
-- **Hook noise reduction.** Cursor and Claude adapters skip persisting empty `PostToolUse` metrics when there is no auto-trigger, no block, and zero overhead tokens.
-- **`smart_search` compact result.** Removed redundant `query` / `total` / `# Top files` blocks from text output for broad queries; `topFiles` capped at 5 in JSON.
+Five-feature expansion focused on offline reasoning, graph traversal, and review/test orchestration. **18 tools total** (was 16).
+
+- **`smart_read(mode: 'explain')`.** Offline-first structural explanations for any indexed symbol — signature, parent, docstring, first body line, detected side effects (I/O, network, process, mutation, throws, async, DB) and caller count. Cached in SQLite (`explain_cache`, schema v7) by content hash, so repeated explains cost zero LLM tokens. Use it instead of reading a whole file to "understand a function".
+- **ADR / Spec markdown indexing (index v6).** `buildIndex` now picks up architecture decisions and spec docs from canonical locations (`docs/adr/`, `decisions/`, `architecture/`, `design-docs/`) and filenames (`SPEC.md`, `ARCHITECTURE.md`, `ADR-*.md`, `RFC-*.md`, `0001-*.md`...). H1 → `kind='adr'` with title + normalized status; H2/H3 → `kind='adr-section'`. Plain README and unrelated markdown are skipped at walker level.
+- **`smart_search(kinds: [...])`.** New optional filter to restrict hits to specific symbol kinds — e.g. `kinds=['adr','adr-section']` for design decisions, `kinds=['class']` to scope to declarations. Omitting the filter preserves previous behavior.
+- **`smart_context paths` mode.** Pass `paths: { from, to }` (path or symbol on either side) and get a BFS over the import graph (max 5 hops by default, undirected) with per-step `{ file, symbol, signature, line, kind }`. Falls back to nearest neighbors of each endpoint when no path exists. Replaces multiple search+read cycles to answer "how does X reach Y?".
+- **`smart_test` (new tool).** Three actions: `affected` expands a diff through `importedBy ∪ testOf` (default 2 hops) and lists tests to re-run; `run` executes a strict runner from an allowlist (`npm-test`, `npm-run`, `pnpm-*`, `yarn-*`, `bun-*`, `node-test`, `vitest`, `jest`) with sanitized `script`/`files`, output goes through `smart_shell` compression, and red runs are persisted as `last_test_failure` in SQLite; `last_failure` returns the last persisted red.
+- **`smart_review` (new tool).** Code review preflight in one call. Per file: additions/deletions, callers (importedBy), affected tests (testOf), changed symbols, and offline heuristic findings (TODO/FIXME, console.log/print, debugger, eval, dynamic Function, process.exit, `as any` / `: any` on TS only, alert, hardcoded-secret patterns). Summary aggregates `issuesBySeverity`, `coverageGap` (sources changed without touching their tests), `layersTouched` + `crossLayer` flag, and short actionable hints. `includeBlame: true` (opt-in) attaches a short `git blame` per changed symbol.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -1094,7 +1092,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.17.0 (or later)
+# Should show: smart-context-mcp@1.18.0 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -2123,7 +2121,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.17.0)
+│   └── package.json       ← Package metadata (v1.18.0)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file

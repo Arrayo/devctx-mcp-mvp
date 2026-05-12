@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.0] - 2026-05-12
+
+Five-feature expansion. Tool count goes from **16 to 18** (two new tools, three new modes/features over existing tools). All additions are offline-first, indexed, and validated.
+
+### Added — `smart_read(mode: 'explain')`
+- **Structural explanation of indexed symbols, no LLM call.** Combines signature, parent, kind, JSDoc/comment block, first body line, detected side effects (I/O, network, process, logging, mutation, throws, async, DB), and caller count from the import graph.
+- **SQLite cache (`explain_cache`, schema v7).** Keyed by `file + symbol + contentHash`. Repeated explains of unchanged symbols cost zero tokens and zero LLM latency.
+- **New helpers in `src/explain/explainer.js`:** `buildStructuralExplanation`, `explainSymbol`, `explainSymbols`, `detectSideEffects`, `extractDocstring`, `extractFirstBodyLine`, `formatExplanationText`.
+- **Storage maintenance updated.** `runStorageMaintenance` prunes `explain_cache` rows older than the configured retention window alongside the other tables.
+
+### Added — ADR / Spec markdown indexing (search index v6)
+- **`buildIndex` now indexes architecture decision records and spec docs.** Path-based detection (`docs/adr/`, `decisions/`, `architecture/`, `design-docs/`) and filename-based (`SPEC.md`, `ARCHITECTURE.md`, `DESIGN.md`, `ADR-*.md`, `RFC-*.md`, `0001-*.md`, …). Other markdown is skipped at walker level so the index stays slim.
+- **Symbols emitted:** H1 → `kind: 'adr'` with `name`, `title`, normalized `status` (accepted, deprecated, superseded, draft, proposed, rejected, amended, in-review), `signature`, `snippet`. H2/H3 → `kind: 'adr-section'` with slugified names. Filename fallback when no H1.
+- **Index version bumped from 5 to 6.**
+
+### Added — `smart_search(kinds: string[])`
+- **Optional filter to scope results by symbol kind.** Examples: `kinds=['adr','adr-section']` to surface design decisions, `kinds=['class']` to restrict to declarations. Omitting the filter preserves prior behavior.
+- **`filterGroupsByKinds`** crosses post-rank groups against `loadedIndex.files[rel].symbols[].kind`; result includes the normalized `kinds` field when applied.
+
+### Added — `smart_context paths` mode
+- **BFS over the import graph between two entities.** `paths: { from, to }` accepts either a relative file path or a symbol name on each side. Default `pathMaxHops: 5`, undirected (configurable via `pathDirected: true`).
+- **Returns the file chain with per-step `{ file, symbol, signature, line, kind }`.** When no path exists, falls back to the nearest neighbors of each endpoint (3 each).
+- **`task` is now optional in this mode.** New module `src/graph-paths.js` exports `findPath`, `resolveEntityToFiles`, `buildPathsResult`, `describePath`.
+
+### Added — `smart_test` (new tool)
+- **`action: 'affected'`** — Without executing anything, expand a git diff (default `HEAD`, also uncommitted via the same path resolver used by `smart_context`) through `importedBy ∪ testOf` (default 2 hops) and return the deduped list of test files to re-run.
+- **`action: 'run'`** — Execute a runner from an allowlist (`npm-test`, `npm-run`, `pnpm-test`, `pnpm-run`, `yarn-test`, `yarn-run`, `bun-test`, `bun-run`, `node-test`, `vitest`, `jest`). Optional `script` for `*-run`, optional `files` list to scope. All arguments are sanitized (no shell metacharacters, no `..` traversal). Output is compressed via `smart_shell`; on red, persists `last_test_failure` in SQLite (`meta` table); on green, clears it.
+- **`action: 'last_failure'`** — Returns the last persisted red run (command, runner, exit code, parsed TAP/jest failures, truncated output/stderr, `recordedAt`).
+- **New module `src/tools/smart-test.js`** plus helpers in `src/storage/sqlite.js` (`getLastTestFailure`, `setLastTestFailure`, `clearLastTestFailure`).
+
+### Added — `smart_review` (new tool)
+- **Code review preflight in one call.** Per file: `additions`, `deletions`, `changeType`, `callers` (importedBy from the graph, capped), `affectedTests` (testOf, capped), `changedSymbols`, and `issues[]` from offline heuristic checks.
+- **Heuristic detectors** (regex over diff hunks, no LLM): TODO/FIXME/XXX/HACK (low), console.log/print/println (med), debugger (high), eval/new Function/process.exit (high), `as any` / `: any` scoped to TS (med), alert (med), possible hardcoded secret patterns (high).
+- **Summary aggregates:** `issuesBySeverity { high, med, low }`, `coverageGap` (source files changed without their tests touched), `layersTouched` + `crossLayer` flag based on common architecture paths (`domain`/`application`/`infrastructure`/`presentation`), and short actionable `hints`.
+- **`includeBlame: true` (opt-in)** runs `git blame -L` on changed symbol lines (max 3 per file) and returns short `{ sha, author, summary }` records.
+- **Strict validation.** Refs and paths are validated with `/^[A-Za-z0-9._/\-]+$/` before reaching the git CLI to block injection.
+- **New modules:** `src/review/heuristics.js`, `src/tools/smart-review.js`.
+
+### Tooling
+- **Total tool count: 18** (was 16). Two new tools (`smart_test`, `smart_review`) and three new modes/features over existing tools (`smart_read explain`, ADR/Spec indexing + `kinds`, `smart_context paths`).
+
 ## [1.17.0] - 2026-05-08
 
 ### Added — token savings & continuity (P0 + P1)
