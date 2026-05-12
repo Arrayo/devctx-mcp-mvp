@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { isBinaryBuffer } from './utils/fs.js';
 import { IGNORED_DIRS } from './config/ignored-paths.js';
 
-const INDEX_VERSION = 5;
+const INDEX_VERSION = 6;
 
 const MAX_SIGNATURE_LEN = 200;
 const MAX_SNIPPET_LEN = 280;
@@ -60,7 +60,14 @@ const indexableExtensions = new Set([
   '.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs',
   '.py', '.go', '.rs', '.java',
   '.cs', '.kt', '.php', '.swift',
+  '.md', '.markdown',
 ]);
+
+const isIndexableMarkdownFile = (fullPath) => {
+  const ext = path.extname(fullPath).toLowerCase();
+  if (ext !== '.md' && ext !== '.markdown') return false;
+  return isAdrPath(fullPath);
+};
 
 const ignoredDirs = new Set(IGNORED_DIRS);
 
@@ -565,6 +572,105 @@ const extractSwiftImports = (content) => {
 };
 
 // ---------------------------------------------------------------------------
+// ADR / Spec / Architecture markdown parser
+// ---------------------------------------------------------------------------
+
+const ADR_PATH_RE = /(?:^|\/)(?:adrs?|decisions|architecture|design-docs)\//i;
+const ADR_FILENAME_RE = /^(?:adr[-_]?\d{0,4}.*|\d{3,4}[-_].*|SPEC|ARCHITECTURE|DESIGN|RFC[-_]?\d*.*)\.(?:md|markdown)$/i;
+const ADR_STATUS_RE = /^\s*[*_>-]{0,3}\s*status\s*[*_]{0,2}\s*[:=]?\s*[*_]{0,2}\s*([A-Za-z][A-Za-z -]+)/i;
+const MARKDOWN_HEADING_RE = /^(#{1,6})\s+(.+?)\s*$/;
+const ADR_VALID_STATUS = new Set([
+  'proposed', 'draft', 'rejected', 'accepted', 'deprecated',
+  'superseded', 'amended', 'approved', 'in review', 'in-review',
+]);
+
+export const isAdrPath = (relPath) => {
+  if (!relPath) return false;
+  const norm = relPath.replace(/\\/g, '/');
+  if (ADR_PATH_RE.test(norm)) return true;
+  const base = path.basename(norm);
+  return ADR_FILENAME_RE.test(base);
+};
+
+const slugify = (text) => text.trim()
+  .toLowerCase()
+  .replace(/[^\w\s-]/g, '')
+  .replace(/\s+/g, '-')
+  .replace(/-+/g, '-')
+  .replace(/^-|-$/g, '')
+  .slice(0, 60);
+
+const extractAdrStatus = (lines, headingLine) => {
+  const start = Math.max(0, headingLine - 1);
+  const end = Math.min(lines.length, start + 20);
+  for (let i = start; i < end; i += 1) {
+    const m = ADR_STATUS_RE.exec(lines[i]);
+    if (!m) continue;
+    const value = m[1].trim().toLowerCase().replace(/\s+/g, '-');
+    if (ADR_VALID_STATUS.has(value) || ADR_VALID_STATUS.has(value.replace('-', ' '))) {
+      return value;
+    }
+  }
+  return null;
+};
+
+export const extractAdrSymbols = (content, fullPath) => {
+  const symbols = [];
+  const lines = content.split('\n');
+  let titleSet = false;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const headingMatch = MARKDOWN_HEADING_RE.exec(lines[i]);
+    if (!headingMatch) continue;
+
+    const level = headingMatch[1].length;
+    const titleText = headingMatch[2].trim();
+    if (!titleText) continue;
+
+    if (!titleSet && level === 1) {
+      const name = slugify(titleText) || `adr-${path.basename(fullPath).toLowerCase()}`;
+      const status = extractAdrStatus(lines, i + 1);
+      const signature = `# ${titleText}${status ? ` (status: ${status})` : ''}`;
+      symbols.push({
+        name,
+        kind: 'adr',
+        line: i + 1,
+        signature: trimSignature(signature),
+        snippet: trimSnippet(titleText),
+        ...(status ? { status } : {}),
+        title: titleText,
+      });
+      titleSet = true;
+      continue;
+    }
+
+    if (level === 2 || level === 3) {
+      const sectionSlug = slugify(titleText);
+      if (!sectionSlug) continue;
+      symbols.push({
+        name: sectionSlug,
+        kind: 'adr-section',
+        line: i + 1,
+        signature: trimSignature(`${headingMatch[1]} ${titleText}`),
+      });
+    }
+  }
+
+  if (!titleSet) {
+    const base = path.basename(fullPath).replace(/\.[^.]+$/, '');
+    symbols.unshift({
+      name: slugify(base) || 'adr',
+      kind: 'adr',
+      line: 1,
+      signature: trimSignature(`# ${base}`),
+      title: base,
+    });
+  }
+
+  return symbols;
+};
+
+// ---------------------------------------------------------------------------
 // Unified file info extraction
 // ---------------------------------------------------------------------------
 
@@ -591,6 +697,7 @@ const extractFileInfo = (fullPath, content) => {
   else if (ext === '.kt') info = { symbols: extractKotlinSymbols(content), ...extractKotlinImports(content) };
   else if (ext === '.php') info = { symbols: extractPhpSymbols(content), ...extractPhpImports(content) };
   else if (ext === '.swift') info = { symbols: extractSwiftSymbols(content), ...extractSwiftImports(content) };
+  else if ((ext === '.md' || ext === '.markdown') && isAdrPath(fullPath)) info = { symbols: extractAdrSymbols(content, fullPath), imports: [], exports: [] };
   else info = { symbols: [], imports: [], exports: [] };
 
   return {
@@ -672,7 +779,10 @@ const walkForIndex = (dir, files = []) => {
 
     if (entry.isDirectory()) {
       walkForIndex(fullPath, files);
-    } else if (indexableExtensions.has(path.extname(entry.name).toLowerCase())) {
+    } else {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (!indexableExtensions.has(ext)) continue;
+      if ((ext === '.md' || ext === '.markdown') && !isIndexableMarkdownFile(fullPath)) continue;
       files.push(fullPath);
     }
   }

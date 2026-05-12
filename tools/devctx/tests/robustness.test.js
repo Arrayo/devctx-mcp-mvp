@@ -1471,7 +1471,7 @@ describe('buildIndex', () => {
 
   it('extracts JS symbols from fixture project', () => {
     const index = buildIndex(fixtureRoot);
-    assert.ok(index.version === 5);
+    assert.ok(index.version === 6);
     assert.ok(Object.keys(index.files).length > 0);
     assert.ok(Object.keys(index.invertedIndex).length > 0);
 

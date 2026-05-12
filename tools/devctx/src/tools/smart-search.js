@@ -363,7 +363,19 @@ const buildCompactResult = (groups, totalMatches, query, root, searchMode, prove
   return lines.join('\n');
 };
 
-export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, _testForceWalk = false, progress: enableProgress = false }) => {
+const filterGroupsByKinds = (groups, loadedIndex, indexRoot, kinds) => {
+  if (!Array.isArray(kinds) || kinds.length === 0) return groups;
+  if (!loadedIndex?.files) return groups;
+  const kindSet = new Set(kinds.map((k) => String(k).toLowerCase()));
+  return groups.filter((group) => {
+    const rel = path.relative(indexRoot, group.file).replace(/\\/g, '/');
+    const entry = loadedIndex.files[rel];
+    if (!entry?.symbols) return false;
+    return entry.symbols.some((s) => kindSet.has(String(s.kind ?? '').toLowerCase()));
+  });
+};
+
+export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, kinds, _testForceWalk = false, progress: enableProgress = false }) => {
   const progress = enableProgress ? createProgressReporter('smart_search') : null;
   const startTime = Date.now();
   
@@ -449,7 +461,11 @@ export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, _testFor
     // index unavailable — continue without it
   }
 
-  const { groups, breakdown } = groupMatches(dedupedMatches, query, validIntent, indexHits, graphHits);
+  let { groups, breakdown } = groupMatches(dedupedMatches, query, validIntent, indexHits, graphHits);
+  const normalizedKinds = Array.isArray(kinds) ? kinds.filter((k) => typeof k === 'string' && k.trim()) : null;
+  if (normalizedKinds && normalizedKinds.length > 0) {
+    groups = filterGroupsByKinds(groups, loadedIndex, indexRoot, normalizedKinds);
+  }
 
   if (loadedIndex && indexFreshness === 'fresh') {
     const topRelPaths = groups.slice(0, 10).map((g) => path.relative(indexRoot, g.file).replace(/\\/g, '/'));
@@ -522,6 +538,7 @@ export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, _testFor
     query,
     indexFreshness,
     ...(validIntent ? { intent: validIntent } : {}),
+    ...(normalizedKinds && normalizedKinds.length > 0 ? { kinds: normalizedKinds } : {}),
     ...(indexHits ? { indexBoosted: indexHits.size } : {}),
     totalMatches: dedupedMatches.length,
     matchedFiles: cappedGroups.length,
