@@ -367,13 +367,18 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 
 ### What You Get
 
-**Tools (12):** Efficient alternatives to built-in operations
-- `smart_read` - Compressed file reading (outline, signatures, symbol)
-- `smart_search` - Intent-aware code search with ranking
-- `smart_context` - One-call context builder with graph
-- `smart_shell` - Safe diagnostic commands
-- `smart_turn` - Session persistence
-- And 7 more
+**Tools (20):** Efficient alternatives to built-in operations
+- `smart_read` / `smart_read_batch` - Compressed file reading (outline, signatures, symbol, explain)
+- `smart_search` - Intent-aware code search with ranking, ADR filtering, and opt-in semantic re-rank
+- `smart_context` - One-call context builder with graph + `paths: { from, to }` traversal
+- `smart_test` - Affected tests via graph + sandboxed runner + persisted `last_failure`
+- `smart_review` - Code review preflight: diff + callers + heuristic findings
+- `smart_playbook` - Declarative composite workflows (5 built-in: preflight-merge, debug-flake, refactor-safe, doc-sync, ramp-up)
+- `smart_shell` - Safe diagnostic commands (TAP/git-log/diff compression)
+- `smart_turn` / `smart_resume` - Session persistence + `nextActions[]` machine-readable plan
+- `smart_summary` / `smart_status` / `smart_doctor` / `smart_metrics` / `smart_edit`
+- `global_memory` - Opt-in cross-project memory in `~/.devctx/global.db` (scrubbed, semantic recall)
+- `build_index` / `warm_cache` / `git_blame` / `cross_project`
 
 **Rules (5 profiles):** Task-specific workflows
 - Debugging: Error-first, symbol-focused
@@ -383,9 +388,10 @@ This MCP **does not intercept** your prompts magically. Here's what actually hap
 - Architecture: Index-first, minimal-detail
 
 **Storage (`.devctx/`):** Local context database
-- `index.json` - Symbol index (functions, classes, imports)
-- `state.sqlite` - Sessions, metrics, patterns (Node 22+)
-- `metrics.jsonl` - Legacy fallback (Node 18-20)
+- `index.json` - Symbol index (functions, classes, imports, ADRs, sections) — `INDEX_VERSION 7`
+- `state.sqlite` - Sessions, metrics, patterns, task handoffs, test failures, explain cache (Node 22+, `node:sqlite`)
+- `metrics.jsonl` - Opt-in legacy file, only when `DEVCTX_METRICS_FILE=path.jsonl` is set
+- `~/.devctx/global.db` - Cross-project memory (opt-in via `DEVCTX_GLOBAL_MEMORY=true`)
 
 ### Persistent Task Context (When Supported)
 
@@ -1849,9 +1855,13 @@ cd ../api-service && npx build-index
 
 All data stored in `.devctx/`:
 
-- `index.json` - Symbol index
-- `state.sqlite` - Sessions, metrics, patterns (Node 22+)
-- `metrics.jsonl` - Legacy metrics (fallback for Node <22)
+- `index.json` - Symbol index (`INDEX_VERSION 7`: ADR + ADR sections, richer Python/Go)
+- `state.sqlite` - Sessions, metrics, patterns, task handoffs, test failures, explain cache (Node 22+)
+- `metrics.jsonl` - Opt-in legacy file, only when `DEVCTX_METRICS_FILE=path.jsonl` is set
+
+Cross-project (opt-in via `DEVCTX_GLOBAL_MEMORY=true`):
+
+- `~/.devctx/global.db` - Scrubbed decisions, patterns, playbooks, notes with semantic recall
 
 Add to `.gitignore`:
 

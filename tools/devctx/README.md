@@ -654,9 +654,12 @@ npm run verify
 ## Storage
 
 Data stored in `.devctx/`:
-- `index.json` - Symbol index
-- `state.sqlite` - Task checkpoints, metrics, patterns (Node 22+)
-- `metrics.jsonl` - Legacy fallback (Node 18-20)
+- `index.json` - Symbol index (`INDEX_VERSION 7`: ADR + ADR sections, richer Python/Go)
+- `state.sqlite` - Sessions, metrics, patterns, task handoffs, test failures, explain cache (Node 22+)
+- `metrics.jsonl` - Opt-in legacy file, only when `DEVCTX_METRICS_FILE=path.jsonl` is set
+
+Cross-project (opt-in via `DEVCTX_GLOBAL_MEMORY=true`):
+- `~/.devctx/global.db` - Scrubbed decisions, patterns, playbooks, notes with semantic recall
 
 Add to `.gitignore`:
 ```
