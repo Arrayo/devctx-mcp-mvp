@@ -14,6 +14,7 @@ import { recordDevctxOperation } from '../missed-opportunities.js';
 import { IGNORED_DIRS, IGNORED_FILE_NAMES, IGNORED_FILE_PATTERNS } from '../config/ignored-paths.js';
 import { createProgressReporter } from '../streaming.js';
 import { ensureIndexReady } from '../index-manager.js';
+import { semanticRankSymbols, semanticRankFiles, buildIndexCorpusIdf } from '../embeddings/index.js';
 
 const execFile = promisify(execFileCallback);
 const supportedGlobs = [
@@ -375,7 +376,7 @@ const filterGroupsByKinds = (groups, loadedIndex, indexRoot, kinds) => {
   });
 };
 
-export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, kinds, _testForceWalk = false, progress: enableProgress = false }) => {
+export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, kinds, semantic = false, semanticLimit = 8, _testForceWalk = false, progress: enableProgress = false }) => {
   const progress = enableProgress ? createProgressReporter('smart_search') : null;
   const startTime = Date.now();
   
@@ -549,6 +550,34 @@ export const smartSearch = async ({ query, cwd = '.', intent, maxFiles, kinds, _
 
   if (provenance?.fallbackReason) result.searchMode = provenance.fallbackReason;
   if (retrievalConfidence !== 'high') result.retrievalConfidence = retrievalConfidence;
+
+  if (semantic === true) {
+    try {
+      const index = loadIndex(root);
+      if (index) {
+        const idf = buildIndexCorpusIdf(index);
+        const symbolRanks = semanticRankSymbols({ query, index, limit: semanticLimit, idf });
+        const fileRanks = semanticRankFiles({ query, index, limit: semanticLimit, idf });
+        result.semantic = {
+          embedder: 'hashing-v1',
+          symbols: symbolRanks.map((r) => ({
+            score: Number(r.score.toFixed(4)),
+            path: r.path,
+            symbol: r.symbol.name,
+            kind: r.symbol.kind,
+            line: r.symbol.line,
+          })),
+          files: fileRanks.map((r) => ({
+            score: Number(r.score.toFixed(4)),
+            path: r.path,
+            symbols: r.symbolCount,
+          })),
+        };
+      }
+    } catch (err) {
+      result.semanticError = err?.message ?? String(err);
+    }
+  }
 
   return result;
 };

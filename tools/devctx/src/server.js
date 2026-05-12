@@ -162,15 +162,18 @@ export const createDevctxServer = () => {
 
   server.tool(
     'smart_search',
-    'Search code with ranked, deduplicated results and index boosting. Best for: finding where a symbol is defined/used, understanding call chains, locating implementations. NOT ideal for: exact string matching (use Grep), finding files by name (use Glob), broad multi-word queries (generates noise). Optional intent adjusts ranking. maxFiles caps the number of files returned (default 15). kinds filters results by symbol kind from the index — e.g. ["adr","adr-section"] returns only architecture decision docs; ["class","function"] returns only those declarations; use to scope a query to a domain. When >30 files match, results include a hint suggesting Grep instead.',
+    'Search code with ranked, deduplicated results and index boosting. Best for: finding where a symbol is defined/used, understanding call chains, locating implementations. NOT ideal for: exact string matching (use Grep), finding files by name (use Glob), broad multi-word queries (generates noise). Optional intent adjusts ranking. maxFiles caps the number of files returned (default 15). kinds filters results by symbol kind from the index — e.g. ["adr","adr-section"] returns only architecture decision docs; ["class","function"] returns only those declarations; use to scope a query to a domain. Pass semantic=true to additionally include a local semantic re-rank (hashing-v1 embedder, TF-IDF over symbol signatures + file paths) — useful when the query is conceptual ("user registration flow", "rate limit middleware") rather than literal. semanticLimit caps the semantic block (default 8). Semantic block adds zero deps and runs in <5ms even on large indexes. When >30 files match, results include a hint suggesting Grep instead.',
     {
       query: z.string(),
       cwd: z.string().optional(),
       intent: z.enum(['implementation', 'debug', 'tests', 'config', 'docs', 'explore']).optional(),
       maxFiles: z.number().int().min(1).max(50).optional(),
       kinds: z.array(z.string()).optional(),
+      semantic: z.boolean().optional(),
+      semanticLimit: z.number().int().min(1).max(50).optional(),
     },
-    async ({ query, cwd = '.', intent, maxFiles, kinds }) => asTextResult(await smartSearch({ query, cwd, intent, maxFiles, kinds })),
+    async ({ query, cwd = '.', intent, maxFiles, kinds, semantic, semanticLimit }) =>
+      asTextResult(await smartSearch({ query, cwd, intent, maxFiles, kinds, semantic, semanticLimit })),
   );
 
   server.tool(
