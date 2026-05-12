@@ -11,6 +11,9 @@ import { setProjectRoot, projectRoot as originalProjectRoot } from '../src/utils
 
 const { detectAffectedTests, buildShellCommand, parseFailureFromOutput } = _internal;
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+const SKIP_SQLITE_TESTS = nodeMajor < 22 ? 'SQLite support requires Node 22+' : false;
+
 const writeFixture = (root, files) => {
   for (const [rel, content] of Object.entries(files)) {
     const full = path.join(root, rel);
@@ -80,7 +83,7 @@ describe('smart_test internals', () => {
   });
 });
 
-describe('smart_test actions (integration)', () => {
+describe('smart_test actions (integration)', { skip: SKIP_SQLITE_TESTS }, () => {
   let tempRoot;
   let savedRoot;
   let savedIndexDir;

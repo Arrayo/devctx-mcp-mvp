@@ -19,6 +19,9 @@ import {
 } from '../src/global-memory/store.js';
 import { globalMemory } from '../src/tools/global-memory.js';
 
+const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+const SKIP_SQLITE_TESTS = nodeMajor < 22 ? 'SQLite support requires Node 22+' : false;
+
 describe('global-memory :: scrub', () => {
   it('redacts api keys / bearer tokens / passwords', () => {
     const dirty = 'API_KEY = "sk-1234567890abcdef1234567890abcdef" password=hunter2longenough';
@@ -58,7 +61,7 @@ describe('global-memory :: scrub', () => {
   });
 });
 
-describe('global-memory :: store CRUD', () => {
+describe('global-memory :: store CRUD', { skip: SKIP_SQLITE_TESTS }, () => {
   let tmpDb;
   let prevEnvDb;
   let prevEnvFlag;
@@ -145,7 +148,7 @@ describe('global-memory :: store CRUD', () => {
   });
 });
 
-describe('global-memory :: tool surface', () => {
+describe('global-memory :: tool surface', { skip: SKIP_SQLITE_TESTS }, () => {
   let tmpDb;
   let prevEnvDb;
   let prevEnvFlag;

@@ -11,7 +11,10 @@ import { buildStructuralExplanation, detectSideEffects, extractDocstring } from 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.join(__dirname, '../evals/fixtures/sample-project');
 
-describe('smart_read mode=explain', () => {
+const nodeMajor = parseInt(process.versions.node.split('.')[0], 10);
+const SKIP_SQLITE_TESTS = nodeMajor < 22 ? 'SQLite support requires Node 22+' : false;
+
+describe('smart_read mode=explain', { skip: SKIP_SQLITE_TESTS }, () => {
   let originalEnv;
   let tempDir;
 

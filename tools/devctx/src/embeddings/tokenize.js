@@ -3,7 +3,7 @@ const STOP_WORDS = new Set([
   'as', 'by', 'from', 'this', 'that', 'these', 'those', 'it', 'its', 'be', 'been', 'being',
   'are', 'was', 'were', 'has', 'have', 'had', 'do', 'does', 'did', 'will', 'would', 'should',
   'can', 'could', 'may', 'might', 'must', 'shall', 'not', 'no', 'yes', 'if', 'else', 'then',
-  'return', 'true', 'false', 'null', 'undefined', 'self', 'this', 'use', 'using', 'used',
+  'return', 'true', 'false', 'null', 'undefined', 'self', 'this', 'use', 'using', 'used', 'via',
 ]);
 
 const CAMEL_RE = /([a-z0-9])([A-Z])/g;
