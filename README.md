@@ -29,16 +29,15 @@ An MCP (Model Context Protocol) server that provides specialized tools for readi
 
 See [Workflow Metrics](./docs/workflow-metrics.md) and [Adoption Metrics](./docs/adoption-metrics-design.md) for details.
 
-## Latest Release: `1.18.0`
+## Latest Release: `1.18.1`
 
-Five-feature expansion focused on offline reasoning, graph traversal, and review/test orchestration. **18 tools total** (was 16).
+Agent-MCP simbiosis: anchors the right tool at the start of a task and nudges the agent back to devctx mid-task on concrete signals. No new tools — still **18 total** — but discovery and tool selection get much better out of the box.
 
-- **`smart_read(mode: 'explain')`.** Offline-first structural explanations for any indexed symbol — signature, parent, docstring, first body line, detected side effects (I/O, network, process, mutation, throws, async, DB) and caller count. Cached in SQLite (`explain_cache`, schema v7) by content hash, so repeated explains cost zero LLM tokens. Use it instead of reading a whole file to "understand a function".
-- **ADR / Spec markdown indexing (index v6).** `buildIndex` now picks up architecture decisions and spec docs from canonical locations (`docs/adr/`, `decisions/`, `architecture/`, `design-docs/`) and filenames (`SPEC.md`, `ARCHITECTURE.md`, `ADR-*.md`, `RFC-*.md`, `0001-*.md`...). H1 → `kind='adr'` with title + normalized status; H2/H3 → `kind='adr-section'`. Plain README and unrelated markdown are skipped at walker level.
-- **`smart_search(kinds: [...])`.** New optional filter to restrict hits to specific symbol kinds — e.g. `kinds=['adr','adr-section']` for design decisions, `kinds=['class']` to scope to declarations. Omitting the filter preserves previous behavior.
-- **`smart_context paths` mode.** Pass `paths: { from, to }` (path or symbol on either side) and get a BFS over the import graph (max 5 hops by default, undirected) with per-step `{ file, symbol, signature, line, kind }`. Falls back to nearest neighbors of each endpoint when no path exists. Replaces multiple search+read cycles to answer "how does X reach Y?".
-- **`smart_test` (new tool).** Three actions: `affected` expands a diff through `importedBy ∪ testOf` (default 2 hops) and lists tests to re-run; `run` executes a strict runner from an allowlist (`npm-test`, `npm-run`, `pnpm-*`, `yarn-*`, `bun-*`, `node-test`, `vitest`, `jest`) with sanitized `script`/`files`, output goes through `smart_shell` compression, and red runs are persisted as `last_test_failure` in SQLite; `last_failure` returns the last persisted red.
-- **`smart_review` (new tool).** Code review preflight in one call. Per file: additions/deletions, callers (importedBy), affected tests (testOf), changed symbols, and offline heuristic findings (TODO/FIXME, console.log/print, debugger, eval, dynamic Function, process.exit, `as any` / `: any` on TS only, alert, hardcoded-secret patterns). Summary aggregates `issuesBySeverity`, `coverageGap` (sources changed without touching their tests), `layersTouched` + `crossLayer` flag, and short actionable hints. `includeBlame: true` (opt-in) attaches a short `git blame` per changed symbol.
+- **`smart_turn` now returns `nextActions[]`.** Machine-readable, intent-aware list of `{ tool, args, why, when }` so the agent has a typed entry point instead of prose. Adapts to the resolved mode (`blocked_guided` / `guided_refresh` / `guided_context` / `lightweight`) and to the inferred intent (debug / tests / review / refactor / implementation / docs / explore). Examples: debug → `smart_test({ action: 'last_failure' })` first; tests → `smart_test({ action: 'affected' })` first; review → `smart_review({ ref: 'HEAD' })` first; refactor / explore → `smart_context({ task, intent })` first; docs → `smart_search({ kinds: ['adr', 'adr-section'] })` first. `summaryResult.ambiguous` prepends a `smart_turn({ sessionId })` action so multi-agent runs disambiguate continuity in one call.
+- **Reactive soft-prompts on `PostToolUse`.** Adapters (Cursor / Claude) now inject a contextual hint via the existing `additionalContext` channel when the agent drifts back to native tools on a clear signal: large `Read` (>12KB → `smart_read({ mode: 'outline' })`), ≥5 sequential `Read` calls without writes (→ `smart_context`), or ≥3 `Grep` / `SemanticSearch` calls in the same turn (→ `smart_search` with `kinds`). Non-blocking, throttled to once per 2 minutes per hook, and gated by `DEVCTX_DISABLE_SOFT_PROMPTS=true`.
+- **Behavioral pairing.** `nextActions` anchors the *first* tool proactively; soft-prompts catch drift mid-task reactively. Together they cover the full turn without enforcing rules or returning errors.
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full v1.18.x history.
 
 See [CHANGELOG.md](./CHANGELOG.md) for full release history.
 
@@ -1092,7 +1091,7 @@ Restart your AI client. Done.
 # Check installed version
 npm list -g smart-context-mcp
 
-# Should show: smart-context-mcp@1.18.0 (or later)
+# Should show: smart-context-mcp@1.18.1 (or later)
 
 # Update to latest version
 npm update -g smart-context-mcp
@@ -2121,7 +2120,7 @@ This repository contains the `smart-context-mcp` npm package in `tools/devctx/`:
 │   ├── tests/             ← 740+ unit tests
 │   ├── evals/             ← Benchmarks & scenarios
 │   ├── scripts/           ← CLI binaries
-│   └── package.json       ← Package metadata (v1.18.0)
+│   └── package.json       ← Package metadata (v1.18.1)
 ├── docs/                  ← Documentation (GitHub only)
 ├── .github/workflows/     ← CI/CD with release gating
 └── README.md              ← This file

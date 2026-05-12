@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.18.1] - 2026-05-12
+
+Agent-MCP simbiosis. No new tools (still 18) — discovery and tool selection improve at the boundary of every turn and mid-task. Zero breaking changes.
+
+### Added — `smart_turn` returns `nextActions[]`
+- **Machine-readable, intent-aware list** of `{ tool, args, why, when }` returned alongside the existing `nextTools` strings and prose `next` / `instructions`. Models anchor better to a typed list than to prose.
+- **Adapts to mode + inferred intent.** Resolved mode (`blocked_guided` / `guided_refresh` / `guided_context` / `lightweight`) and intent inferred from the prompt drive the suggestions:
+  - `debug` → `smart_test({ action: 'last_failure' })` first, then `smart_context({ intent: 'debug' })`.
+  - `tests` → `smart_test({ action: 'affected' })` first, then `smart_test({ action: 'run', runner: 'node-test' })`.
+  - `review` → `smart_review({ ref: 'HEAD' })` first, then `smart_test({ action: 'affected' })` to validate coverage gaps.
+  - `refactor` / `implementation` → `smart_context({ intent })` first, then `smart_read({ mode: 'outline' })`, `smart_read({ mode: 'explain' })`, `smart_test({ action: 'affected' })`.
+  - `docs` → `smart_search({ kinds: ['adr', 'adr-section'] })` first.
+  - `explore` → `smart_context({ intent: 'explore' })` first, then `smart_read({ mode: 'outline' })`, `smart_context({ paths: { from, to } })` for graph traversal.
+- **Ambiguous continuity disambiguation.** When `summaryResult.ambiguous` is set, `nextActions[0]` is `smart_turn({ phase: 'start', sessionId, ensureSession: true })` so multi-agent runs lock onto the recommended session explicitly.
+- **End actions.** `smart_turn(end)` also returns `nextActions[]`: `repo_safety` first when blocked, milestone retry when checkpoint was skipped, fresh `smart_turn(start)` when the workflow ended, otherwise `smart_turn(start)` + `smart_review` on handoff.
+- **New module:** `src/turn/next-actions.js` (`deriveStartActions`, `deriveEndActions`, intent inference with corrected regex boundaries — `\btests?\b`, `fail\w*`, `implement\w*`). 15 unit tests covering every branch.
+
+### Added — Reactive soft-prompts on `PostToolUse`
+- **Cursor and Claude adapters now inject contextual hints** through the existing `additionalContext` channel of the `PostToolUse` hook when the agent drifts back to native tools on a clear signal. Non-blocking, never returns an error, and the hint is included in hook metrics for observability.
+- **Three triggers (pure heuristics, no LLM):**
+  - `large_read` — `Read` returned >12KB → suggest `smart_read({ mode: 'outline', paths: ['<actual path>'] })`.
+  - `repeated_reads` — `meaningfulReadCount ≥ 5` with zero writes → suggest `smart_context({ task: '<your task>' })` or `smart_context({ paths: { from, to } })`.
+  - `repeated_search` — `≥3 Grep / SemanticSearch` calls in the same turn → suggest `smart_search({ query, intent, kinds: [...] })`.
+- **Throttle.** In-memory `Map<hookKey, lastIssuedAt>`; default window 2 minutes per hook so the agent never sees the same hint twice in a turn. No schema changes, no migrations.
+- **Gating.** `DEVCTX_DISABLE_SOFT_PROMPTS=true` turns the feature off.
+- **New module:** `src/orchestration/policy/soft-prompts.js`. 12 unit tests covering gating, every trigger, write-detection short-circuit, and throttle semantics.
+
+### Why this matters
+- `nextActions` anchors the *first* tool proactively at the boundary of a task.
+- Soft-prompts catch the agent *mid-task* when it drifts to native tools on a concrete signal.
+- Together they cover the full turn without enforcing rules, without errors, and without breaking any client. Existing `nextTools` and `instructions` outputs stay identical.
+
 ## [1.18.0] - 2026-05-12
 
 Five-feature expansion. Tool count goes from **16 to 18** (two new tools, three new modes/features over existing tools). All additions are offline-first, indexed, and validated.
