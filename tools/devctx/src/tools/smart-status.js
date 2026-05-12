@@ -11,6 +11,17 @@ import { recordToolUsage } from '../usage-feedback.js';
 import { recordDecision, DECISION_REASONS, EXPECTED_BENEFITS } from '../decision-explainer.js';
 import { recordDevctxOperation } from '../missed-opportunities.js';
 import { countTokens } from '../tokenCounter.js';
+import { getActiveWatcher } from '../index-watcher.js';
+
+const getIndexWatcherStatus = () => {
+  const watcher = getActiveWatcher();
+  if (!watcher) return { enabled: false };
+  try {
+    return { enabled: true, ...watcher.stats() };
+  } catch {
+    return { enabled: true, error: 'stats_unavailable' };
+  }
+};
 
 const ACTIVE_SESSION_SCOPE = 'active';
 
@@ -199,6 +210,7 @@ export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) =
       },
       recentFiles: recentFiles.slice(-3),
       storageHealth,
+      indexWatcher: getIndexWatcherStatus(),
       updatedAt: session.updatedAt,
     };
   } else {
@@ -247,6 +259,7 @@ export const smartStatus = async ({ format = 'detailed', maxItems = 10 } = {}) =
         questions: session.unresolvedQuestions,
       },
       storageHealth,
+      indexWatcher: getIndexWatcherStatus(),
       updatedAt: session.updatedAt,
     };
   }

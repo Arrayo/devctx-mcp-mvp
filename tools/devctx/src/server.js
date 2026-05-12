@@ -11,6 +11,7 @@ import { smartShell } from './tools/smart-shell.js';
 import { smartTest } from './tools/smart-test.js';
 import { smartReview } from './tools/smart-review.js';
 import { smartPlaybook } from './tools/smart-playbook.js';
+import { startIndexWatcher, isWatchEnabled, setActiveWatcher } from './index-watcher.js';
 import { smartSummary } from './tools/smart-summary.js';
 import { smartStatus } from './tools/smart-status.js';
 import { smartDoctor } from './tools/smart-doctor.js';
@@ -631,8 +632,22 @@ export const runDevctxServer = async () => {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  const watcher = isWatchEnabled() ? startIndexWatcher() : null;
+  if (watcher) {
+    setActiveWatcher(watcher);
+    if (process.env.DEVCTX_DEBUG === '1') {
+      process.stderr.write('[devctx] reactive index watcher: ENABLED\n');
+    }
+  }
+
   const shutdown = () => {
-    transport.close().catch(() => {}).finally(() => process.exit(0));
+    const finalize = async () => {
+      try { if (watcher) await watcher.stop(); } catch { /* noop */ }
+      try { setActiveWatcher(null); } catch { /* noop */ }
+      try { await transport.close(); } catch { /* noop */ }
+      process.exit(0);
+    };
+    finalize();
   };
 
   process.on('SIGINT', shutdown);
