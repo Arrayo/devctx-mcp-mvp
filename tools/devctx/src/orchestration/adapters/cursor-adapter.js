@@ -21,6 +21,12 @@ import {
   normalizeWhitespace,
   truncate,
 } from '../policy/event-policy.js';
+import {
+  evaluateSoftPrompt,
+  isSoftPromptsEnabled,
+  markSoftPromptEmitted,
+  shouldEmitSoftPrompt,
+} from '../policy/soft-prompts.js';
 
 export const HOOK_CLIENT = 'cursor';
 export const STOP_MAX_TOKENS = 300;
@@ -504,6 +510,26 @@ export const createCursorAdapter = ({
         continuityState: existing.continuityState,
       });
     }
+
+    if (isSoftPromptsEnabled() && shouldEmitSoftPrompt(hookKey)) {
+      const softPrompt = evaluateSoftPrompt({
+        toolName: input.tool_name,
+        toolInput: input.tool_input,
+        toolResponse: input.tool_response,
+        state: nextState,
+      });
+      if (softPrompt) {
+        markSoftPromptEmitted(hookKey);
+        await recordHookMetrics({
+          action: 'PostToolUse',
+          sessionId: existing.projectSessionId,
+          additionalContext: softPrompt.message,
+          continuityState: existing.continuityState,
+        });
+        return buildCursorHookContextResponse('PostToolUse', softPrompt.message);
+      }
+    }
+
     return null;
   };
 
